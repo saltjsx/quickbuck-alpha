@@ -23,6 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
+import type { Route } from "./+types/history";
 import { useState } from "react";
 import {
   ArrowDownLeft,
@@ -34,6 +35,17 @@ import {
   TrendingDown,
 } from "lucide-react";
 import type { Id } from "../../../convex/_generated/dataModel";
+
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "Transaction History - QuickBuck" },
+    {
+      name: "description",
+      content:
+        "View detailed transaction history and financial activity logs in QuickBuck.",
+    },
+  ];
+}
 
 export default function TransactionHistoryPage() {
   const userAccounts = useQuery(api.accounts.getUserAccounts);

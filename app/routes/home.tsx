@@ -6,7 +6,7 @@ import Integrations from "~/components/homepage/integrations";
 import type { Route } from "./+types/home";
 
 export function meta({}: Route.MetaArgs) {
-  const title = "QuickBuck - Real-Time Multiplayer Finance Game";
+  const title = "QuickBuck";
   const description =
     "Build financial empires in this real-time multiplayer finance simulation game. Create companies, sell products, trade stocks, and compete with players worldwide.";
   const keywords =

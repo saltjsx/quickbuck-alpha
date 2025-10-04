@@ -9,6 +9,18 @@ import {
 } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { ShoppingBag } from "lucide-react";
+import type { Route } from "./+types/marketplace";
+
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "Marketplace - QuickBuck" },
+    {
+      name: "description",
+      content:
+        "Browse and purchase products from other companies in the QuickBuck marketplace.",
+    },
+  ];
+}
 
 export default function MarketplacePage() {
   const products = useQuery(api.products.getActiveProducts);

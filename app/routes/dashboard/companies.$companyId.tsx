@@ -11,10 +11,11 @@ import { useState } from "react";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Company Dashboard" },
+    { title: "Company Dashboard - QuickBuck" },
     {
       name: "description",
-      content: "View your company's performance dashboard",
+      content:
+        "Manage your company, view performance metrics, and track products in QuickBuck.",
     },
   ];
 }

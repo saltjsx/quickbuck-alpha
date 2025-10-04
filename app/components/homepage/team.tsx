@@ -1,24 +1,24 @@
 const features = [
   {
-    title: "🏦 Bank Account System",
+    title: "Bank Account System",
     description:
       "Start with $10,000 and manage multiple accounts for your companies. All transactions are tracked in real-time.",
     icon: "🏦",
   },
   {
-    title: "🏢 Company Management",
+    title: "Company Management",
     description:
       "Create unlimited companies, grant access to other players, and watch them go public when they reach $50,000.",
     icon: "🏢",
   },
   {
-    title: "🛍️ Product Marketplace",
+    title: "Product Marketplace",
     description:
       "List products with custom pricing and watch them sell automatically every 2 minutes through the game's economy.",
     icon: "🛍️",
   },
   {
-    title: "📈 Stock Market",
+    title: "Stock Market",
     description:
       "Invest in public companies, track your portfolio performance, and buy/sell shares in real-time.",
     icon: "📈",

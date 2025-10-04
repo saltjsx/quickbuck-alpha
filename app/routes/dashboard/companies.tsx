@@ -15,6 +15,18 @@ import { CreateCompanyDialog } from "~/components/game/create-company-dialog";
 import { CreateProductDialog } from "~/components/game/create-product-dialog";
 import { CompanyDashboard } from "~/components/game/company-dashboard";
 import { useState } from "react";
+import type { Route } from "./+types/companies";
+
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "My Companies - QuickBuck" },
+    {
+      name: "description",
+      content:
+        "Manage your companies, create new businesses, and list products in the QuickBuck finance simulation game.",
+    },
+  ];
+}
 
 export default function CompaniesPage() {
   const companies = useQuery(api.companies.getUserCompanies);

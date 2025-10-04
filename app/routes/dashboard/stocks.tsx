@@ -11,6 +11,18 @@ import {
 import { Badge } from "~/components/ui/badge";
 import { TrendingUp, TrendingDown, ArrowRight } from "lucide-react";
 import { Line, LineChart, ResponsiveContainer } from "recharts";
+import type { Route } from "./+types/stocks";
+
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "Stock Market - QuickBuck" },
+    {
+      name: "description",
+      content:
+        "Browse public companies, view stock prices, and invest in the stock market in QuickBuck.",
+    },
+  ];
+}
 
 function MiniChart({ data }: { data: any[] }) {
   if (!data || data.length === 0) {

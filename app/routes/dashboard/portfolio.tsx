@@ -11,6 +11,18 @@ import {
 import { Badge } from "~/components/ui/badge";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { Button } from "~/components/ui/button";
+import type { Route } from "./+types/portfolio";
+
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "My Portfolio - QuickBuck" },
+    {
+      name: "description",
+      content:
+        "Track your stock investments, view gains/losses, and manage your investment portfolio in QuickBuck.",
+    },
+  ];
+}
 
 export default function PortfolioPage() {
   const navigate = useNavigate();

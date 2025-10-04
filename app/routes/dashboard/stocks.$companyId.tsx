@@ -2,6 +2,7 @@ import { useParams, useNavigate } from "react-router";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import type { Route } from "./+types/stocks.$companyId";
 import {
   Card,
   CardContent,
@@ -46,6 +47,17 @@ import {
   ChartTooltipContent,
 } from "~/components/ui/chart";
 import { useToast } from "~/hooks/use-toast";
+
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "Stock Details - QuickBuck" },
+    {
+      name: "description",
+      content:
+        "View detailed stock information, price charts, and trading activity for companies in QuickBuck.",
+    },
+  ];
+}
 
 export default function StockDetailPage() {
   const { companyId } = useParams();

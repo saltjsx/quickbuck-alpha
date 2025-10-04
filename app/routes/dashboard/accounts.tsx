@@ -9,6 +9,18 @@ import {
 } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Wallet } from "lucide-react";
+import type { Route } from "./+types/accounts";
+
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "My Accounts - QuickBuck" },
+    {
+      name: "description",
+      content:
+        "View and manage your bank accounts and transaction history in QuickBuck.",
+    },
+  ];
+}
 
 export default function AccountsPage() {
   const accounts = useQuery(api.accounts.getUserAccounts);

@@ -19,6 +19,18 @@ import {
 } from "~/components/ui/select";
 import { Badge } from "~/components/ui/badge";
 import { useState } from "react";
+import type { Route } from "./+types/transactions";
+
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "Transactions - QuickBuck" },
+    {
+      name: "description",
+      content:
+        "View your transaction history, transfer money between accounts, and track all financial activity in QuickBuck.",
+    },
+  ];
+}
 import { Search, Send, Building2, User, ArrowRight } from "lucide-react";
 import type { Id } from "../../../convex/_generated/dataModel";
 

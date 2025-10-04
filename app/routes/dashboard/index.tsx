@@ -17,6 +17,18 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { Link } from "react-router";
+import type { Route } from "./+types/index";
+
+export function meta({}: Route.MetaArgs) {
+  return [
+    { title: "Dashboard - QuickBuck" },
+    {
+      name: "description",
+      content:
+        "View your net worth, manage companies, and track your progress in the QuickBuck multiplayer finance simulation game.",
+    },
+  ];
+}
 
 export default function Page() {
   const personalAccount = useQuery(api.accounts.getPersonalAccount);
