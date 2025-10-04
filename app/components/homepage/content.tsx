@@ -14,8 +14,8 @@ export default function ContentSection() {
             <p>
               Stop rebuilding the same foundation over and over. RSK eliminates
               months of integration work by providing a complete,
-              production-ready SaaS template with authentication, payments, and
-              real-time data working seamlessly out of the box.{" "}
+              production-ready SaaS template with authentication and real-time
+              data working seamlessly out of the box.{" "}
             </p>
             <p>
               <span className="font-bold">From idea to launch in weeks,</span>{" "}

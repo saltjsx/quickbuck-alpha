@@ -63,3 +63,37 @@ export const upsertUser = mutation({
     return await ctx.db.get(userId);
   },
 });
+
+// Update user's username
+export const updateUsername = mutation({
+  args: { username: v.string() },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    // Check if username is already taken
+    const existingUser = await ctx.db
+      .query("users")
+      .withIndex("by_username", (q) => q.eq("username", args.username))
+      .first();
+
+    if (existingUser && existingUser.tokenIdentifier !== identity.subject) {
+      throw new Error("Username already taken");
+    }
+
+    // Get current user
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.subject))
+      .unique();
+
+    if (!user) throw new Error("User not found");
+
+    // Update username
+    await ctx.db.patch(user._id, {
+      username: args.username,
+    });
+
+    return { success: true };
+  },
+});

@@ -16,7 +16,7 @@ const menuItems = [
 export const Navbar = ({
   loaderData,
 }: {
-  loaderData?: { isSignedIn: boolean; hasActiveSubscription: boolean };
+  loaderData?: { isSignedIn: boolean };
 }) => {
   const [menuState, setMenuState] = React.useState(false);
   const [isScrolled, setIsScrolled] = React.useState(false);
@@ -43,13 +43,11 @@ export const Navbar = ({
   }, []);
 
   // Simple computations don't need useMemo
-  const dashboardLink = !loaderData?.isSignedIn 
-    ? "/sign-up" 
-    : loaderData.hasActiveSubscription ? "/dashboard" : "/pricing";
+  const dashboardLink = !loaderData?.isSignedIn ? "/sign-up" : "/dashboard";
 
-  const dashboardText = !loaderData?.isSignedIn 
+  const dashboardText = !loaderData?.isSignedIn
     ? "Get Started (Demo)"
-    : loaderData.hasActiveSubscription ? "Dashboard" : "Subscribe";
+    : "Dashboard";
   return (
     <header>
       <nav

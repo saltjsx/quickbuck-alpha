@@ -1,6 +1,6 @@
 # React Starter Kit (RSK)
 
-A modern, production-ready SaaS starter template for building full-stack React applications using React Router v7, Convex, Clerk, and Polar.sh. Ready for Vercel deployment with built-in AI chat capabilities.
+A modern, production-ready SaaS starter template for building full-stack React applications using React Router v7, Convex, and Clerk. Ready for Vercel deployment with built-in AI chat capabilities.
 
 ## Features
 
@@ -11,17 +11,16 @@ A modern, production-ready SaaS starter template for building full-stack React a
 - 🔒 **TypeScript by default** - Type safety throughout
 - 🎨 **TailwindCSS v4** - Modern utility-first CSS
 - 🔐 **Authentication with Clerk** - Complete user management
-- 💳 **Subscription management with Polar.sh** - Billing and payments
-- 🗄️ **Real-time database with Convex** - Serverless backend
+- ️ **Real-time database with Convex** - Serverless backend
 - 🤖 **AI Chat Integration** - OpenAI-powered chat functionality
 - 📊 **Interactive Dashboard** - User management and analytics
-- 🎯 **Webhook handling** - Payment and subscription events
 - 📱 **Responsive Design** - Mobile-first approach
 - 🚢 **Vercel Deployment Ready** - One-click deployment
 
 ## Tech Stack
 
 ### Frontend
+
 - **React Router v7** - Full-stack React framework
 - **TailwindCSS v4** - Utility-first CSS framework
 - **shadcn/ui** - Modern component library with Radix UI
@@ -30,12 +29,13 @@ A modern, production-ready SaaS starter template for building full-stack React a
 - **Motion** - Smooth animations
 
 ### Backend & Services
+
 - **Convex** - Real-time database and serverless functions
 - **Clerk** - Authentication and user management
-- **Polar.sh** - Subscription billing and payments
 - **OpenAI** - AI chat capabilities
 
 ### Development & Deployment
+
 - **Vite** - Fast build tool
 - **TypeScript** - Type safety
 - **Vercel** - Deployment platform
@@ -44,10 +44,9 @@ A modern, production-ready SaaS starter template for building full-stack React a
 
 ### Prerequisites
 
-- Node.js 18+ 
+- Node.js 18+
 - Clerk account for authentication
 - Convex account for database
-- Polar.sh account for subscriptions
 - OpenAI API key (for AI chat features)
 
 ### Installation
@@ -75,11 +74,6 @@ VITE_CONVEX_URL=your_convex_url_here
 VITE_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key_here
 CLERK_SECRET_KEY=your_clerk_secret_key_here
 
-# Polar.sh Configuration
-POLAR_ACCESS_TOKEN=your_polar_access_token_here
-POLAR_ORGANIZATION_ID=your_polar_organization_id_here
-POLAR_WEBHOOK_SECRET=your_polar_webhook_secret_here
-
 # OpenAI Configuration (for AI chat)
 OPENAI_API_KEY=your_openai_api_key_here
 
@@ -92,10 +86,6 @@ FRONTEND_URL=http://localhost:5173
 ```bash
 npx convex dev
 ```
-
-5. Set up your Polar.sh webhook endpoint:
-   - URL: `{your_domain}/webhook/polar`
-   - Events: All subscription events
 
 ### Development
 
@@ -164,36 +154,29 @@ Make sure to deploy the output of `npm run build`
 ## Architecture
 
 ### Key Routes
-- `/` - Homepage with pricing
-- `/pricing` - Dynamic pricing page
+
+- `/` - Homepage
 - `/dashboard` - Protected user dashboard
 - `/dashboard/chat` - AI-powered chat interface
 - `/dashboard/settings` - User settings
-- `/success` - Subscription success page
-- `/webhook/polar` - Polar.sh webhook handler
 
 ### Key Components
 
 #### Authentication & Authorization
+
 - Protected routes with Clerk authentication
 - Server-side user data loading with loaders
 - Automatic user synchronization
 
-#### Subscription Management
-- Dynamic pricing cards fetched from Polar.sh
-- Secure checkout flow with redirect handling
-- Real-time subscription status updates
-- Customer portal for subscription management
-- Webhook handling for payment events
-
 #### Dashboard Features
+
 - Interactive sidebar navigation
 - Real-time data updates
 - User profile management
 - AI chat functionality
-- Subscription status display
 
 #### AI Chat Integration
+
 - OpenAI-powered conversations
 - Real-time message streaming
 - Chat history persistence
@@ -207,9 +190,6 @@ Make sure to deploy the output of `npm run build`
 - `VITE_CONVEX_URL` - Your Convex client URL
 - `VITE_CLERK_PUBLISHABLE_KEY` - Clerk publishable key
 - `CLERK_SECRET_KEY` - Clerk secret key
-- `POLAR_ACCESS_TOKEN` - Polar.sh API access token
-- `POLAR_ORGANIZATION_ID` - Your Polar.sh organization ID
-- `POLAR_WEBHOOK_SECRET` - Polar.sh webhook secret
 - `OPENAI_API_KEY` - OpenAI API key for chat features
 - `FRONTEND_URL` - Your production frontend URL
 
@@ -234,7 +214,6 @@ Make sure to deploy the output of `npm run build`
 - `react-router` v7 - Full-stack React framework
 - `@clerk/react-router` - Authentication
 - `convex` - Real-time database
-- `@polar-sh/sdk` - Subscription management
 - `@ai-sdk/openai` & `ai` - AI chat capabilities
 - `@vercel/react-router` - Vercel deployment
 - `tailwindcss` v4 - Styling
@@ -261,6 +240,6 @@ This project is licensed under the MIT License.
 
 ---
 
-**Stop rebuilding the same foundation over and over.** RSK eliminates months of integration work by providing a complete, production-ready SaaS template with authentication, payments, AI chat, and real-time data working seamlessly out of the box.
+**Stop rebuilding the same foundation over and over.** RSK eliminates months of integration work by providing a complete, production-ready SaaS template with authentication, AI chat, and real-time data working seamlessly out of the box.
 
-Built with ❤️ using React Router v7, Convex, Clerk, Polar.sh, and OpenAI.
+Built with ❤️ using React Router v7, Convex, Clerk, and OpenAI.

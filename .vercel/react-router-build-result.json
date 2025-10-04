@@ -13,12 +13,16 @@
       "routes/home": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/sign-in": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/sign-up": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
-      "routes/pricing": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
-      "routes/success": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
-      "routes/subscription-required": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/dashboard/index": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
-      "routes/dashboard/chat": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
-      "routes/dashboard/settings": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0"
+      "routes/dashboard/accounts": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/dashboard/companies.$companyId": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/dashboard/companies": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/dashboard/marketplace": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/dashboard/stocks.$companyId": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/dashboard/stocks": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/dashboard/portfolio": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/dashboard/transactions": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/dashboard/history": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0"
     },
     "routes": {
       "root": {
@@ -54,33 +58,6 @@
           "runtime": "nodejs"
         }
       },
-      "routes/pricing": {
-        "id": "routes/pricing",
-        "parentId": "root",
-        "file": "app/routes/pricing.tsx",
-        "path": "pricing",
-        "config": {
-          "runtime": "nodejs"
-        }
-      },
-      "routes/success": {
-        "id": "routes/success",
-        "parentId": "root",
-        "file": "app/routes/success.tsx",
-        "path": "success",
-        "config": {
-          "runtime": "nodejs"
-        }
-      },
-      "routes/subscription-required": {
-        "id": "routes/subscription-required",
-        "parentId": "root",
-        "file": "app/routes/subscription-required.tsx",
-        "path": "subscription-required",
-        "config": {
-          "runtime": "nodejs"
-        }
-      },
       "routes/dashboard/layout": {
         "id": "routes/dashboard/layout",
         "parentId": "root",
@@ -96,20 +73,83 @@
           "runtime": "nodejs"
         }
       },
-      "routes/dashboard/chat": {
-        "id": "routes/dashboard/chat",
+      "routes/dashboard/accounts": {
+        "id": "routes/dashboard/accounts",
         "parentId": "routes/dashboard/layout",
-        "file": "app/routes/dashboard/chat.tsx",
-        "path": "dashboard/chat",
+        "file": "app/routes/dashboard/accounts.tsx",
+        "path": "dashboard/accounts",
         "config": {
           "runtime": "nodejs"
         }
       },
-      "routes/dashboard/settings": {
-        "id": "routes/dashboard/settings",
+      "routes/dashboard/companies.$companyId": {
+        "id": "routes/dashboard/companies.$companyId",
         "parentId": "routes/dashboard/layout",
-        "file": "app/routes/dashboard/settings.tsx",
-        "path": "dashboard/settings",
+        "file": "app/routes/dashboard/companies.$companyId.tsx",
+        "path": "dashboard/companies/:companyId",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/dashboard/companies": {
+        "id": "routes/dashboard/companies",
+        "parentId": "routes/dashboard/layout",
+        "file": "app/routes/dashboard/companies.tsx",
+        "path": "dashboard/companies",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/dashboard/marketplace": {
+        "id": "routes/dashboard/marketplace",
+        "parentId": "routes/dashboard/layout",
+        "file": "app/routes/dashboard/marketplace.tsx",
+        "path": "dashboard/marketplace",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/dashboard/stocks.$companyId": {
+        "id": "routes/dashboard/stocks.$companyId",
+        "parentId": "routes/dashboard/layout",
+        "file": "app/routes/dashboard/stocks.$companyId.tsx",
+        "path": "dashboard/stocks/:companyId",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/dashboard/stocks": {
+        "id": "routes/dashboard/stocks",
+        "parentId": "routes/dashboard/layout",
+        "file": "app/routes/dashboard/stocks.tsx",
+        "path": "dashboard/stocks",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/dashboard/portfolio": {
+        "id": "routes/dashboard/portfolio",
+        "parentId": "routes/dashboard/layout",
+        "file": "app/routes/dashboard/portfolio.tsx",
+        "path": "dashboard/portfolio",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/dashboard/transactions": {
+        "id": "routes/dashboard/transactions",
+        "parentId": "routes/dashboard/layout",
+        "file": "app/routes/dashboard/transactions.tsx",
+        "path": "dashboard/transactions",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/dashboard/history": {
+        "id": "routes/dashboard/history",
+        "parentId": "routes/dashboard/layout",
+        "file": "app/routes/dashboard/history.tsx",
+        "path": "dashboard/history",
         "config": {
           "runtime": "nodejs"
         }
@@ -117,9 +157,9 @@
     }
   },
   "reactRouterConfig": {
-    "appDirectory": "/Users/michaelshimeles/Desktop/rsk/app",
+    "appDirectory": "/Users/abdul/Documents/quickbuck/app",
     "basename": "/",
-    "buildDirectory": "/Users/michaelshimeles/Desktop/rsk/build",
+    "buildDirectory": "/Users/abdul/Documents/quickbuck/build",
     "future": {
       "unstable_middleware": false,
       "unstable_optimizeDeps": false,
@@ -151,24 +191,6 @@
         "file": "routes/sign-up.tsx",
         "path": "sign-up/*"
       },
-      "routes/pricing": {
-        "id": "routes/pricing",
-        "parentId": "root",
-        "file": "routes/pricing.tsx",
-        "path": "pricing"
-      },
-      "routes/success": {
-        "id": "routes/success",
-        "parentId": "root",
-        "file": "routes/success.tsx",
-        "path": "success"
-      },
-      "routes/subscription-required": {
-        "id": "routes/subscription-required",
-        "parentId": "root",
-        "file": "routes/subscription-required.tsx",
-        "path": "subscription-required"
-      },
       "routes/dashboard/layout": {
         "id": "routes/dashboard/layout",
         "parentId": "root",
@@ -180,17 +202,59 @@
         "file": "routes/dashboard/index.tsx",
         "path": "dashboard"
       },
-      "routes/dashboard/chat": {
-        "id": "routes/dashboard/chat",
+      "routes/dashboard/accounts": {
+        "id": "routes/dashboard/accounts",
         "parentId": "routes/dashboard/layout",
-        "file": "routes/dashboard/chat.tsx",
-        "path": "dashboard/chat"
+        "file": "routes/dashboard/accounts.tsx",
+        "path": "dashboard/accounts"
       },
-      "routes/dashboard/settings": {
-        "id": "routes/dashboard/settings",
+      "routes/dashboard/companies.$companyId": {
+        "id": "routes/dashboard/companies.$companyId",
         "parentId": "routes/dashboard/layout",
-        "file": "routes/dashboard/settings.tsx",
-        "path": "dashboard/settings"
+        "file": "routes/dashboard/companies.$companyId.tsx",
+        "path": "dashboard/companies/:companyId"
+      },
+      "routes/dashboard/companies": {
+        "id": "routes/dashboard/companies",
+        "parentId": "routes/dashboard/layout",
+        "file": "routes/dashboard/companies.tsx",
+        "path": "dashboard/companies"
+      },
+      "routes/dashboard/marketplace": {
+        "id": "routes/dashboard/marketplace",
+        "parentId": "routes/dashboard/layout",
+        "file": "routes/dashboard/marketplace.tsx",
+        "path": "dashboard/marketplace"
+      },
+      "routes/dashboard/stocks.$companyId": {
+        "id": "routes/dashboard/stocks.$companyId",
+        "parentId": "routes/dashboard/layout",
+        "file": "routes/dashboard/stocks.$companyId.tsx",
+        "path": "dashboard/stocks/:companyId"
+      },
+      "routes/dashboard/stocks": {
+        "id": "routes/dashboard/stocks",
+        "parentId": "routes/dashboard/layout",
+        "file": "routes/dashboard/stocks.tsx",
+        "path": "dashboard/stocks"
+      },
+      "routes/dashboard/portfolio": {
+        "id": "routes/dashboard/portfolio",
+        "parentId": "routes/dashboard/layout",
+        "file": "routes/dashboard/portfolio.tsx",
+        "path": "dashboard/portfolio"
+      },
+      "routes/dashboard/transactions": {
+        "id": "routes/dashboard/transactions",
+        "parentId": "routes/dashboard/layout",
+        "file": "routes/dashboard/transactions.tsx",
+        "path": "dashboard/transactions"
+      },
+      "routes/dashboard/history": {
+        "id": "routes/dashboard/history",
+        "parentId": "routes/dashboard/layout",
+        "file": "routes/dashboard/history.tsx",
+        "path": "dashboard/history"
       }
     },
     "routeDiscovery": {

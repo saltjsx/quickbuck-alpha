@@ -7,37 +7,140 @@ export default defineSchema({
     email: v.optional(v.string()),
     image: v.optional(v.string()),
     tokenIdentifier: v.string(),
-  }).index("by_token", ["tokenIdentifier"]),
-  subscriptions: defineTable({
-    userId: v.optional(v.string()),
-    polarId: v.optional(v.string()),
-    polarPriceId: v.optional(v.string()),
-    currency: v.optional(v.string()),
-    interval: v.optional(v.string()),
-    status: v.optional(v.string()),
-    currentPeriodStart: v.optional(v.number()),
-    currentPeriodEnd: v.optional(v.number()),
-    cancelAtPeriodEnd: v.optional(v.boolean()),
-    amount: v.optional(v.number()),
-    startedAt: v.optional(v.number()),
-    endsAt: v.optional(v.number()),
-    endedAt: v.optional(v.number()),
-    canceledAt: v.optional(v.number()),
-    customerCancellationReason: v.optional(v.string()),
-    customerCancellationComment: v.optional(v.string()),
-    metadata: v.optional(v.any()),
-    customFieldData: v.optional(v.any()),
-    customerId: v.optional(v.string()),
+    username: v.optional(v.string()),
   })
-    .index("userId", ["userId"])
-    .index("polarId", ["polarId"]),
-  webhookEvents: defineTable({
-    type: v.string(),
-    polarEventId: v.string(),
-    createdAt: v.string(),
-    modifiedAt: v.string(),
-    data: v.any(),
+    .index("by_token", ["tokenIdentifier"])
+    .index("by_username", ["username"]),
+
+  // Ledger system - all transactions
+  ledger: defineTable({
+    fromAccountId: v.id("accounts"),
+    toAccountId: v.id("accounts"),
+    amount: v.number(),
+    type: v.union(
+      v.literal("transfer"),
+      v.literal("product_purchase"),
+      v.literal("product_cost"),
+      v.literal("initial_deposit"),
+      v.literal("stock_purchase"),
+      v.literal("stock_sale"),
+      v.literal("marketplace_batch") // NEW: batch marketplace transactions
+    ),
+    description: v.optional(v.string()),
+    productId: v.optional(v.id("products")),
+    batchCount: v.optional(v.number()), // NEW: number of items in batch
+    createdAt: v.number(),
   })
-    .index("type", ["type"])
-    .index("polarEventId", ["polarEventId"]),
+    .index("by_from_account", ["fromAccountId"])
+    .index("by_to_account", ["toAccountId"])
+    .index("by_created_at", ["createdAt"]),
+
+  // Bank accounts - for both personal and company accounts
+  accounts: defineTable({
+    name: v.string(),
+    type: v.union(v.literal("personal"), v.literal("company")),
+    ownerId: v.id("users"), // The primary owner
+    companyId: v.optional(v.id("companies")),
+    balance: v.optional(v.number()), // Cached balance for performance
+    createdAt: v.number(),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_company", ["companyId"]),
+
+  // Balances table - fast balance lookups (replaces calculating from ledger)
+  balances: defineTable({
+    accountId: v.id("accounts"),
+    balance: v.number(),
+    lastUpdated: v.number(),
+  })
+    .index("by_account", ["accountId"]),
+
+  // Companies
+  companies: defineTable({
+    name: v.string(),
+    description: v.optional(v.string()),
+    tags: v.array(v.string()), // Industry tags for categorization
+    ticker: v.string(), // Stock ticker symbol (e.g., "AAPL")
+    logoUrl: v.optional(v.string()), // Company logo image URL
+    ownerId: v.id("users"),
+    accountId: v.id("accounts"),
+    isPublic: v.boolean(), // Listed on stock market (balance > $50,000)
+    totalShares: v.number(), // Total shares available
+    sharePrice: v.number(), // Current share price
+    createdAt: v.number(),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_public", ["isPublic"])
+    .index("by_account", ["accountId"])
+    .index("by_ticker", ["ticker"]),
+
+  // Company access - who can manage the company
+  companyAccess: defineTable({
+    companyId: v.id("companies"),
+    userId: v.id("users"),
+    role: v.union(v.literal("owner"), v.literal("manager")),
+    grantedAt: v.number(),
+  })
+    .index("by_company", ["companyId"])
+    .index("by_user", ["userId"])
+    .index("by_company_user", ["companyId", "userId"]),
+
+  // Stock holdings
+  stocks: defineTable({
+    companyId: v.id("companies"),
+    holderId: v.union(v.id("users"), v.id("companies")), // Can be user or company
+    holderType: v.union(v.literal("user"), v.literal("company")),
+    shares: v.number(),
+    averagePurchasePrice: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_company", ["companyId"])
+    .index("by_holder", ["holderId"])
+    .index("by_company_holder", ["companyId", "holderId"]),
+
+  // Stock price history for charts
+  stockPriceHistory: defineTable({
+    companyId: v.id("companies"),
+    price: v.number(),
+    marketCap: v.number(),
+    volume: v.number(), // Trading volume in last period
+    timestamp: v.number(),
+  })
+    .index("by_company", ["companyId"])
+    .index("by_company_timestamp", ["companyId", "timestamp"]),
+
+  // Stock transactions for tracking individual trades
+  stockTransactions: defineTable({
+    companyId: v.id("companies"),
+    buyerId: v.union(v.id("users"), v.id("companies")),
+    buyerType: v.union(v.literal("user"), v.literal("company")),
+    shares: v.number(),
+    pricePerShare: v.number(),
+    totalAmount: v.number(),
+    transactionType: v.union(v.literal("buy"), v.literal("sell"), v.literal("transfer")),
+    fromId: v.optional(v.union(v.id("users"), v.id("companies"))), // For transfers
+    toId: v.optional(v.union(v.id("users"), v.id("companies"))), // For transfers
+    timestamp: v.number(),
+  })
+    .index("by_company", ["companyId"])
+    .index("by_buyer", ["buyerId"])
+    .index("by_timestamp", ["timestamp"]),
+
+  // Products
+  products: defineTable({
+    name: v.string(),
+    description: v.string(),
+    price: v.number(),
+    imageUrl: v.optional(v.string()),
+    tags: v.array(v.string()),
+    companyId: v.id("companies"),
+    createdBy: v.id("users"),
+    isActive: v.boolean(),
+    totalSales: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_company", ["companyId"])
+    .index("by_active", ["isActive"])
+    .index("by_created_by", ["createdBy"]),
 });

@@ -1,9 +1,17 @@
-import { IconDashboard, IconSettings } from "@tabler/icons-react";
-import { MessageCircle } from "lucide-react";
+import {
+  IconBuilding,
+  IconChartLine,
+  IconCreditCard,
+  IconDashboard,
+  IconHistory,
+  IconSend,
+  IconShoppingBag,
+  IconTrendingUp,
+  IconWallet,
+} from "@tabler/icons-react";
 import { Link } from "react-router";
+import { UserButton } from "@clerk/react-router";
 import { NavMain } from "./nav-main";
-import { NavSecondary } from "./nav-secondary";
-import { NavUser } from "./nav-user";
 import {
   Sidebar,
   SidebarContent,
@@ -21,16 +29,39 @@ const data = {
       icon: IconDashboard,
     },
     {
-      title: "Chat",
-      url: "/dashboard/chat",
-      icon: MessageCircle,
+      title: "Accounts",
+      url: "/dashboard/accounts",
+      icon: IconWallet,
     },
-  ],
-  navSecondary: [
     {
-      title: "Settings",
-      url: "/dashboard/settings",
-      icon: IconSettings,
+      title: "Send Money",
+      url: "/dashboard/transactions",
+      icon: IconSend,
+    },
+    {
+      title: "History",
+      url: "/dashboard/history",
+      icon: IconHistory,
+    },
+    {
+      title: "My Companies",
+      url: "/dashboard/companies",
+      icon: IconBuilding,
+    },
+    {
+      title: "Marketplace",
+      url: "/dashboard/marketplace",
+      icon: IconShoppingBag,
+    },
+    {
+      title: "Stock Market",
+      url: "/dashboard/stocks",
+      icon: IconChartLine,
+    },
+    {
+      title: "Portfolio",
+      url: "/dashboard/portfolio",
+      icon: IconTrendingUp,
     },
   ],
 };
@@ -48,16 +79,27 @@ export function AppSidebar({
         <SidebarMenu>
           <SidebarMenuItem>
             <Link to="/" prefetch="viewport">
-              <span className="text-base font-semibold">Ras Mic Inc.</span>
+              <span className="text-base font-semibold">💰 QuickBuck</span>
             </Link>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
-        <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
-      <SidebarFooter>{user && <NavUser user={user} />}</SidebarFooter>
+      <SidebarFooter>
+        {user && (
+          <div className="p-2">
+            <UserButton
+              appearance={{
+                elements: {
+                  avatarBox: "h-10 w-10",
+                },
+              }}
+            />
+          </div>
+        )}
+      </SidebarFooter>
     </Sidebar>
   );
 }
