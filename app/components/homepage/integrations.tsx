@@ -31,15 +31,6 @@ export default function IntegrationsSection({
                   {loaderData?.isSignedIn ? "Play Now" : "Start Playing"}
                 </Link>
               </Button>
-              <Button variant="outline" size="sm" asChild>
-                <Link
-                  to="https://github.com/saltjsx/quickbuck"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  ⭐️ View on GitHub
-                </Link>
-              </Button>
             </div>
           </div>
         </div>
