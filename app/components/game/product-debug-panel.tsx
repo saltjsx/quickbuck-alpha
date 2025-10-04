@@ -23,8 +23,8 @@ export function ProductDebugPanel({
 }) {
   const [showDebug, setShowDebug] = useState(false);
   const debugData = useQuery(
-    showDebug ? api.debug.inspectCompanyProducts : undefined,
-    showDebug ? { companyId } : ("skip" as any)
+    api.debug.inspectCompanyProducts,
+    showDebug ? { companyId } : "skip"
   );
 
   if (!showDebug) {
