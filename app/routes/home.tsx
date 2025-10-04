@@ -1,16 +1,17 @@
 import { getAuth } from "@clerk/react-router/ssr.server";
 import ContentSection from "~/components/homepage/content";
 import Footer from "~/components/homepage/footer";
+import GameFeaturesSection from "~/components/homepage/team";
 import Integrations from "~/components/homepage/integrations";
-import Team from "~/components/homepage/team";
 import type { Route } from "./+types/home";
 
 export function meta({}: Route.MetaArgs) {
-  const title = "React Starter Kit - Launch Your SAAS Quickly";
+  const title = "QuickBuck - Real-Time Multiplayer Finance Game";
   const description =
-    "This powerful starter kit is designed to help you launch your SAAS application quickly and efficiently.";
-  const keywords = "React, Starter Kit, SAAS, Launch, Quickly, Efficiently";
-  const siteUrl = "https://www.reactstarter.xyz/";
+    "Build financial empires in this real-time multiplayer finance simulation game. Create companies, sell products, trade stocks, and compete with players worldwide.";
+  const keywords =
+    "finance game, multiplayer, stocks, companies, simulation, real-time";
+  const siteUrl = "https://www.quickbuck.game/";
   const imageUrl =
     "https://jdj14ctwppwprnqu.public.blob.vercel-storage.com/rsk-image-FcUcfBMBgsjNLo99j3NhKV64GT2bQl.png";
 
@@ -29,7 +30,7 @@ export function meta({}: Route.MetaArgs) {
     { property: "og:image:width", content: "1200" },
     { property: "og:image:height", content: "630" },
     { property: "og:url", content: siteUrl },
-    { property: "og:site_name", content: "React Starter Kit" },
+    { property: "og:site_name", content: "QuickBuck" },
     { property: "og:image", content: imageUrl },
 
     // Twitter Card
@@ -44,7 +45,7 @@ export function meta({}: Route.MetaArgs) {
       name: "keywords",
       content: keywords,
     },
-    { name: "author", content: "Ras Mic" },
+    { name: "author", content: "QuickBuck Team" },
     { name: "favicon", content: imageUrl },
   ];
 }
@@ -62,7 +63,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     <>
       <Integrations loaderData={loaderData} />
       <ContentSection />
-      <Team />
+      <GameFeaturesSection />
       <Footer />
     </>
   );

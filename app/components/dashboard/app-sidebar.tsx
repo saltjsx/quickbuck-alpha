@@ -20,6 +20,7 @@ import {
   SidebarMenu,
   SidebarMenuItem,
 } from "~/components/ui/sidebar";
+import { LogoIcon } from "~/components/logo";
 
 const data = {
   navMain: [
@@ -78,8 +79,15 @@ export function AppSidebar({
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <Link to="/" prefetch="viewport">
-              <span className="text-base font-semibold">💰 QuickBuck</span>
+            <Link
+              to="/"
+              prefetch="viewport"
+              className="flex items-center gap-2"
+            >
+              <LogoIcon className="h-8 w-8" />
+              <span className="font-logo lowercase text-base font-semibold">
+                quickbuck
+              </span>
             </Link>
           </SidebarMenuItem>
         </SidebarMenu>

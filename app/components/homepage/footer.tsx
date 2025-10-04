@@ -5,7 +5,11 @@ export default function FooterSection() {
     <footer className="py-16 md:py-32">
       <div className="mx-auto max-w-5xl px-6">
         <Link to="/" aria-label="go home" className="mx-auto block size-fit">
-          <img src="/rsk.png" alt="RSK Logo" className="h-12 w-12" />
+          <img
+            src="/quickbuck-colored-transp.png"
+            alt="quickbuck logo"
+            className="h-12 w-12"
+          />
         </Link>
         <div className="my-8 flex flex-wrap justify-center gap-6 text-sm">
           <Link
@@ -30,8 +34,7 @@ export default function FooterSection() {
           </Link>
         </div>
         <span className="text-muted-foreground block text-center text-sm">
-          {" "}
-          © {new Date().getFullYear()} RSK, All rights reserved
+          © {new Date().getFullYear()} quickbuck, all rights reserved
         </span>
       </div>
     </footer>

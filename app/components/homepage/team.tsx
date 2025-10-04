@@ -1,60 +1,61 @@
-const members = [
+const features = [
   {
-    name: "Michael Shimeles",
-    role: "Co-Founder & CEO",
-    avatar:
-      "https://pbs.twimg.com/profile_images/1927552295291564033/U8DD7JlB_400x400.jpg",
+    title: "🏦 Bank Account System",
+    description:
+      "Start with $10,000 and manage multiple accounts for your companies. All transactions are tracked in real-time.",
+    icon: "🏦",
   },
   {
-    name: "Ras Mic",
-    role: "Co-Founder & CTO",
-    avatar:
-      "https://pbs.twimg.com/media/GsOcrswWMAALjCG?format=jpg&name=medium",
+    title: "🏢 Company Management",
+    description:
+      "Create unlimited companies, grant access to other players, and watch them go public when they reach $50,000.",
+    icon: "🏢",
   },
   {
-    name: "Micky",
-    role: "Co-Founder & CMO",
-    avatar:
-      "https://pbs.twimg.com/media/GrQYfZ7WAAAMy7i?format=jpg&name=medium",
+    title: "🛍️ Product Marketplace",
+    description:
+      "List products with custom pricing and watch them sell automatically every 2 minutes through the game's economy.",
+    icon: "🛍️",
   },
   {
-    name: "Mike",
-    role: "Co-Founder & COO",
-    avatar:
-      "https://pbs.twimg.com/media/GoRePdpXEAAb06Q?format=jpg&name=4096x4096",
+    title: "📈 Stock Market",
+    description:
+      "Invest in public companies, track your portfolio performance, and buy/sell shares in real-time.",
+    icon: "📈",
   },
 ];
 
-export default function TeamSection() {
+export default function GameFeaturesSection() {
   return (
-    <section id="team" className="py-12 md:py-32">
+    <section id="how-to-play" className="py-12 md:py-32">
       <div className="mx-auto max-w-3xl px-8 lg:px-0">
         <h2 className="mb-8 text-4xl font-bold md:mb-16 lg:text-5xl">
-          Our team
+          Game Features
         </h2>
 
-        <div>
-          <h3 className="mb-6 text-lg font-medium">Leadership</h3>
-          <div className="grid grid-cols-2 gap-4 border-t py-6 md:grid-cols-4">
-            {members.map((member, index) => (
-              <div key={index}>
-                <div className="bg-background size-20 rounded-full border p-0.5 shadow shadow-zinc-950/5">
-                  <img
-                    className="aspect-square rounded-full object-cover"
-                    src={member.avatar}
-                    alt={member.name}
-                    height="460"
-                    width="460"
-                    loading="lazy"
-                  />
-                </div>
-                <span className="mt-2 block text-sm">{member.name}</span>
-                <span className="text-muted-foreground block text-xs">
-                  {member.role}
-                </span>
-              </div>
-            ))}
-          </div>
+        <div className="grid gap-8 md:grid-cols-2">
+          {features.map((feature, index) => (
+            <div key={index} className="space-y-4">
+              <div className="text-4xl">{feature.icon}</div>
+              <h3 className="text-xl font-semibold">{feature.title}</h3>
+              <p className="text-muted-foreground">{feature.description}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-12 text-center">
+          <h3 className="mb-4 text-2xl font-semibold">
+            Ready to Build Your Empire?
+          </h3>
+          <p className="text-muted-foreground mb-6">
+            Join thousands of players in this exciting finance simulation game.
+          </p>
+          <a
+            href="/sign-up"
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+          >
+            Start Playing Now
+          </a>
         </div>
       </div>
     </section>

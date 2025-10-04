@@ -8,21 +8,20 @@ export default function ContentSection() {
       <div className="mx-auto max-w-5xl px-6">
         <div className="grid gap-6 md:grid-cols-2 md:gap-12">
           <h2 className="text-4xl font-medium">
-            The Starter Kit you need to start your SaaS application.
+            Real-Time Finance Simulation Game
           </h2>
           <div className="space-y-6">
             <p>
-              Stop rebuilding the same foundation over and over. RSK eliminates
-              months of integration work by providing a complete,
-              production-ready SaaS template with authentication and real-time
-              data working seamlessly out of the box.{" "}
+              Experience the thrill of building financial empires in QuickBuck,
+              a real-time multiplayer game where every decision matters. Start
+              with $10,000 and grow your wealth through strategic company
+              management, product sales, and stock trading.
             </p>
             <p>
-              <span className="font-bold">From idea to launch in weeks,</span>{" "}
-              not months. With TypeScript safety, modern UI components, and
-              scalable architecture built-in, you can validate your business
-              concept and start generating revenue while your competitors are
-              still setting up their development environment.{" "}
+              <span className="font-bold">Compete globally</span> with players
+              worldwide in this dynamic economy. Watch your companies go public,
+              invest in stocks, and climb the leaderboards as the market evolves
+              in real-time.
             </p>
             <Button
               asChild
@@ -30,8 +29,8 @@ export default function ContentSection() {
               size="sm"
               className="gap-1 pr-1.5"
             >
-              <Link to="#">
-                <span>Learn More</span>
+              <Link to="#how-to-play">
+                <span>Learn How to Play</span>
                 <ChevronRight className="size-2" />
               </Link>
             </Button>

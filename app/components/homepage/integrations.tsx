@@ -56,11 +56,12 @@ export default function IntegrationsSection({
             </div>
             <div className="mx-auto mt-6 max-w-lg space-y-6 text-center sm:mt-0 sm:text-left">
               <h2 className="text-balance text-3xl font-semibold md:text-4xl">
-                React Starter Kit
+                Build Financial Empires in QuickBuck
               </h2>
               <p className="text-muted-foreground">
-                This powerful starter kit is designed to help you launch your
-                SAAS application quickly and efficiently.
+                Real-time multiplayer finance simulation game. Create companies,
+                sell products, trade stocks, and compete with players worldwide
+                to build your fortune.
               </p>
 
               <div className="flex gap-3">
@@ -69,18 +70,16 @@ export default function IntegrationsSection({
                     to={loaderData?.isSignedIn ? "/dashboard" : "/sign-up"}
                     prefetch="viewport"
                   >
-                    {loaderData?.isSignedIn
-                      ? "Go to Dashboard (Demo)"
-                      : "Get Started (Demo)"}
+                    {loaderData?.isSignedIn ? "Play Now" : "Start Playing"}
                   </Link>
                 </Button>
                 <Button variant="outline" size="sm" asChild>
                   <Link
-                    to="https://github.com/michaelshimeles/react-starter-kit"
+                    to="https://github.com/saltjsx/quickbuck"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    ⭐️ Star on GitHub
+                    ⭐️ View on GitHub
                   </Link>
                 </Button>
               </div>
