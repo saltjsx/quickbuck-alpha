@@ -648,48 +648,64 @@ export const getAllPublicStocks = query({
       .withIndex("by_public", (q) => q.eq("isPublic", true))
       .collect();
 
-    const stocks = await Promise.all(
-      publicCompanies.map(async (company) => {
-        const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
-        const priceHistory = await ctx.db
-          .query("stockPriceHistory")
-          .withIndex("by_company_timestamp", (q) =>
-            q.eq("companyId", company._id).gt("timestamp", oneDayAgo)
-          )
-          .order("asc")
-          .collect();
+    // OPTIMIZED: Batch fetch price history for all companies
+    const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+    const oneHourAgo = Date.now() - (60 * 60 * 1000);
+    
+    // Get all recent price history in fewer queries
+    const allDayHistory = await ctx.db
+      .query("stockPriceHistory")
+      .withIndex("by_company_timestamp")
+      .filter((q) => q.gt(q.field("timestamp"), oneDayAgo))
+      .collect();
+    
+    const allHourHistory = await ctx.db
+      .query("stockPriceHistory")
+      .withIndex("by_company_timestamp")
+      .filter((q) => q.gt(q.field("timestamp"), oneHourAgo))
+      .collect();
 
-        const oldPrice = priceHistory[0]?.price || company.sharePrice;
-        const priceChange24h = company.sharePrice - oldPrice;
-        const priceChangePercent24h = (priceChange24h / oldPrice) * 100;
+    // Group by company
+    const dayHistoryByCompany = new Map<string, any[]>();
+    const hourHistoryByCompany = new Map<string, any[]>();
+    
+    allDayHistory.forEach(entry => {
+      const arr = dayHistoryByCompany.get(entry.companyId) || [];
+      arr.push(entry);
+      dayHistoryByCompany.set(entry.companyId, arr);
+    });
+    
+    allHourHistory.forEach(entry => {
+      const arr = hourHistoryByCompany.get(entry.companyId) || [];
+      arr.push(entry);
+      hourHistoryByCompany.set(entry.companyId, arr);
+    });
 
-        const oneHourAgo = Date.now() - (60 * 60 * 1000);
-        const hourHistory = await ctx.db
-          .query("stockPriceHistory")
-          .withIndex("by_company_timestamp", (q) =>
-            q.eq("companyId", company._id).gt("timestamp", oneHourAgo)
-          )
-          .order("asc")
-          .collect();
+    const stocks = publicCompanies.map(company => {
+      const dayHistory = dayHistoryByCompany.get(company._id) || [];
+      const hourHistory = hourHistoryByCompany.get(company._id) || [];
+      
+      const oldPrice = dayHistory[0]?.price || company.sharePrice;
+      const priceChange24h = company.sharePrice - oldPrice;
+      const priceChangePercent24h = (priceChange24h / oldPrice) * 100;
 
-        const marketCap = company.sharePrice * company.totalShares;
+      const marketCap = company.sharePrice * company.totalShares;
 
-        return {
-          _id: company._id,
-          name: company.name,
-          ticker: company.ticker,
-          logoUrl: company.logoUrl,
-          currentPrice: company.sharePrice,
-          priceChange24h,
-          priceChangePercent24h,
-          marketCap,
-          priceHistory: aggregateToHourly(hourHistory).map(h => ({
-            price: h.price,
-            timestamp: h.timestamp,
-          })),
-        };
-      })
-    );
+      return {
+        _id: company._id,
+        name: company.name,
+        ticker: company.ticker,
+        logoUrl: company.logoUrl,
+        currentPrice: company.sharePrice,
+        priceChange24h,
+        priceChangePercent24h,
+        marketCap,
+        priceHistory: aggregateToHourly(hourHistory).map(h => ({
+          price: h.price,
+          timestamp: h.timestamp,
+        })),
+      };
+    });
 
     return stocks.sort((a, b) => b.marketCap - a.marketCap);
   },
@@ -722,5 +738,33 @@ export const updateStockPrices = internalMutation({
     }
 
     return { updated: publicCompanies.length };
+  },
+});
+
+// OPTIMIZATION: Clean up old stock price history to prevent unbounded growth
+export const cleanupOldPriceHistory = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    // Keep only last 90 days of price history
+    const ninetyDaysAgo = Date.now() - (90 * 24 * 60 * 60 * 1000);
+    
+    // Get all old records
+    const oldRecords = await ctx.db
+      .query("stockPriceHistory")
+      .withIndex("by_company_timestamp")
+      .filter((q) => q.lt(q.field("timestamp"), ninetyDaysAgo))
+      .collect();
+
+    // Delete in batches to avoid timeout
+    let deleted = 0;
+    for (const record of oldRecords) {
+      await ctx.db.delete(record._id);
+      deleted++;
+      
+      // Limit deletions per run to avoid timeout
+      if (deleted >= 1000) break;
+    }
+
+    return { deleted, remaining: oldRecords.length - deleted };
   },
 });

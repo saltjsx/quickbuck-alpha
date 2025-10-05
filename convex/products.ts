@@ -235,38 +235,41 @@ export const automaticPurchase = internalMutation({
         await ctx.db.patch(company.accountId, { balance: newBalance });
       }
 
-      // Create individual product purchase transactions
+      // OPTIMIZED: Create BATCH transactions instead of individual ones
       for (const [productIdStr, salesCount] of tx.productSales) {
-        const product = await ctx.db.get(productIdStr as any) as any; // Cast to any for now
+        const product = await ctx.db.get(productIdStr as any) as any;
         if (!product) continue;
 
         const prodPrice = product.price || 0;
         const costPercentage = 0.23 + Math.random() * 0.44;
         const prodCost = prodPrice * costPercentage;
+        
+        const totalRevenue = prodPrice * salesCount;
+        const totalCost = prodCost * salesCount;
 
-        // Create revenue transaction for each unit sold
-        for (let i = 0; i < salesCount; i++) {
-          await ctx.db.insert("ledger", {
-            fromAccountId: systemAccount._id,
-            toAccountId: company.accountId,
-            amount: prodPrice,
-            type: "product_purchase",
-            productId: productIdStr as any,
-            description: `Purchase of ${product.name}`,
-            createdAt: Date.now(),
-          });
+        // Create ONE batch revenue transaction for all sales
+        await ctx.db.insert("ledger", {
+          fromAccountId: systemAccount._id,
+          toAccountId: company.accountId,
+          amount: totalRevenue,
+          type: "marketplace_batch",
+          productId: productIdStr as any,
+          batchCount: salesCount,
+          description: `Batch purchase of ${salesCount}x ${product.name}`,
+          createdAt: Date.now(),
+        });
 
-          // Create cost transaction
-          await ctx.db.insert("ledger", {
-            fromAccountId: company.accountId,
-            toAccountId: systemAccount._id,
-            amount: prodCost,
-            type: "product_cost",
-            productId: productIdStr as any,
-            description: `Production cost for ${product.name}`,
-            createdAt: Date.now(),
-          });
-        }
+        // Create ONE batch cost transaction
+        await ctx.db.insert("ledger", {
+          fromAccountId: company.accountId,
+          toAccountId: systemAccount._id,
+          amount: totalCost,
+          type: "marketplace_batch",
+          productId: productIdStr as any,
+          batchCount: salesCount,
+          description: `Batch production cost for ${salesCount}x ${product.name}`,
+          createdAt: Date.now(),
+        });
       }
 
       // Update product sales counts and revenue/costs

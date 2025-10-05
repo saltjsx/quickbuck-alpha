@@ -346,33 +346,48 @@ export const getTransactions = query({
   handler: async (ctx, args) => {
     const limit = args.limit || 50;
 
-    const transactions = await ctx.db
+    // OPTIMIZED: Query only from/to this account with proper index usage
+    const fromTransactions = await ctx.db
       .query("ledger")
-      .withIndex("by_created_at")
+      .withIndex("by_from_account", (q) => q.eq("fromAccountId", args.accountId))
       .order("desc")
-      .collect();
+      .take(limit);
 
-    const relevantTransactions = transactions
-      .filter(
-        (tx) =>
-          tx.fromAccountId === args.accountId ||
-          tx.toAccountId === args.accountId
-      )
+    const toTransactions = await ctx.db
+      .query("ledger")
+      .withIndex("by_to_account", (q) => q.eq("toAccountId", args.accountId))
+      .order("desc")
+      .take(limit);
+
+    // Combine and sort
+    const allTransactions = [...fromTransactions, ...toTransactions]
+      .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, limit);
 
-    // Enrich with account names
-    const enrichedTransactions = await Promise.all(
-      relevantTransactions.map(async (tx) => {
-        const fromAccount = await ctx.db.get(tx.fromAccountId);
-        const toAccount = await ctx.db.get(tx.toAccountId);
-        
-        return {
-          ...tx,
-          fromAccountName: fromAccount?.name || "Unknown",
-          toAccountName: toAccount?.name || "Unknown",
-        };
-      })
+    // OPTIMIZED: Batch fetch account names
+    const accountIds = new Set<string>();
+    allTransactions.forEach(tx => {
+      accountIds.add(tx.fromAccountId);
+      accountIds.add(tx.toAccountId);
+    });
+
+    const accounts = await Promise.all(
+      Array.from(accountIds).map(id => ctx.db.get(id as any))
     );
+
+    const accountMap = new Map();
+    accounts.forEach(account => {
+      if (account && 'name' in account) {
+        accountMap.set(account._id, account.name);
+      }
+    });
+
+    // Map with cached account names
+    const enrichedTransactions = allTransactions.map(tx => ({
+      ...tx,
+      fromAccountName: accountMap.get(tx.fromAccountId) || "Unknown",
+      toAccountName: accountMap.get(tx.toAccountId) || "Unknown",
+    }));
 
     return enrichedTransactions;
   },

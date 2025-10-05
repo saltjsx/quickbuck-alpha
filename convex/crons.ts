@@ -17,4 +17,11 @@ crons.interval(
   internal.stocks.updateStockPrices
 );
 
+// Clean up old price history daily at 3 AM
+crons.daily(
+  "cleanup old price history",
+  { hourUTC: 3, minuteUTC: 0 },
+  internal.stocks.cleanupOldPriceHistory
+);
+
 export default crons;
