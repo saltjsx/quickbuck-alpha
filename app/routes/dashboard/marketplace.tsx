@@ -56,7 +56,8 @@ export default function MarketplacePage() {
               <CardHeader>
                 <CardTitle>Available Products</CardTitle>
                 <CardDescription>
-                  Automatic purchases range from $1,500-$3,000 every 2 minutes
+                  Quickbuck chooses products at random, and purchases a certain
+                  quantity to fulfill its minimum spend.
                 </CardDescription>
               </CardHeader>
               <CardContent>

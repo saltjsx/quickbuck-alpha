@@ -49,7 +49,7 @@ export function MarketplaceTab() {
         <CardTitle>Product Marketplace</CardTitle>
         <CardDescription>
           Browse products from all companies. Products are automatically
-          purchased every 2 minutes!
+          purchased every 20 minutes!
         </CardDescription>
       </CardHeader>
       <CardContent>
