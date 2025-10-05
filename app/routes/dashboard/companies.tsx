@@ -13,6 +13,8 @@ import { Button } from "~/components/ui/button";
 import { Building2, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { CreateCompanyDialog } from "~/components/game/create-company-dialog";
 import { CreateProductDialog } from "~/components/game/create-product-dialog";
+import { EditCompanyDialog } from "~/components/game/edit-company-dialog";
+import { DeleteCompanyDialog } from "~/components/game/delete-company-dialog";
 import { CompanyDashboard } from "~/components/game/company-dashboard";
 import { useState } from "react";
 import type { Route } from "./+types/companies";
@@ -164,8 +166,23 @@ export default function CompaniesPage() {
                               )}
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <CreateProductDialog companyId={company._id} />
+                            <EditCompanyDialog
+                              company={{
+                                _id: company._id,
+                                name: company.name,
+                                description: company.description,
+                                tags: company.tags,
+                                ticker: company.ticker,
+                                logoUrl: company.logoUrl,
+                              }}
+                            />
+                            <DeleteCompanyDialog
+                              companyId={company._id}
+                              companyName={company.name}
+                              balance={company.balance}
+                            />
                             <Link to={`/dashboard/companies/${company._id}`}>
                               <Button variant="outline" size="sm">
                                 <ExternalLink className="h-4 w-4 mr-1" />

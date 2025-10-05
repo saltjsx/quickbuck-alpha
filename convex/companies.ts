@@ -304,6 +304,178 @@ export const checkAndUpdatePublicStatus = mutation({
   },
 });
 
+// Update company details
+export const updateCompany = mutation({
+  args: {
+    companyId: v.id("companies"),
+    name: v.optional(v.string()),
+    description: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+    ticker: v.optional(v.string()),
+    logoUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const company = await ctx.db.get(args.companyId);
+    if (!company) throw new Error("Company not found");
+
+    // Check if user is the owner
+    if (company.ownerId !== userId) {
+      throw new Error("Only the owner can update company details");
+    }
+
+    // If ticker is being changed, check if it's already taken
+    if (args.ticker && args.ticker !== company.ticker) {
+      const newTicker = args.ticker.toUpperCase();
+      const existingCompany = await ctx.db
+        .query("companies")
+        .withIndex("by_ticker", (q) => q.eq("ticker", newTicker))
+        .first();
+      
+      if (existingCompany && existingCompany._id !== args.companyId) {
+        throw new Error("Ticker symbol already in use");
+      }
+    }
+
+    const updates: any = {};
+    if (args.name !== undefined) updates.name = args.name;
+    if (args.description !== undefined) updates.description = args.description;
+    if (args.tags !== undefined) updates.tags = args.tags;
+    if (args.ticker !== undefined) updates.ticker = args.ticker.toUpperCase();
+    if (args.logoUrl !== undefined) updates.logoUrl = args.logoUrl;
+
+    await ctx.db.patch(args.companyId, updates);
+
+    return { success: true };
+  },
+});
+
+// Delete company and return funds to owner
+export const deleteCompany = mutation({
+  args: {
+    companyId: v.id("companies"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const company = await ctx.db.get(args.companyId);
+    if (!company) throw new Error("Company not found");
+
+    // Check if user is the owner
+    if (company.ownerId !== userId) {
+      throw new Error("Only the owner can delete the company");
+    }
+
+    // Get company balance
+    const account = await ctx.db.get(company.accountId);
+    const balance = account?.balance ?? 0;
+
+    // Transfer funds back to owner's personal account if there's a balance
+    let fundsReturned = 0;
+    if (balance > 0) {
+      const personalAccount = await ctx.db
+        .query("accounts")
+        .withIndex("by_owner", (q) => q.eq("ownerId", userId))
+        .filter((q) => q.eq(q.field("type"), "personal"))
+        .first();
+
+      if (personalAccount) {
+        // Update personal account balance
+        const personalBalance = personalAccount.balance ?? 0;
+        await ctx.db.patch(personalAccount._id, {
+          balance: personalBalance + balance,
+        });
+
+        // Create transfer ledger entry
+        await ctx.db.insert("ledger", {
+          fromAccountId: company.accountId,
+          toAccountId: personalAccount._id,
+          amount: balance,
+          type: "transfer",
+          description: `Company deletion: ${company.name} - returning funds to owner`,
+          createdAt: Date.now(),
+        });
+
+        fundsReturned = balance;
+      }
+    }
+
+    // Deactivate all products (don't delete for historical record)
+    const products = await ctx.db
+      .query("products")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .collect();
+
+    for (const product of products) {
+      await ctx.db.patch(product._id, { isActive: false });
+    }
+
+    // Delete all stock holdings for this company
+    const stocks = await ctx.db
+      .query("stocks")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .collect();
+
+    for (const stock of stocks) {
+      await ctx.db.delete(stock._id);
+    }
+
+    // Delete stock price history
+    const priceHistory = await ctx.db
+      .query("stockPriceHistory")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .collect();
+
+    for (const history of priceHistory) {
+      await ctx.db.delete(history._id);
+    }
+
+    // Delete stock transactions
+    const stockTransactions = await ctx.db
+      .query("stockTransactions")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .collect();
+
+    for (const transaction of stockTransactions) {
+      await ctx.db.delete(transaction._id);
+    }
+
+    // Delete all company access records
+    const accessRecords = await ctx.db
+      .query("companyAccess")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .collect();
+
+    for (const access of accessRecords) {
+      await ctx.db.delete(access._id);
+    }
+
+    // Delete balance record
+    const balanceRecord = await ctx.db
+      .query("balances")
+      .withIndex("by_account", (q) => q.eq("accountId", company.accountId))
+      .first();
+
+    if (balanceRecord) {
+      await ctx.db.delete(balanceRecord._id);
+    }
+
+    // Delete company account
+    await ctx.db.delete(company.accountId);
+
+    // Finally, delete the company
+    await ctx.db.delete(args.companyId);
+
+    return {
+      success: true,
+      fundsReturned,
+    };
+  },
+});
+
 // Get company dashboard data
 export const getCompanyDashboard = query({
   args: { companyId: v.id("companies") },

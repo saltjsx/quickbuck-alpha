@@ -49,6 +49,8 @@ import {
   XCircle,
 } from "lucide-react";
 import { EditProductDialog } from "./edit-product-dialog";
+import { EditCompanyDialog } from "./edit-company-dialog";
+import { DeleteCompanyDialog } from "./delete-company-dialog";
 import { useToast } from "~/hooks/use-toast";
 // import { ProductDebugPanel } from "./product-debug-panel";
 
@@ -124,9 +126,26 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
             Track your company's performance and growth
           </p>
         </div>
-        <Badge variant={company.isPublic ? "default" : "outline"}>
-          {company.isPublic ? "Public Company" : "Private Company"}
-        </Badge>
+        <div className="flex gap-2">
+          <Badge variant={company.isPublic ? "default" : "outline"}>
+            {company.isPublic ? "Public Company" : "Private Company"}
+          </Badge>
+          <EditCompanyDialog
+            company={{
+              _id: company._id,
+              name: company.name,
+              description: company.description,
+              tags: company.tags,
+              ticker: company.ticker,
+              logoUrl: company.logoUrl,
+            }}
+          />
+          <DeleteCompanyDialog
+            companyId={company._id}
+            companyName={company.name}
+            balance={company.balance}
+          />
+        </div>
       </div>
 
       {/* Key Metrics */}
