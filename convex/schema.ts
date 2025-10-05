@@ -68,6 +68,7 @@ export default defineSchema({
     isPublic: v.boolean(), // Listed on stock market (balance > $50,000)
     totalShares: v.number(), // Total shares available
     sharePrice: v.number(), // Current share price
+    marketSentiment: v.optional(v.number()), // Market sentiment multiplier (0.8 - 1.2)
     createdAt: v.number(),
   })
     .index("by_owner", ["ownerId"])

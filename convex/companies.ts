@@ -65,6 +65,7 @@ export const createCompany = mutation({
       isPublic: false,
       totalShares: 1000000, // 1 million shares by default
       sharePrice: 0.01, // $0.01 per share initially
+      marketSentiment: 1.0, // Neutral market sentiment
       createdAt: Date.now(),
     });
 
@@ -277,10 +278,26 @@ export const checkAndUpdatePublicStatus = mutation({
     const balance = account?.balance ?? 0;
 
     if (balance > 50000 && !company.isPublic) {
+      // Calculate fair IPO price based on company fundamentals
+      // Use neutral sentiment (1.0) for IPO
+      const fairValue = (balance / company.totalShares) * 5.0; // 5x book value multiplier
+      
       await ctx.db.patch(args.companyId, {
         isPublic: true,
+        sharePrice: fairValue,
+        marketSentiment: 1.0,
       });
-      return { madePublic: true, balance };
+      
+      // Record initial public price in history
+      await ctx.db.insert("stockPriceHistory", {
+        companyId: args.companyId,
+        price: fairValue,
+        marketCap: fairValue * company.totalShares,
+        volume: 0,
+        timestamp: Date.now(),
+      });
+      
+      return { madePublic: true, balance, ipoPrice: fairValue };
     }
 
     return { madePublic: false, balance };
