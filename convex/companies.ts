@@ -346,37 +346,24 @@ export const getCompanyDashboard = query({
     // Calculate profit
     const totalProfit = totalRevenue - totalCosts;
 
-    // OPTIMIZED: Use product totalSales field instead of scanning all transactions
+    // OPTIMIZED: Use stored totalRevenue and totalCosts from products table
     const productStats = products.map((product) => {
-      // Filter from already loaded transactions (last 30 days only)
-      const productPurchases = recentTransactions.filter(
-        tx => tx.productId === product._id && 
-              tx.type === "product_purchase"
-      );
-      
-      const productCostTxs = recentTransactions.filter(
-        tx => tx.productId === product._id && 
-              tx.type === "product_cost"
-      );
-      
-      const productRevenue = productPurchases.reduce((sum, tx) => sum + tx.amount, 0);
-      const productCosts = productCostTxs.reduce((sum, tx) => sum + tx.amount, 0);
+      const productRevenue = product.totalRevenue || 0;
+      const productCosts = product.totalCosts || 0;
       const productProfit = productRevenue - productCosts;
       
       // Use totalSales field for lifetime units sold
       const unitsSold = product.totalSales || 0;
       
-      // Calculate recent sales (last 30 days) for avg price
-      const recentUnitsSold = product.price > 0 ? Math.round(productRevenue / product.price) : 0;
-      const avgSalePrice = recentUnitsSold > 0 ? productRevenue / recentUnitsSold : product.price;
+      // Calculate avg sale price
+      const avgSalePrice = unitsSold > 0 ? productRevenue / unitsSold : product.price;
 
       return {
         ...product,
         revenue: productRevenue,
         costs: productCosts,
         profit: productProfit,
-        unitsSold: unitsSold, // Lifetime total
-        recentUnitsSold: recentUnitsSold, // Last 30 days
+        unitsSold: unitsSold,
         avgSalePrice: avgSalePrice,
       };
     });

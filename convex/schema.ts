@@ -142,6 +142,8 @@ export default defineSchema({
     createdBy: v.id("users"),
     isActive: v.boolean(),
     totalSales: v.number(),
+    totalRevenue: v.optional(v.number()),
+    totalCosts: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_company", ["companyId"])

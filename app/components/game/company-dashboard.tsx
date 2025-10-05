@@ -346,15 +346,6 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
                     product.revenue > 0
                       ? (product.profit / product.revenue) * 100
                       : 0;
-                  // Calculate units sold as revenue / price
-                  const calculatedUnitsSold =
-                    product.price > 0
-                      ? Math.round(product.revenue / product.price)
-                      : 0;
-                  const calculatedAvgPrice =
-                    calculatedUnitsSold > 0
-                      ? product.revenue / calculatedUnitsSold
-                      : 0;
 
                   return (
                     <TableRow key={product._id}>
@@ -385,11 +376,11 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
                       </TableCell>
                       <TableCell className="text-right">
                         <span className="text-xs text-muted-foreground">
-                          ${calculatedAvgPrice.toFixed(2)}
+                          ${product.avgSalePrice.toFixed(2)}
                         </span>
                       </TableCell>
                       <TableCell className="text-right">
-                        {calculatedUnitsSold}
+                        {product.unitsSold}
                       </TableCell>
                       <TableCell className="text-right">
                         ${product.revenue.toFixed(2)}

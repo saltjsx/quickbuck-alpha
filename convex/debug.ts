@@ -128,73 +128,29 @@ export const inspectCompanyProducts = query({
   },
 });
 
-// Mutation to reset the entire economy by deleting all data
-export const resetEconomy = mutation({
+// Mutation to migrate existing products to have totalRevenue and totalCosts
+export const migrateProductRevenue = mutation({
   args: {},
   handler: async (ctx) => {
-    // Delete all documents from each table in order to avoid foreign key issues
-    // Start with dependent tables first
-
-    // Delete stock transactions
-    const stockTransactions = await ctx.db.query("stockTransactions").collect();
-    for (const tx of stockTransactions) {
-      await ctx.db.delete(tx._id);
-    }
-
-    // Delete stock price history
-    const stockPriceHistory = await ctx.db.query("stockPriceHistory").collect();
-    for (const history of stockPriceHistory) {
-      await ctx.db.delete(history._id);
-    }
-
-    // Delete stocks
-    const stocks = await ctx.db.query("stocks").collect();
-    for (const stock of stocks) {
-      await ctx.db.delete(stock._id);
-    }
-
-    // Delete products
     const products = await ctx.db.query("products").collect();
+    
     for (const product of products) {
-      await ctx.db.delete(product._id);
+      const productData = product as any;
+      
+      // Set default values if missing
+      const updates: any = {};
+      if (productData.totalRevenue === undefined) {
+        updates.totalRevenue = 0;
+      }
+      if (productData.totalCosts === undefined) {
+        updates.totalCosts = 0;
+      }
+      
+      if (Object.keys(updates).length > 0) {
+        await ctx.db.patch(productData._id, updates);
+      }
     }
-
-    // Delete company access
-    const companyAccess = await ctx.db.query("companyAccess").collect();
-    for (const access of companyAccess) {
-      await ctx.db.delete(access._id);
-    }
-
-    // Delete companies
-    const companies = await ctx.db.query("companies").collect();
-    for (const company of companies) {
-      await ctx.db.delete(company._id);
-    }
-
-    // Delete balances
-    const balances = await ctx.db.query("balances").collect();
-    for (const balance of balances) {
-      await ctx.db.delete(balance._id);
-    }
-
-    // Delete ledger transactions
-    const ledger = await ctx.db.query("ledger").collect();
-    for (const tx of ledger) {
-      await ctx.db.delete(tx._id);
-    }
-
-    // Delete accounts
-    const accounts = await ctx.db.query("accounts").collect();
-    for (const account of accounts) {
-      await ctx.db.delete(account._id);
-    }
-
-    // Optionally delete users - uncomment if you want to remove all user data too
-    // const users = await ctx.db.query("users").collect();
-    // for (const user of users) {
-    //   await ctx.db.delete(user._id);
-    // }
-
-    return { success: true, message: "Economy reset complete. All data has been deleted." };
+    
+    return { success: true, migratedProducts: products.length };
   },
 });

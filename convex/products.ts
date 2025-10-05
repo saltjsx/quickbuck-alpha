@@ -5,7 +5,7 @@ import { internalMutation, mutation, query } from "./_generated/server";
 async function getCurrentUserId(ctx: any) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) return null;
-  
+
   const user = await ctx.db
     .query("users")
     .withIndex("by_token", (q: any) => q.eq("tokenIdentifier", identity.subject))
@@ -48,6 +48,8 @@ export const createProduct = mutation({
       createdBy: userId,
       isActive: true,
       totalSales: 0,
+      totalRevenue: 0,
+      totalCosts: 0,
       createdAt: Date.now(),
     });
 
@@ -233,34 +235,52 @@ export const automaticPurchase = internalMutation({
         await ctx.db.patch(company.accountId, { balance: newBalance });
       }
 
-      // Create single batched ledger entry for revenue
-      await ctx.db.insert("ledger", {
-        fromAccountId: systemAccount._id,
-        toAccountId: company.accountId,
-        amount: tx.totalRevenue,
-        type: "marketplace_batch",
-        description: `Marketplace batch: ${tx.productSales.size} products, ${Array.from(tx.productSales.values()).reduce((a, b) => a + b, 0)} units sold`,
-        batchCount: Array.from(tx.productSales.values()).reduce((a, b) => a + b, 0),
-        createdAt: Date.now(),
-      });
+      // Create individual product purchase transactions
+      for (const [productIdStr, salesCount] of tx.productSales) {
+        const product = await ctx.db.get(productIdStr as any) as any; // Cast to any for now
+        if (!product) continue;
 
-      // Create single batched ledger entry for costs
-      await ctx.db.insert("ledger", {
-        fromAccountId: company.accountId,
-        toAccountId: systemAccount._id,
-        amount: tx.totalCost,
-        type: "marketplace_batch",
-        description: `Production costs for batch`,
-        batchCount: Array.from(tx.productSales.values()).reduce((a, b) => a + b, 0),
-        createdAt: Date.now(),
-      });
+        const prodPrice = product.price || 0;
+        const costPercentage = 0.23 + Math.random() * 0.44;
+        const prodCost = prodPrice * costPercentage;
 
-      // Update product sales counts
+        // Create revenue transaction for each unit sold
+        for (let i = 0; i < salesCount; i++) {
+          await ctx.db.insert("ledger", {
+            fromAccountId: systemAccount._id,
+            toAccountId: company.accountId,
+            amount: prodPrice,
+            type: "product_purchase",
+            productId: productIdStr as any,
+            description: `Purchase of ${product.name}`,
+            createdAt: Date.now(),
+          });
+
+          // Create cost transaction
+          await ctx.db.insert("ledger", {
+            fromAccountId: company.accountId,
+            toAccountId: systemAccount._id,
+            amount: prodCost,
+            type: "product_cost",
+            productId: productIdStr as any,
+            description: `Production cost for ${product.name}`,
+            createdAt: Date.now(),
+          });
+        }
+      }
+
+      // Update product sales counts and revenue/costs
       for (const [productIdStr, salesCount] of tx.productSales) {
         const product = await ctx.db.get(productIdStr as any);
         if (product && "totalSales" in product) {
+          const prodPrice = (product as any).price || 0;
+          const costPercentage = 0.23 + Math.random() * 0.44;
+          const prodCost = prodPrice * costPercentage;
+          
           await ctx.db.patch(productIdStr as any, {
             totalSales: product.totalSales + salesCount,
+            totalRevenue: (product.totalRevenue || 0) + (salesCount * prodPrice),
+            totalCosts: (product.totalCosts || 0) + (salesCount * prodCost),
           });
         }
       }
