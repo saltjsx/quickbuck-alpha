@@ -166,7 +166,7 @@ export default function Page() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  <Link to="/companies">
+                  <Link to="/dashboard/companies">
                     <Button
                       variant="outline"
                       className="w-full justify-between"
@@ -175,7 +175,7 @@ export default function Page() {
                       <ArrowRight className="h-4 w-4" />
                     </Button>
                   </Link>
-                  <Link to="/marketplace">
+                  <Link to="/dashboard/marketplace">
                     <Button
                       variant="outline"
                       className="w-full justify-between"
@@ -184,7 +184,7 @@ export default function Page() {
                       <ArrowRight className="h-4 w-4" />
                     </Button>
                   </Link>
-                  <Link to="/stocks">
+                  <Link to="/dashboard/stocks">
                     <Button
                       variant="outline"
                       className="w-full justify-between"
@@ -193,7 +193,7 @@ export default function Page() {
                       <ArrowRight className="h-4 w-4" />
                     </Button>
                   </Link>
-                  <Link to="/accounts">
+                  <Link to="/dashboard/accounts">
                     <Button
                       variant="outline"
                       className="w-full justify-between"

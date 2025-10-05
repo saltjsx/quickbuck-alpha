@@ -15,6 +15,7 @@
       "routes/sign-up": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/dashboard/index": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/dashboard/accounts": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/dashboard/leaderboard": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/dashboard/companies.$companyId": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/dashboard/companies": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/dashboard/marketplace": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
@@ -78,6 +79,15 @@
         "parentId": "routes/dashboard/layout",
         "file": "app/routes/dashboard/accounts.tsx",
         "path": "dashboard/accounts",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/dashboard/leaderboard": {
+        "id": "routes/dashboard/leaderboard",
+        "parentId": "routes/dashboard/layout",
+        "file": "app/routes/dashboard/leaderboard.tsx",
+        "path": "dashboard/leaderboard",
         "config": {
           "runtime": "nodejs"
         }
@@ -207,6 +217,12 @@
         "parentId": "routes/dashboard/layout",
         "file": "routes/dashboard/accounts.tsx",
         "path": "dashboard/accounts"
+      },
+      "routes/dashboard/leaderboard": {
+        "id": "routes/dashboard/leaderboard",
+        "parentId": "routes/dashboard/layout",
+        "file": "routes/dashboard/leaderboard.tsx",
+        "path": "dashboard/leaderboard"
       },
       "routes/dashboard/companies.$companyId": {
         "id": "routes/dashboard/companies.$companyId",
