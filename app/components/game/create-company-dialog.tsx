@@ -17,6 +17,7 @@ import { Badge } from "~/components/ui/badge";
 import { Plus, X } from "lucide-react";
 import { useToast } from "~/hooks/use-toast";
 import { track } from "@databuddy/sdk";
+import profaneWords from "profane-words";
 
 export function CreateCompanyDialog() {
   const [open, setOpen] = useState(false);
@@ -29,8 +30,34 @@ export function CreateCompanyDialog() {
   const createCompany = useMutation(api.companies.createCompany);
   const { toast } = useToast();
 
+  // Helper function to check for profanity
+  const containsProfanity = (text: string): boolean => {
+    if (!text) return false;
+    const lowerText = text.toLowerCase();
+    return profaneWords.some((word) => lowerText.includes(word.toLowerCase()));
+  };
+
+  // Helper function to extract filename from URL
+  const getFilenameFromUrl = (url: string): string => {
+    try {
+      const urlObj = new URL(url);
+      return urlObj.pathname.split("/").pop() || "";
+    } catch {
+      return url;
+    }
+  };
+
   const handleAddTag = () => {
     if (tagInput.trim() && !tags.includes(tagInput.trim())) {
+      if (containsProfanity(tagInput.trim())) {
+        toast({
+          title: "Profanity Detected",
+          description:
+            "Tag contains inappropriate content. Please choose a different tag.",
+          variant: "destructive",
+        });
+        return;
+      }
       setTags([...tags, tagInput.trim()]);
       setTagInput("");
     }
@@ -42,6 +69,72 @@ export function CreateCompanyDialog() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Profanity checks
+    if (containsProfanity(name)) {
+      toast({
+        title: "Profanity Detected",
+        description:
+          "Company name contains inappropriate content. Please choose a different name.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (containsProfanity(description)) {
+      toast({
+        title: "Profanity Detected",
+        description:
+          "Company description contains inappropriate content. Please revise your description.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (containsProfanity(ticker)) {
+      toast({
+        title: "Profanity Detected",
+        description:
+          "Ticker symbol contains inappropriate content. Please choose a different ticker.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check tags for profanity
+    const profaneTag = tags.find((tag) => containsProfanity(tag));
+    if (profaneTag) {
+      toast({
+        title: "Profanity Detected",
+        description: `Tag "${profaneTag}" contains inappropriate content. Please remove or modify this tag.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check logo URL and filename for profanity
+    if (logoUrl) {
+      if (containsProfanity(logoUrl)) {
+        toast({
+          title: "Profanity Detected",
+          description:
+            "Logo URL contains inappropriate content. Please use a different URL.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const filename = getFilenameFromUrl(logoUrl);
+      if (containsProfanity(filename)) {
+        toast({
+          title: "Profanity Detected",
+          description:
+            "Logo filename contains inappropriate content. Please use a different image.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
 
     if (!ticker.trim()) {
       toast({
