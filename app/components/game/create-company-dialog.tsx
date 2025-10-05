@@ -17,7 +17,6 @@ import { Badge } from "~/components/ui/badge";
 import { Plus, X } from "lucide-react";
 import { useToast } from "~/hooks/use-toast";
 import { track } from "@databuddy/sdk";
-import profaneWords from "profane-words";
 
 export function CreateCompanyDialog() {
   const [open, setOpen] = useState(false);
@@ -30,11 +29,78 @@ export function CreateCompanyDialog() {
   const createCompany = useMutation(api.companies.createCompany);
   const { toast } = useToast();
 
+  // List of common profane words
+  const profaneWords = [
+    "fuck",
+    "fucking",
+    "fucker",
+    "fucked",
+    "fuckers",
+    "shit",
+    "shitty",
+    "shitting",
+    "shithead",
+    "ass",
+    "asshole",
+    "assholes",
+    "asshat",
+    "bitch",
+    "bitches",
+    "bitching",
+    "bitchy",
+    "bastard",
+    "bastards",
+    "damn",
+    "damned",
+    "dammit",
+    "crap",
+    "craps",
+    "piss",
+    "pissing",
+    "pissed",
+    "dick",
+    "dicks",
+    "dickhead",
+    "cock",
+    "cocks",
+    "cockhead",
+    "pussy",
+    "pussies",
+    "cunt",
+    "cunts",
+    "motherfucker",
+    "motherfuckers",
+    "motherfucking",
+    "bullshit",
+    "bullshitting",
+    "hell",
+    "hells",
+    "whore",
+    "whores",
+    "whoring",
+    "slut",
+    "sluts",
+    "slutty",
+    "prick",
+    "pricks",
+    "twat",
+    "twats",
+    "wanker",
+    "wankers",
+    "bollocks",
+    "bollock",
+    "arse",
+    "arses",
+    "arsehole",
+    "wank",
+    "wanking",
+  ];
+
   // Helper function to check for profanity
   const containsProfanity = (text: string): boolean => {
     if (!text) return false;
     const lowerText = text.toLowerCase();
-    return profaneWords.some((word) => lowerText.includes(word.toLowerCase()));
+    return profaneWords.some((word) => lowerText.includes(word));
   };
 
   // Helper function to extract filename from URL

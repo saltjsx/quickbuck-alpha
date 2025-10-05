@@ -32,15 +32,156 @@ export function CreateProductDialog({ companyId }: CreateProductDialogProps) {
   const createProduct = useMutation(api.products.createProduct);
   const { toast } = useToast();
 
+  // List of common profane words
+  const profaneWords = [
+    "fuck",
+    "fucking",
+    "fucker",
+    "fucked",
+    "fuckers",
+    "shit",
+    "shitty",
+    "shitting",
+    "shithead",
+    "ass",
+    "asshole",
+    "assholes",
+    "asshat",
+    "bitch",
+    "bitches",
+    "bitching",
+    "bitchy",
+    "bastard",
+    "bastards",
+    "damn",
+    "damned",
+    "dammit",
+    "crap",
+    "craps",
+    "piss",
+    "pissing",
+    "pissed",
+    "dick",
+    "dicks",
+    "dickhead",
+    "cock",
+    "cocks",
+    "cockhead",
+    "pussy",
+    "pussies",
+    "cunt",
+    "cunts",
+    "motherfucker",
+    "motherfuckers",
+    "motherfucking",
+    "bullshit",
+    "bullshitting",
+    "hell",
+    "hells",
+    "whore",
+    "whores",
+    "whoring",
+    "slut",
+    "sluts",
+    "slutty",
+    "prick",
+    "pricks",
+    "twat",
+    "twats",
+    "wanker",
+    "wankers",
+    "bollocks",
+    "bollock",
+    "arse",
+    "arses",
+    "arsehole",
+    "wank",
+    "wanking",
+  ];
+
+  // Helper function to check for profanity
+  const containsProfanity = (text: string): boolean => {
+    if (!text) return false;
+    const lowerText = text.toLowerCase();
+    return profaneWords.some((word) => lowerText.includes(word));
+  };
+
+  // Helper function to extract filename from URL
+  const getFilenameFromUrl = (url: string): string => {
+    try {
+      const urlObj = new URL(url);
+      return urlObj.pathname.split("/").pop() || "";
+    } catch {
+      return url;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Profanity checks
+    if (containsProfanity(name)) {
+      toast({
+        title: "Profanity Detected",
+        description:
+          "Product name contains inappropriate content. Please choose a different name.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (containsProfanity(description)) {
+      toast({
+        title: "Profanity Detected",
+        description:
+          "Product description contains inappropriate content. Please revise your description.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check image URL and filename for profanity
+    if (imageUrl) {
+      if (containsProfanity(imageUrl)) {
+        toast({
+          title: "Profanity Detected",
+          description:
+            "Image URL contains inappropriate content. Please use a different URL.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const filename = getFilenameFromUrl(imageUrl);
+      if (containsProfanity(filename)) {
+        toast({
+          title: "Profanity Detected",
+          description:
+            "Image filename contains inappropriate content. Please use a different image.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    // Check tags for profanity
+    const productTags = tags
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    const profaneTag = productTags.find((tag) => containsProfanity(tag));
+    if (profaneTag) {
+      toast({
+        title: "Profanity Detected",
+        description: `Tag "${profaneTag}" contains inappropriate content. Please remove or modify this tag.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       const productPrice = parseFloat(price);
-      const productTags = tags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean);
 
       await createProduct({
         name,
