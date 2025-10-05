@@ -796,16 +796,32 @@ export const updateStockPrices = internalMutation({
       // Calculate fair value based on company fundamentals
       const fairValue = calculateBasePrice(companyBalance, company.totalShares, newSentiment);
       
-      // Add small random market noise (±1%)
-      const marketNoise = (Math.random() - 0.5) * 0.02;
-      
-      // Move current price toward fair value with some noise
+      // Calculate how far price is from fair value
       const priceGap = fairValue - company.sharePrice;
-      const convergenceRate = 0.15; // 15% movement toward fair value per update
-      const newPrice = Math.max(
-        0.01,
-        company.sharePrice + (priceGap * convergenceRate) + (company.sharePrice * marketNoise)
-      );
+      const deviationPercent = Math.abs(priceGap / fairValue);
+      
+      let newPrice: number;
+      
+      // If price is within 5% of fair value, just apply random fluctuations
+      if (deviationPercent < 0.05) {
+        // Small random market noise (±1.5%) when near fair value
+        const marketNoise = (Math.random() - 0.5) * 0.03;
+        newPrice = company.sharePrice * (1 + marketNoise);
+      } else {
+        // If significantly off fair value, converge back
+        // Stronger convergence for larger deviations
+        let convergenceRate = 0.15; // Base 15% convergence
+        if (deviationPercent > 0.15) {
+          convergenceRate = 0.25; // 25% for large deviations (>15% off)
+        }
+        
+        // Add smaller noise when converging
+        const marketNoise = (Math.random() - 0.5) * 0.01;
+        newPrice = company.sharePrice + (priceGap * convergenceRate) + (company.sharePrice * marketNoise);
+      }
+      
+      // Ensure price stays positive
+      newPrice = Math.max(0.01, newPrice);
 
       await ctx.db.patch(company._id, {
         sharePrice: newPrice,
