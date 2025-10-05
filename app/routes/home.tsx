@@ -9,13 +9,11 @@ import { useEffect } from "react";
 
 export function meta({}: Route.MetaArgs) {
   const title = "QuickBuck";
-  const description =
-    "Build financial empires in this real-time multiplayer finance simulation game. Create companies, sell products, trade stocks, and compete with players worldwide.";
+  const description = "make money, rule the world.";
   const keywords =
     "finance game, multiplayer, stocks, companies, simulation, real-time";
   const siteUrl = "https://www.quickbuck.game/";
-  const imageUrl =
-    "https://jdj14ctwppwprnqu.public.blob.vercel-storage.com/rsk-image-FcUcfBMBgsjNLo99j3NhKV64GT2bQl.png";
+  const imageUrl = "/embed image.png";
 
   return [
     { title },
