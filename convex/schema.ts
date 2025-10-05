@@ -45,7 +45,8 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_owner", ["ownerId"])
-    .index("by_company", ["companyId"]),
+    .index("by_company", ["companyId"])
+    .index("by_type_balance", ["type", "balance"]),
 
   // Balances table - fast balance lookups (replaces calculating from ledger)
   balances: defineTable({
@@ -72,7 +73,9 @@ export default defineSchema({
     .index("by_owner", ["ownerId"])
     .index("by_public", ["isPublic"])
     .index("by_account", ["accountId"])
-    .index("by_ticker", ["ticker"]),
+    .index("by_ticker", ["ticker"])
+    .index("by_sharePrice", ["sharePrice"])
+    .index("by_totalShares", ["totalShares"]),
 
   // Company access - who can manage the company
   companyAccess: defineTable({
@@ -97,7 +100,8 @@ export default defineSchema({
   })
     .index("by_company", ["companyId"])
     .index("by_holder", ["holderId"])
-    .index("by_company_holder", ["companyId", "holderId"]),
+    .index("by_company_holder", ["companyId", "holderId"])
+    .index("by_holderType_shares", ["holderType", "shares"]),
 
   // Stock price history for charts
   stockPriceHistory: defineTable({
@@ -142,5 +146,6 @@ export default defineSchema({
   })
     .index("by_company", ["companyId"])
     .index("by_active", ["isActive"])
+    .index("by_active_totalSales", ["isActive", "totalSales"])
     .index("by_created_by", ["createdBy"]),
 });

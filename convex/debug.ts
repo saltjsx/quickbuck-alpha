@@ -1,6 +1,21 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 
+export const listUsers = query({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+    return users.map((user) => ({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      username: user.username,
+      image: user.image,
+      tokenIdentifier: user.tokenIdentifier,
+    }));
+  },
+});
+
 // Debug query to inspect product sales data
 export const inspectProductSales = query({
   args: { productId: v.id("products") },

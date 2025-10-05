@@ -4,6 +4,7 @@ import {
   IconCreditCard,
   IconDashboard,
   IconHistory,
+  IconMedal,
   IconSend,
   IconShoppingBag,
   IconTrendingUp,
@@ -28,6 +29,11 @@ const data = {
       title: "Dashboard",
       url: "/dashboard",
       icon: IconDashboard,
+    },
+    {
+      title: "Leaderboard",
+      url: "/dashboard/leaderboard",
+      icon: IconMedal,
     },
     {
       title: "Accounts",

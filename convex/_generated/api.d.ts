@@ -14,6 +14,7 @@ import type * as companies from "../companies.js";
 import type * as crons from "../crons.js";
 import type * as debug from "../debug.js";
 import type * as http from "../http.js";
+import type * as leaderboard from "../leaderboard.js";
 import type * as products from "../products.js";
 import type * as stocks from "../stocks.js";
 import type * as users from "../users.js";
@@ -39,6 +40,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   debug: typeof debug;
   http: typeof http;
+  leaderboard: typeof leaderboard;
   products: typeof products;
   stocks: typeof stocks;
   users: typeof users;
