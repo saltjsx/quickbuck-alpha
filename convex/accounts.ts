@@ -97,30 +97,32 @@ export const getUserAccounts = query({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
+    // Batch fetch companies
+    const companyIds = companyAccess.map(a => a.companyId);
+    const companies = await Promise.all(companyIds.map(id => ctx.db.get(id)));
+    
+    // Batch fetch company accounts
     const companyAccounts = await Promise.all(
-      companyAccess.map(async (access) => {
-        const company = await ctx.db.get(access.companyId);
-        if (!company) return null;
-        const account = await ctx.db.get(company.accountId);
-        return account ? { ...account, companyName: company.name } : null;
-      })
+      companies
+        .filter(Boolean)
+        .map((company: any) => ctx.db.get(company.accountId))
     );
 
-    const accounts = [personalAccount, ...companyAccounts.filter(Boolean)];
-    
-    // Get balances from balances table
-    const accountsWithBalance = await Promise.all(
-      accounts.filter(Boolean).map(async (account) => {
-        const balanceRecord = await ctx.db
-          .query("balances")
-          .withIndex("by_account", (q) => q.eq("accountId", account!._id))
-          .first();
-        
-        const balance = balanceRecord?.balance ?? account!.balance ?? 0;
-        
-        return { ...account, balance };
+    // Build result with company names
+    const companyAccountsWithNames = companyAccounts
+      .map((account: any, index) => {
+        const company = companies[index];
+        return account && company ? { ...account, companyName: (company as any).name } : null;
       })
-    );
+      .filter(Boolean);
+
+    const accounts = [personalAccount, ...companyAccountsWithNames].filter(Boolean);
+    
+    // Use cached balance from account directly
+    const accountsWithBalance = accounts.map((account: any) => ({
+      ...account,
+      balance: account.balance ?? 0,
+    }));
 
     return accountsWithBalance;
   },
@@ -232,13 +234,8 @@ export const transfer = mutation({
 
     if (!hasAccess) throw new Error("No access to source account");
 
-    // Check balance from balances table
-    const fromBalanceRecord = await ctx.db
-      .query("balances")
-      .withIndex("by_account", (q) => q.eq("accountId", args.fromAccountId))
-      .first();
-    
-    const balance = fromBalanceRecord?.balance ?? fromAccount.balance ?? 0;
+    // Check balance from cached account balance
+    const balance = fromAccount.balance ?? 0;
 
     if (balance < args.amount) throw new Error("Insufficient funds");
 
@@ -246,43 +243,14 @@ export const transfer = mutation({
     const toAccount = await ctx.db.get(args.toAccountId);
     if (!toAccount) throw new Error("Destination account not found");
 
+    const toBalance = toAccount.balance ?? 0;
+
     // Update from account balance
-    if (fromBalanceRecord) {
-      await ctx.db.patch(fromBalanceRecord._id, {
-        balance: balance - args.amount,
-        lastUpdated: Date.now(),
-      });
-    } else {
-      await ctx.db.insert("balances", {
-        accountId: args.fromAccountId,
-        balance: balance - args.amount,
-        lastUpdated: Date.now(),
-      });
-    }
     await ctx.db.patch(args.fromAccountId, { 
       balance: balance - args.amount 
     });
 
     // Update to account balance
-    const toBalanceRecord = await ctx.db
-      .query("balances")
-      .withIndex("by_account", (q) => q.eq("accountId", args.toAccountId))
-      .first();
-    
-    const toBalance = toBalanceRecord?.balance ?? toAccount.balance ?? 0;
-    
-    if (toBalanceRecord) {
-      await ctx.db.patch(toBalanceRecord._id, {
-        balance: toBalance + args.amount,
-        lastUpdated: Date.now(),
-      });
-    } else {
-      await ctx.db.insert("balances", {
-        accountId: args.toAccountId,
-        balance: toBalance + args.amount,
-        lastUpdated: Date.now(),
-      });
-    }
     await ctx.db.patch(args.toAccountId, { 
       balance: toBalance + args.amount 
     });

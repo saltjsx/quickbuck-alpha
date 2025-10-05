@@ -226,30 +226,11 @@ export const automaticPurchase = internalMutation({
 
       const netProfit = tx.totalRevenue - tx.totalCost;
       
-      // Update company balance
+      // Update company balance (only update account, skip balances table for performance)
       const account = await ctx.db.get(company.accountId);
       if (account) {
         const newBalance = (account.balance ?? 0) + netProfit;
         await ctx.db.patch(company.accountId, { balance: newBalance });
-        
-        // Update or create balance record
-        const balanceRecord = await ctx.db
-          .query("balances")
-          .withIndex("by_account", (q) => q.eq("accountId", company.accountId))
-          .first();
-        
-        if (balanceRecord) {
-          await ctx.db.patch(balanceRecord._id, {
-            balance: newBalance,
-            lastUpdated: Date.now(),
-          });
-        } else {
-          await ctx.db.insert("balances", {
-            accountId: company.accountId,
-            balance: newBalance,
-            lastUpdated: Date.now(),
-          });
-        }
       }
 
       // Create single batched ledger entry for revenue

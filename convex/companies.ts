@@ -91,25 +91,35 @@ export const getCompanies = query({
   handler: async (ctx) => {
     const companies = await ctx.db.query("companies").collect();
     
-    // Get balances for each company from balances table
-    const companiesWithBalance = await Promise.all(
-      companies.map(async (company) => {
-        const balanceRecord = await ctx.db
-          .query("balances")
-          .withIndex("by_account", (q) => q.eq("accountId", company.accountId))
-          .first();
-        
-        const balance = balanceRecord?.balance ?? (await ctx.db.get(company.accountId))?.balance ?? 0;
+    // Batch fetch all accounts using cached balance
+    const accountIds = companies.map(c => c.accountId);
+    const accounts = await Promise.all(accountIds.map(id => ctx.db.get(id)));
+    
+    // Create balance map
+    const balanceMap = new Map();
+    accounts.forEach((account: any) => {
+      if (account) {
+        balanceMap.set(account._id, account.balance ?? 0);
+      }
+    });
+    
+    // Batch fetch owners
+    const ownerIds = companies.map(c => c.ownerId);
+    const owners = await Promise.all(ownerIds.map(id => ctx.db.get(id)));
+    
+    // Create owner map
+    const ownerMap = new Map();
+    owners.forEach((owner: any, index) => {
+      if (owner) {
+        ownerMap.set(ownerIds[index], owner.name || "Unknown");
+      }
+    });
 
-        const owner = await ctx.db.get(company.ownerId);
-
-        return {
-          ...company,
-          balance,
-          ownerName: owner?.name || "Unknown",
-        };
-      })
-    );
+    const companiesWithBalance = companies.map((company) => ({
+      ...company,
+      balance: balanceMap.get(company.accountId) ?? 0,
+      ownerName: ownerMap.get(company.ownerId) || "Unknown",
+    }));
 
     return companiesWithBalance;
   },
@@ -124,25 +134,35 @@ export const getPublicCompanies = query({
       .withIndex("by_public", (q) => q.eq("isPublic", true))
       .collect();
     
-    // Get balances and additional info from balances table
-    const enrichedCompanies = await Promise.all(
-      companies.map(async (company) => {
-        const balanceRecord = await ctx.db
-          .query("balances")
-          .withIndex("by_account", (q) => q.eq("accountId", company.accountId))
-          .first();
-        
-        const balance = balanceRecord?.balance ?? (await ctx.db.get(company.accountId))?.balance ?? 0;
+    // Batch fetch all accounts using cached balance
+    const accountIds = companies.map(c => c.accountId);
+    const accounts = await Promise.all(accountIds.map(id => ctx.db.get(id)));
+    
+    // Create balance map
+    const balanceMap = new Map();
+    accounts.forEach((account: any) => {
+      if (account) {
+        balanceMap.set(account._id, account.balance ?? 0);
+      }
+    });
+    
+    // Batch fetch owners
+    const ownerIds = companies.map(c => c.ownerId);
+    const owners = await Promise.all(ownerIds.map(id => ctx.db.get(id)));
+    
+    // Create owner map
+    const ownerMap = new Map();
+    owners.forEach((owner: any, index) => {
+      if (owner) {
+        ownerMap.set(ownerIds[index], owner.name || "Unknown");
+      }
+    });
 
-        const owner = await ctx.db.get(company.ownerId);
-
-        return {
-          ...company,
-          balance,
-          ownerName: owner?.name || "Unknown",
-        };
-      })
-    );
+    const enrichedCompanies = companies.map((company) => ({
+      ...company,
+      balance: balanceMap.get(company.accountId) ?? 0,
+      ownerName: ownerMap.get(company.ownerId) || "Unknown",
+    }));
 
     return enrichedCompanies;
   },
@@ -160,28 +180,36 @@ export const getUserCompanies = query({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
-    const companies = await Promise.all(
-      companyAccess.map(async (access) => {
-        const company = await ctx.db.get(access.companyId);
-        if (!company) return null;
+    if (companyAccess.length === 0) return [];
 
-        // Get balance from balances table
-        const balanceRecord = await ctx.db
-          .query("balances")
-          .withIndex("by_account", (q) => q.eq("accountId", company.accountId))
-          .first();
-        
-        const balance = balanceRecord?.balance ?? (await ctx.db.get(company.accountId))?.balance ?? 0;
+    // Batch fetch all companies and their accounts
+    const companyIds = companyAccess.map(a => a.companyId);
+    const companies = await Promise.all(companyIds.map(id => ctx.db.get(id)));
+    const validCompanies = companies.filter(Boolean) as any[];
+    
+    // Batch fetch all accounts
+    const accountIds = validCompanies.map(c => c.accountId);
+    const accounts = await Promise.all(accountIds.map(id => ctx.db.get(id)));
+    
+    // Create account balance map using cached balance on account
+    const accountBalanceMap = new Map();
+    accounts.forEach((account: any) => {
+      if (account) {
+        accountBalanceMap.set(account._id, account.balance ?? 0);
+      }
+    });
 
-        return {
-          ...company,
-          balance,
-          role: access.role,
-        };
-      })
-    );
+    // Map results
+    const result = validCompanies.map((company, index) => {
+      const access = companyAccess.find(a => a.companyId === company._id);
+      return {
+        ...company,
+        balance: accountBalanceMap.get(company.accountId) ?? 0,
+        role: access?.role || "viewer",
+      };
+    });
 
-    return companies.filter(Boolean);
+    return result;
   },
 });
 
@@ -244,13 +272,9 @@ export const checkAndUpdatePublicStatus = mutation({
     const company = await ctx.db.get(args.companyId);
     if (!company) throw new Error("Company not found");
 
-    // Get balance from balances table
-    const balanceRecord = await ctx.db
-      .query("balances")
-      .withIndex("by_account", (q) => q.eq("accountId", company.accountId))
-      .first();
-    
-    const balance = balanceRecord?.balance ?? (await ctx.db.get(company.accountId))?.balance ?? 0;
+    // Get balance from cached account balance
+    const account = await ctx.db.get(company.accountId);
+    const balance = account?.balance ?? 0;
 
     if (balance > 50000 && !company.isPublic) {
       await ctx.db.patch(args.companyId, {
@@ -289,80 +313,78 @@ export const getCompanyDashboard = query({
       .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
       .collect();
 
-    // Get cached balance
+    // Get cached balance directly from account
     const account = await ctx.db.get(company.accountId);
     const balance = account?.balance ?? 0;
 
-    // For revenue/cost calculations, we still need ledger data
-    // But we'll filter by product type and limit the query
-    const allTransactions = await ctx.db
+    // OPTIMIZED: Only load last 30 days of transactions for charts
+    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    
+    const recentTransactions = await ctx.db
       .query("ledger")
       .withIndex("by_created_at")
       .order("desc")
-      .take(10000); // Limit to last 10k transactions to avoid hitting limit
+      .filter((q) => q.gt(q.field("createdAt"), thirtyDaysAgo))
+      .collect();
 
     // Filter transactions for this company
-    const incoming = allTransactions.filter(tx => tx.toAccountId === company.accountId);
-    const outgoing = allTransactions.filter(tx => tx.fromAccountId === company.accountId);
+    const incoming = recentTransactions.filter(tx => tx.toAccountId === company.accountId);
+    const outgoing = recentTransactions.filter(tx => tx.fromAccountId === company.accountId);
 
-    // Calculate revenue (product purchases)
-    const revenueTransactions = incoming.filter(tx => tx.type === "product_purchase");
+    // Calculate revenue (product purchases + batch marketplace)
+    const revenueTransactions = incoming.filter(tx => 
+      tx.type === "product_purchase" || tx.type === "marketplace_batch"
+    );
     const totalRevenue = revenueTransactions.reduce((sum, tx) => sum + tx.amount, 0);
 
-    // Calculate costs (product costs)
-    const costTransactions = outgoing.filter(tx => tx.type === "product_cost");
+    // Calculate costs (product costs + batch marketplace from company)
+    const costTransactions = outgoing.filter(tx => 
+      tx.type === "product_cost" || tx.type === "marketplace_batch"
+    );
     const totalCosts = costTransactions.reduce((sum, tx) => sum + tx.amount, 0);
 
     // Calculate profit
     const totalProfit = totalRevenue - totalCosts;
 
-    // Calculate product-level stats
-    const productStats = await Promise.all(
-      products.map(async (product) => {
-        // Filter from already loaded transactions
-        const productPurchases = allTransactions.filter(
-          tx => tx.productId === product._id && 
-                tx.type === "product_purchase"
-        );
-        
-        const productCostTxs = allTransactions.filter(
-          tx => tx.productId === product._id && 
-                tx.type === "product_cost"
-        );
-        
-        const productRevenue = productPurchases.reduce((sum, tx) => sum + tx.amount, 0);
-        const productCosts = productCostTxs.reduce((sum, tx) => sum + tx.amount, 0);
-        const productProfit = productRevenue - productCosts;
-        
-        // Simple calculation: units sold = revenue / price
-        // This works even if prices changed because each purchase was at current price
-        const unitsSold = product.price > 0 ? Math.round(productRevenue / product.price) : 0;
-        
-        // Calculate average sale price for verification
-        const avgSalePrice = unitsSold > 0 ? productRevenue / unitsSold : 0;
+    // OPTIMIZED: Use product totalSales field instead of scanning all transactions
+    const productStats = products.map((product) => {
+      // Filter from already loaded transactions (last 30 days only)
+      const productPurchases = recentTransactions.filter(
+        tx => tx.productId === product._id && 
+              tx.type === "product_purchase"
+      );
+      
+      const productCostTxs = recentTransactions.filter(
+        tx => tx.productId === product._id && 
+              tx.type === "product_cost"
+      );
+      
+      const productRevenue = productPurchases.reduce((sum, tx) => sum + tx.amount, 0);
+      const productCosts = productCostTxs.reduce((sum, tx) => sum + tx.amount, 0);
+      const productProfit = productRevenue - productCosts;
+      
+      // Use totalSales field for lifetime units sold
+      const unitsSold = product.totalSales || 0;
+      
+      // Calculate recent sales (last 30 days) for avg price
+      const recentUnitsSold = product.price > 0 ? Math.round(productRevenue / product.price) : 0;
+      const avgSalePrice = recentUnitsSold > 0 ? productRevenue / recentUnitsSold : product.price;
 
-        return {
-          ...product,
-          revenue: productRevenue,
-          costs: productCosts,
-          profit: productProfit,
-          unitsSold: unitsSold,
-          avgSalePrice: avgSalePrice,
-        };
-      })
-    );
+      return {
+        ...product,
+        revenue: productRevenue,
+        costs: productCosts,
+        profit: productProfit,
+        unitsSold: unitsSold, // Lifetime total
+        recentUnitsSold: recentUnitsSold, // Last 30 days
+        avgSalePrice: avgSalePrice,
+      };
+    });
 
-    // Calculate daily revenue and profit for graphs (last 30 days)
-    const now = Date.now();
-    const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
-    
-    const recentRevenue = revenueTransactions.filter(tx => tx.createdAt >= thirtyDaysAgo);
-    const recentCosts = costTransactions.filter(tx => tx.createdAt >= thirtyDaysAgo);
-
-    // Group by day
+    // Group by day for charts
     const dailyData: Record<string, { revenue: number; costs: number; profit: number }> = {};
     
-    recentRevenue.forEach(tx => {
+    revenueTransactions.forEach(tx => {
       const date = new Date(tx.createdAt).toISOString().split('T')[0];
       if (!dailyData[date]) {
         dailyData[date] = { revenue: 0, costs: 0, profit: 0 };
@@ -370,7 +392,7 @@ export const getCompanyDashboard = query({
       dailyData[date].revenue += tx.amount;
     });
 
-    recentCosts.forEach(tx => {
+    costTransactions.forEach(tx => {
       const date = new Date(tx.createdAt).toISOString().split('T')[0];
       if (!dailyData[date]) {
         dailyData[date] = { revenue: 0, costs: 0, profit: 0 };

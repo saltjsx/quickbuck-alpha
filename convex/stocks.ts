@@ -110,16 +110,11 @@ export const buyStock = mutation({
 
     const totalCost = args.shares * company.sharePrice;
 
-    // Check balance from balances table
+    // Check balance from cached account balance
     const fromAccount = await ctx.db.get(args.fromAccountId);
     if (!fromAccount) throw new Error("Account not found");
     
-    const fromBalanceRecord = await ctx.db
-      .query("balances")
-      .withIndex("by_account", (q) => q.eq("accountId", args.fromAccountId))
-      .first();
-    
-    const balance = fromBalanceRecord?.balance ?? fromAccount.balance ?? 0;
+    const balance = fromAccount.balance ?? 0;
 
     if (balance < totalCost) throw new Error("Insufficient funds");
 
@@ -127,43 +122,14 @@ export const buyStock = mutation({
     const companyAccount = await ctx.db.get(company.accountId);
     if (!companyAccount) throw new Error("Company account not found");
 
-    const companyBalanceRecord = await ctx.db
-      .query("balances")
-      .withIndex("by_account", (q) => q.eq("accountId", company.accountId))
-      .first();
-    
-    const companyBalance = companyBalanceRecord?.balance ?? companyAccount.balance ?? 0;
+    const companyBalance = companyAccount.balance ?? 0;
 
     // Update buyer balance
-    if (fromBalanceRecord) {
-      await ctx.db.patch(fromBalanceRecord._id, {
-        balance: balance - totalCost,
-        lastUpdated: Date.now(),
-      });
-    } else {
-      await ctx.db.insert("balances", {
-        accountId: args.fromAccountId,
-        balance: balance - totalCost,
-        lastUpdated: Date.now(),
-      });
-    }
     await ctx.db.patch(args.fromAccountId, {
       balance: balance - totalCost,
     });
 
     // Update company balance
-    if (companyBalanceRecord) {
-      await ctx.db.patch(companyBalanceRecord._id, {
-        balance: companyBalance + totalCost,
-        lastUpdated: Date.now(),
-      });
-    } else {
-      await ctx.db.insert("balances", {
-        accountId: company.accountId,
-        balance: companyBalance + totalCost,
-        lastUpdated: Date.now(),
-      });
-    }
     await ctx.db.patch(company.accountId, {
       balance: companyBalance + totalCost,
     });
@@ -309,51 +275,16 @@ export const sellStock = mutation({
     const toAccount = await ctx.db.get(args.toAccountId);
     if (!toAccount) throw new Error("Destination account not found");
 
-    // Get balance records
-    const companyBalanceRecord = await ctx.db
-      .query("balances")
-      .withIndex("by_account", (q) => q.eq("accountId", company.accountId))
-      .first();
-    
-    const companyBalance = companyBalanceRecord?.balance ?? companyAccount.balance ?? 0;
-
-    const toBalanceRecord = await ctx.db
-      .query("balances")
-      .withIndex("by_account", (q) => q.eq("accountId", args.toAccountId))
-      .first();
-    
-    const toBalance = toBalanceRecord?.balance ?? toAccount.balance ?? 0;
+    // Get cached balances
+    const companyBalance = companyAccount.balance ?? 0;
+    const toBalance = toAccount.balance ?? 0;
 
     // Update company balance
-    if (companyBalanceRecord) {
-      await ctx.db.patch(companyBalanceRecord._id, {
-        balance: companyBalance - proceeds,
-        lastUpdated: Date.now(),
-      });
-    } else {
-      await ctx.db.insert("balances", {
-        accountId: company.accountId,
-        balance: companyBalance - proceeds,
-        lastUpdated: Date.now(),
-      });
-    }
     await ctx.db.patch(company.accountId, {
       balance: companyBalance - proceeds,
     });
 
     // Update seller balance
-    if (toBalanceRecord) {
-      await ctx.db.patch(toBalanceRecord._id, {
-        balance: toBalance + proceeds,
-        lastUpdated: Date.now(),
-      });
-    } else {
-      await ctx.db.insert("balances", {
-        accountId: args.toAccountId,
-        balance: toBalance + proceeds,
-        lastUpdated: Date.now(),
-      });
-    }
     await ctx.db.patch(args.toAccountId, {
       balance: toBalance + proceeds,
     });
@@ -613,17 +544,13 @@ export const getStockDetails = query({
     const company = await ctx.db.get(args.companyId);
     if (!company) throw new Error("Company not found");
 
-    // Get balance from balances table
-    const balanceRecord = await ctx.db
-      .query("balances")
-      .withIndex("by_account", (q) => q.eq("accountId", company.accountId))
-      .first();
-    
-    const balance = balanceRecord?.balance ?? (await ctx.db.get(company.accountId))?.balance ?? 0;
+    // Get balance from cached account balance
+    const account = await ctx.db.get(company.accountId);
+    const balance = account?.balance ?? 0;
 
     // Calculate time range
     const now = Date.now();
-    let startTime = 0; // "all" case
+    let startTime = 0;
     const timeRange = args.timeRange || "7d";
     
     switch (timeRange) {
@@ -644,21 +571,26 @@ export const getStockDetails = query({
         break;
       case "all":
       default:
-        startTime = 0;
+        // OPTIMIZED: Limit "all" to last 90 days instead of truly all
+        startTime = now - (90 * 24 * 60 * 60 * 1000);
         break;
     }
 
+    // OPTIMIZED: Limit number of price history records
+    const maxRecords = timeRange === "1h" ? 60 : timeRange === "6h" ? 180 : 500;
+    
     const rawPriceHistory = await ctx.db
       .query("stockPriceHistory")
       .withIndex("by_company_timestamp", (q) =>
         q.eq("companyId", args.companyId).gt("timestamp", startTime)
       )
       .order("asc")
-      .collect();
+      .take(maxRecords);
 
     // Aggregate to hourly intervals
     const priceHistory = aggregateToHourly(rawPriceHistory);
 
+    // OPTIMIZED: Only get last 50 transactions instead of all
     const recentTransactions = await ctx.db
       .query("stockTransactions")
       .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
