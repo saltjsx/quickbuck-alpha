@@ -26,7 +26,7 @@ QuickBuck is a real-time multiplayer finance simulation game built into this app
   - Tags for categorization
 - **Automatic purchases** every 2 minutes:
   - Random products are purchased by the system
-  - Spending ranges from **$1,500 to $3,000** per cycle
+  - Spending ranges from **$3,000 to $5,000** per cycle
   - Production costs are randomly calculated between **23%-67%** of selling price
   - Net profit goes to the company account
 
@@ -66,7 +66,7 @@ When you first access the game, your personal account is automatically created w
 ### 4. Make Money
 
 - Products are automatically purchased every 2 minutes
-- The system randomly selects products to buy (budget: $1,500-$3,000)
+- The system randomly selects products to buy (budget: $3,000-$5,000)
 - Your company receives the sale price minus production costs
 - Watch your company balance grow!
 
@@ -105,7 +105,7 @@ Balance = Sum(Incoming Transactions) - Sum(Outgoing Transactions)
 
 Every 2 minutes:
 
-1. System has a budget of $1,500-$3,000 (random)
+1. System has a budget of $3,000-$5,000 (random)
 2. Randomly selects active products to purchase
 3. Calculates production cost (23-67% of price)
 4. Credits company with (selling price - production cost)

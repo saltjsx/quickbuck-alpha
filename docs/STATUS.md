@@ -112,7 +112,7 @@ app/components/
 4. **Automatic Purchases** (Cron Job)
 
    - Runs every 2 minutes
-   - Spends $1500-$3000 per purchase
+   - Spends $3000-$5000 per purchase
    - Calculates 23-67% production costs
    - Updates company balance and ledger
 

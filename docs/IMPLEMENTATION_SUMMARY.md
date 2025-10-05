@@ -56,7 +56,7 @@ Created comprehensive schema in `/convex/schema.ts` with:
 #### `/convex/crons.ts`
 
 - Automatic product purchases every 2 minutes
-- Spends $1,500-$3,000 per cycle
+- Spends $3,000-$5,000 per cycle
 - Production costs: 23-67% of price
 - Auto-lists companies at $50K milestone
 
@@ -153,7 +153,7 @@ Added missing components:
 ### ✅ Automatic Purchases
 
 - Every 2 minutes
-- $1,500-$3,000 budget
+- $3,000-$5,000 budget
 - Random product selection
 - 23-67% production costs
 - Net profit to companies
@@ -260,7 +260,7 @@ crons.interval(
 
 In `/convex/products.ts`, adjust:
 
-- `totalSpend`: Min/max purchase budget (currently $1,500-$3,000)
+- `totalSpend`: Min/max purchase budget (currently $3,000-$5,000)
 - `costPercentage`: Production cost range (currently 23%-67%)
 - Public listing threshold in `/convex/companies.ts` (currently $50,000)
 
