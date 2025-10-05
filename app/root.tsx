@@ -15,6 +15,7 @@ import type { Route } from "./+types/root";
 import "./app.css";
 import { Analytics } from "@vercel/analytics/react";
 import { Toaster } from "~/components/toaster";
+import { Databuddy } from "@databuddy/sdk/react";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -78,6 +79,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
+        <Databuddy
+          clientId="rXZTUb1ToZ2xp-MexNOlZ"
+          trackHashChanges={true}
+          trackAttributes={true}
+          trackOutgoingLinks={true}
+          trackInteractions={true}
+          trackEngagement={true}
+          trackScrollDepth={true}
+          trackExitIntent={true}
+          trackBounceRate={true}
+          trackWebVitals={true}
+          trackErrors={true}
+          enableBatching={true}
+        />
         <Analytics />
         {children}
         <ScrollRestoration />
