@@ -6,3 +6,4 @@ export { CompaniesTab } from "./companies-tab";
 export { MarketplaceTab } from "./marketplace-tab";
 export { StockMarketTab } from "./stock-market-tab";
 export { CompanyDashboard } from "./company-dashboard";
+export { CollectionsTab } from "./collections-tab";

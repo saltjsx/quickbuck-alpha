@@ -73,6 +73,8 @@ export const getActiveProducts = query({
         return {
           ...product,
           companyName: company?.name || "Unknown",
+          companyLogoUrl: company?.logoUrl,
+          companyTicker: company?.ticker,
         };
       })
     );

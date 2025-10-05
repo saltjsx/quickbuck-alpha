@@ -84,9 +84,23 @@ export function MarketplaceTab() {
                 )}
                 <div className="p-4">
                   <h3 className="font-semibold text-lg mb-1">{product.name}</h3>
-                  <p className="text-sm text-muted-foreground mb-2">
-                    by {product.companyName}
-                  </p>
+                  <div className="flex items-center gap-2 mb-2">
+                    {product.companyLogoUrl && (
+                      <img
+                        src={product.companyLogoUrl}
+                        alt={product.companyName}
+                        className="h-5 w-5 object-contain rounded border"
+                      />
+                    )}
+                    <p className="text-sm text-muted-foreground">
+                      by {product.companyName}
+                    </p>
+                    {product.companyTicker && (
+                      <Badge variant="outline" className="text-xs font-mono">
+                        {product.companyTicker}
+                      </Badge>
+                    )}
+                  </div>
                   <p className="text-sm mb-3 line-clamp-2">
                     {product.description}
                   </p>

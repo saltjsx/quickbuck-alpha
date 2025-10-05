@@ -151,4 +151,16 @@ export default defineSchema({
     .index("by_active", ["isActive"])
     .index("by_active_totalSales", ["isActive", "totalSales"])
     .index("by_created_by", ["createdBy"]),
+
+  // Collections - user-purchased marketplace items
+  collections: defineTable({
+    userId: v.id("users"),
+    productId: v.id("products"),
+    purchasePrice: v.number(),
+    purchasedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_product", ["productId"])
+    .index("by_user_product", ["userId", "productId"])
+    .index("by_user_purchased", ["userId", "purchasedAt"]),
 });

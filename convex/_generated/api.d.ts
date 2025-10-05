@@ -10,6 +10,7 @@
 
 import type * as accounts from "../accounts.js";
 import type * as balances from "../balances.js";
+import type * as collections from "../collections.js";
 import type * as companies from "../companies.js";
 import type * as crons from "../crons.js";
 import type * as debug from "../debug.js";
@@ -36,6 +37,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   accounts: typeof accounts;
   balances: typeof balances;
+  collections: typeof collections;
   companies: typeof companies;
   crons: typeof crons;
   debug: typeof debug;
