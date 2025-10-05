@@ -17,6 +17,7 @@ import { Textarea } from "~/components/ui/textarea";
 import { Plus } from "lucide-react";
 import { useToast } from "~/hooks/use-toast";
 import { track } from "@databuddy/sdk";
+import { Filter } from "bad-words";
 
 interface CreateProductDialogProps {
   companyId: Id<"companies">;
@@ -31,80 +32,7 @@ export function CreateProductDialog({ companyId }: CreateProductDialogProps) {
   const [tags, setTags] = useState("");
   const createProduct = useMutation(api.products.createProduct);
   const { toast } = useToast();
-
-  // List of common profane words
-  const profaneWords = [
-    "fuck",
-    "fucking",
-    "fucker",
-    "fucked",
-    "fuckers",
-    "shit",
-    "shitty",
-    "shitting",
-    "shithead",
-    "ass",
-    "asshole",
-    "assholes",
-    "asshat",
-    "bitch",
-    "bitches",
-    "bitching",
-    "bitchy",
-    "bastard",
-    "bastards",
-    "damn",
-    "damned",
-    "dammit",
-    "crap",
-    "craps",
-    "piss",
-    "pissing",
-    "pissed",
-    "dick",
-    "dicks",
-    "dickhead",
-    "cock",
-    "cocks",
-    "cockhead",
-    "pussy",
-    "pussies",
-    "cunt",
-    "cunts",
-    "motherfucker",
-    "motherfuckers",
-    "motherfucking",
-    "bullshit",
-    "bullshitting",
-    "hell",
-    "hells",
-    "whore",
-    "whores",
-    "whoring",
-    "slut",
-    "sluts",
-    "slutty",
-    "prick",
-    "pricks",
-    "twat",
-    "twats",
-    "wanker",
-    "wankers",
-    "bollocks",
-    "bollock",
-    "arse",
-    "arses",
-    "arsehole",
-    "wank",
-    "wanking",
-  ];
-
-  // Helper function to check for profanity
-  const containsProfanity = (text: string): boolean => {
-    if (!text) return false;
-    const lowerText = text.toLowerCase();
-    return profaneWords.some((word) => lowerText.includes(word));
-  };
+  const filter = new Filter();
 
   // Helper function to extract filename from URL
   const getFilenameFromUrl = (url: string): string => {
@@ -120,7 +48,7 @@ export function CreateProductDialog({ companyId }: CreateProductDialogProps) {
     e.preventDefault();
 
     // Profanity checks
-    if (containsProfanity(name)) {
+    if (filter.isProfane(name)) {
       toast({
         title: "Profanity Detected",
         description:
@@ -130,7 +58,7 @@ export function CreateProductDialog({ companyId }: CreateProductDialogProps) {
       return;
     }
 
-    if (containsProfanity(description)) {
+    if (filter.isProfane(description)) {
       toast({
         title: "Profanity Detected",
         description:
@@ -142,7 +70,7 @@ export function CreateProductDialog({ companyId }: CreateProductDialogProps) {
 
     // Check image URL and filename for profanity
     if (imageUrl) {
-      if (containsProfanity(imageUrl)) {
+      if (filter.isProfane(imageUrl)) {
         toast({
           title: "Profanity Detected",
           description:
@@ -153,7 +81,7 @@ export function CreateProductDialog({ companyId }: CreateProductDialogProps) {
       }
 
       const filename = getFilenameFromUrl(imageUrl);
-      if (containsProfanity(filename)) {
+      if (filter.isProfane(filename)) {
         toast({
           title: "Profanity Detected",
           description:
@@ -170,7 +98,7 @@ export function CreateProductDialog({ companyId }: CreateProductDialogProps) {
       .map((t) => t.trim())
       .filter(Boolean);
 
-    const profaneTag = productTags.find((tag) => containsProfanity(tag));
+    const profaneTag = productTags.find((tag) => filter.isProfane(tag));
     if (profaneTag) {
       toast({
         title: "Profanity Detected",

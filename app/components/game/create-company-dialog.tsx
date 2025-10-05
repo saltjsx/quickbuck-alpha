@@ -17,6 +17,7 @@ import { Badge } from "~/components/ui/badge";
 import { Plus, X } from "lucide-react";
 import { useToast } from "~/hooks/use-toast";
 import { track } from "@databuddy/sdk";
+import { Filter } from "bad-words";
 
 export function CreateCompanyDialog() {
   const [open, setOpen] = useState(false);
@@ -28,80 +29,7 @@ export function CreateCompanyDialog() {
   const [logoUrl, setLogoUrl] = useState("");
   const createCompany = useMutation(api.companies.createCompany);
   const { toast } = useToast();
-
-  // List of common profane words
-  const profaneWords = [
-    "fuck",
-    "fucking",
-    "fucker",
-    "fucked",
-    "fuckers",
-    "shit",
-    "shitty",
-    "shitting",
-    "shithead",
-    "ass",
-    "asshole",
-    "assholes",
-    "asshat",
-    "bitch",
-    "bitches",
-    "bitching",
-    "bitchy",
-    "bastard",
-    "bastards",
-    "damn",
-    "damned",
-    "dammit",
-    "crap",
-    "craps",
-    "piss",
-    "pissing",
-    "pissed",
-    "dick",
-    "dicks",
-    "dickhead",
-    "cock",
-    "cocks",
-    "cockhead",
-    "pussy",
-    "pussies",
-    "cunt",
-    "cunts",
-    "motherfucker",
-    "motherfuckers",
-    "motherfucking",
-    "bullshit",
-    "bullshitting",
-    "hell",
-    "hells",
-    "whore",
-    "whores",
-    "whoring",
-    "slut",
-    "sluts",
-    "slutty",
-    "prick",
-    "pricks",
-    "twat",
-    "twats",
-    "wanker",
-    "wankers",
-    "bollocks",
-    "bollock",
-    "arse",
-    "arses",
-    "arsehole",
-    "wank",
-    "wanking",
-  ];
-
-  // Helper function to check for profanity
-  const containsProfanity = (text: string): boolean => {
-    if (!text) return false;
-    const lowerText = text.toLowerCase();
-    return profaneWords.some((word) => lowerText.includes(word));
-  };
+  const filter = new Filter();
 
   // Helper function to extract filename from URL
   const getFilenameFromUrl = (url: string): string => {
@@ -115,7 +43,7 @@ export function CreateCompanyDialog() {
 
   const handleAddTag = () => {
     if (tagInput.trim() && !tags.includes(tagInput.trim())) {
-      if (containsProfanity(tagInput.trim())) {
+      if (filter.isProfane(tagInput.trim())) {
         toast({
           title: "Profanity Detected",
           description:
@@ -137,7 +65,7 @@ export function CreateCompanyDialog() {
     e.preventDefault();
 
     // Profanity checks
-    if (containsProfanity(name)) {
+    if (filter.isProfane(name)) {
       toast({
         title: "Profanity Detected",
         description:
@@ -147,7 +75,7 @@ export function CreateCompanyDialog() {
       return;
     }
 
-    if (containsProfanity(description)) {
+    if (filter.isProfane(description)) {
       toast({
         title: "Profanity Detected",
         description:
@@ -157,7 +85,7 @@ export function CreateCompanyDialog() {
       return;
     }
 
-    if (containsProfanity(ticker)) {
+    if (filter.isProfane(ticker)) {
       toast({
         title: "Profanity Detected",
         description:
@@ -168,7 +96,7 @@ export function CreateCompanyDialog() {
     }
 
     // Check tags for profanity
-    const profaneTag = tags.find((tag) => containsProfanity(tag));
+    const profaneTag = tags.find((tag) => filter.isProfane(tag));
     if (profaneTag) {
       toast({
         title: "Profanity Detected",
@@ -180,7 +108,7 @@ export function CreateCompanyDialog() {
 
     // Check logo URL and filename for profanity
     if (logoUrl) {
-      if (containsProfanity(logoUrl)) {
+      if (filter.isProfane(logoUrl)) {
         toast({
           title: "Profanity Detected",
           description:
@@ -191,7 +119,7 @@ export function CreateCompanyDialog() {
       }
 
       const filename = getFilenameFromUrl(logoUrl);
-      if (containsProfanity(filename)) {
+      if (filter.isProfane(filename)) {
         toast({
           title: "Profanity Detected",
           description:
