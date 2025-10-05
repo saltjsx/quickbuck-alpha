@@ -60,14 +60,14 @@ function calculateNewPrice(
   let priceChangePercent = 0;
 
   if (impactPercentage < 1) {
-    priceChangePercent = impactPercentage * 25; // Increased from 8 to 25
+    priceChangePercent = impactPercentage * 0.25; // Reduced from 25 to 0.25
   } else if (impactPercentage < 5) {
-    priceChangePercent = 25 + (impactPercentage - 1) * 40; // Increased from 8 + 12x to 25 + 40x
+    priceChangePercent = 0.25 + (impactPercentage - 1) * 0.4; // Reduced from 25+40x to 0.25+0.4x
   } else {
-    priceChangePercent = 200 + Math.pow(impactPercentage - 5, 2); // Increased from 60 + power(1.5) to 200 + power(2)
+    priceChangePercent = 2 + Math.pow(impactPercentage - 5, 1.5) * 0.1; // Much smaller impact for large trades
   }
 
-  priceChangePercent = Math.min(priceChangePercent, 1000); // Increased max from 200 to 1000
+  priceChangePercent = Math.min(priceChangePercent, 10); // Max 10% change instead of 1000%
   const multiplier = isBuying ? (1 + priceChangePercent / 100) : (1 - priceChangePercent / 100);
   const newPrice = currentPrice * multiplier;
 
@@ -704,7 +704,7 @@ export const updateStockPrices = internalMutation({
       .collect();
 
     for (const company of publicCompanies) {
-      const fluctuation = (Math.random() - 0.5) * 0.50; // Increased from 0.20 to 0.50 for ±50% fluctuations
+      const fluctuation = (Math.random() - 0.5) * 0.04; // Reduced from ±50% to ±4%
       const newPrice = Math.max(0.01, company.sharePrice * (1 + fluctuation));
 
       await ctx.db.patch(company._id, {
