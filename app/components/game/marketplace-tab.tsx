@@ -8,9 +8,40 @@ import {
   CardTitle,
 } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
+import { track } from "@databuddy/sdk";
+import { useEffect } from "react";
 
 export function MarketplaceTab() {
   const products = useQuery(api.products.getActiveProducts);
+
+  // Track marketplace view
+  useEffect(() => {
+    if (products && products.length > 0) {
+      track("marketplace_viewed", {
+        products_count: products.length,
+        total_products_value: products.reduce(
+          (sum: number, p: any) => sum + p.price,
+          0
+        ),
+        currency: "USD",
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }, [products?.length]);
+
+  const handleProductClick = (product: any) => {
+    track("product_viewed", {
+      product_id: product._id,
+      product_name: product.name,
+      company_name: product.companyName,
+      price: product.price,
+      currency: "USD",
+      total_sales: product.totalSales,
+      tags: product.tags.join(", "),
+      has_image: !!product.imageUrl,
+      timestamp: new Date().toISOString(),
+    });
+  };
 
   return (
     <Card>
@@ -41,7 +72,8 @@ export function MarketplaceTab() {
             {products.map((product: any) => (
               <div
                 key={product._id}
-                className="border rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
+                className="border rounded-lg overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+                onClick={() => handleProductClick(product)}
               >
                 {product.imageUrl && (
                   <img

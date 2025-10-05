@@ -10,6 +10,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import type { FunctionReturnType } from "convex/server";
+import { track } from "@databuddy/sdk";
+import { useEffect } from "react";
 
 type Portfolio = FunctionReturnType<typeof api.stocks.getPortfolio>;
 
@@ -19,6 +21,55 @@ interface StockMarketTabProps {
 
 export function StockMarketTab({ portfolio }: StockMarketTabProps) {
   const publicCompanies = useQuery(api.companies.getPublicCompanies);
+
+  // Track stock market view
+  useEffect(() => {
+    if (publicCompanies && publicCompanies.length > 0) {
+      const totalMarketCap = publicCompanies.reduce(
+        (sum: number, c: any) => sum + (c.balance || 0),
+        0
+      );
+      track("stock_market_viewed", {
+        public_companies_count: publicCompanies.length,
+        total_market_cap: totalMarketCap,
+        currency: "USD",
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }, [publicCompanies?.length]);
+
+  // Track portfolio view
+  useEffect(() => {
+    if (portfolio && portfolio.length > 0) {
+      const totalPortfolioValue = portfolio.reduce(
+        (sum: number, h: any) => sum + h.currentValue,
+        0
+      );
+      const totalGainLoss = portfolio.reduce(
+        (sum: number, h: any) => sum + h.gainLoss,
+        0
+      );
+      track("portfolio_viewed", {
+        holdings_count: portfolio.length,
+        total_portfolio_value: totalPortfolioValue,
+        total_gain_loss: totalGainLoss,
+        currency: "USD",
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }, [portfolio?.length]);
+
+  const handleCompanyClick = (company: any) => {
+    track("stock_company_viewed", {
+      company_id: company._id,
+      company_name: company.name,
+      ticker: company.ticker,
+      share_price: company.sharePrice,
+      company_value: company.balance,
+      currency: "USD",
+      timestamp: new Date().toISOString(),
+    });
+  };
 
   return (
     <Tabs defaultValue="market" className="space-y-4">
@@ -55,7 +106,8 @@ export function StockMarketTab({ portfolio }: StockMarketTabProps) {
                 {publicCompanies.map((company: any) => (
                   <div
                     key={company._id}
-                    className="p-4 border rounded-lg hover:bg-accent/50 transition-colors"
+                    className="p-4 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+                    onClick={() => handleCompanyClick(company)}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">

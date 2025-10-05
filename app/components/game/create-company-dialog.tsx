@@ -16,6 +16,7 @@ import { Textarea } from "~/components/ui/textarea";
 import { Badge } from "~/components/ui/badge";
 import { Plus, X } from "lucide-react";
 import { useToast } from "~/hooks/use-toast";
+import { track } from "@databuddy/sdk";
 
 export function CreateCompanyDialog() {
   const [open, setOpen] = useState(false);
@@ -68,6 +69,18 @@ export function CreateCompanyDialog() {
         ticker: ticker.toUpperCase(),
         logoUrl: logoUrl || undefined,
       });
+
+      // Track company creation event
+      await track("company_created", {
+        company_name: name,
+        ticker: ticker.toUpperCase(),
+        has_description: !!description,
+        has_logo: !!logoUrl,
+        tags_count: tags.length,
+        tags: tags.join(", "),
+        timestamp: new Date().toISOString(),
+      });
+
       toast({
         title: "Company Created",
         description: "Your company has been created successfully!",
@@ -81,6 +94,15 @@ export function CreateCompanyDialog() {
       setOpen(false);
     } catch (error: any) {
       console.error("Failed to create company:", error);
+
+      // Track company creation failure
+      await track("company_creation_failed", {
+        error_message: error.message || "Unknown error",
+        company_name: name,
+        ticker: ticker.toUpperCase(),
+        timestamp: new Date().toISOString(),
+      });
+
       toast({
         title: "Creation Failed",
         description:

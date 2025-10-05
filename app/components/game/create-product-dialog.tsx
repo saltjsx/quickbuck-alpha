@@ -16,6 +16,7 @@ import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
 import { Plus } from "lucide-react";
 import { useToast } from "~/hooks/use-toast";
+import { track } from "@databuddy/sdk";
 
 interface CreateProductDialogProps {
   companyId: Id<"companies">;
@@ -35,16 +36,31 @@ export function CreateProductDialog({ companyId }: CreateProductDialogProps) {
     e.preventDefault();
 
     try {
+      const productPrice = parseFloat(price);
+      const productTags = tags
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+
       await createProduct({
         name,
         description,
-        price: parseFloat(price),
+        price: productPrice,
         imageUrl: imageUrl || undefined,
-        tags: tags
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean),
+        tags: productTags,
         companyId,
+      });
+
+      // Track product creation event
+      await track("product_created", {
+        product_name: name,
+        price: productPrice,
+        currency: "USD",
+        has_image: !!imageUrl,
+        tags_count: productTags.length,
+        tags: productTags.join(", "),
+        description_length: description.length,
+        timestamp: new Date().toISOString(),
       });
 
       setName("");
@@ -55,6 +71,15 @@ export function CreateProductDialog({ companyId }: CreateProductDialogProps) {
       setOpen(false);
     } catch (error) {
       console.error("Failed to create product:", error);
+
+      // Track product creation failure
+      await track("product_creation_failed", {
+        product_name: name,
+        price: parseFloat(price),
+        error_message: error instanceof Error ? error.message : "Unknown error",
+        timestamp: new Date().toISOString(),
+      });
+
       toast({
         title: "Error",
         description: "Failed to create product. Please try again.",

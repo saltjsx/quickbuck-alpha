@@ -8,6 +8,8 @@ import {
 import { Button } from "~/components/ui/button";
 import type { FunctionReturnType } from "convex/server";
 import type { api } from "../../../convex/_generated/api";
+import { track } from "@databuddy/sdk";
+import { useEffect } from "react";
 
 type Accounts = FunctionReturnType<typeof api.accounts.getUserAccounts>;
 
@@ -17,6 +19,32 @@ interface AccountsTabProps {
 }
 
 export function AccountsTab({ accounts, initializeAccount }: AccountsTabProps) {
+  // Track account view with total balance
+  useEffect(() => {
+    if (accounts && accounts.length > 0) {
+      const totalBalance = accounts.reduce(
+        (sum: number, acc: any) => sum + (acc.balance || 0),
+        0
+      );
+      track("accounts_viewed", {
+        accounts_count: accounts.length,
+        total_balance: totalBalance,
+        currency: "USD",
+        has_company_accounts: accounts.some(
+          (acc: any) => acc.type === "company"
+        ),
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }, [accounts?.length]);
+
+  const handleInitializeAccount = async () => {
+    await initializeAccount({});
+    track("account_initialized", {
+      timestamp: new Date().toISOString(),
+    });
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -29,7 +57,7 @@ export function AccountsTab({ accounts, initializeAccount }: AccountsTabProps) {
         {accounts?.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-muted-foreground mb-4">No accounts yet</p>
-            <Button onClick={() => initializeAccount({})}>
+            <Button onClick={handleInitializeAccount}>
               Initialize Account
             </Button>
           </div>

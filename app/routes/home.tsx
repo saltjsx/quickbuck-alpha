@@ -4,6 +4,8 @@ import Footer from "~/components/homepage/footer";
 import GameFeaturesSection from "~/components/homepage/team";
 import Integrations from "~/components/homepage/integrations";
 import type { Route } from "./+types/home";
+import { track } from "@databuddy/sdk";
+import { useEffect } from "react";
 
 export function meta({}: Route.MetaArgs) {
   const title = "QuickBuck";
@@ -59,6 +61,13 @@ export async function loader(args: Route.LoaderArgs) {
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
+  useEffect(() => {
+    track("homepage_viewed", {
+      user_signed_in: loaderData.isSignedIn,
+      timestamp: new Date().toISOString(),
+    });
+  }, [loaderData.isSignedIn]);
+
   return (
     <>
       <Integrations loaderData={loaderData} />

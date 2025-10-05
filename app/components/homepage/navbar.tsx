@@ -5,6 +5,7 @@ import React, { useCallback } from "react";
 import { Link } from "react-router";
 import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
+import { track } from "@databuddy/sdk";
 
 const menuItems = [
   { name: "Home", href: "#hero" },
@@ -37,6 +38,13 @@ export const Navbar = ({
           block: "start",
         });
       }
+
+      // Track navigation click
+      track("navigation_clicked", {
+        section: href.replace("#", ""),
+        location: "navbar",
+        timestamp: new Date().toISOString(),
+      });
     }
     setMenuState(false); // Close mobile menu
   }, []);
@@ -121,7 +129,12 @@ export const Navbar = ({
               <div className="flex w-full flex-col space-y-3 sm:flex-row sm:gap-3 sm:space-y-0 md:w-fit">
                 {loaderData?.isSignedIn ? (
                   <div className="flex items-center gap-3">
-                    <Button asChild size="sm">
+                    <Button
+                      asChild
+                      size="sm"
+                      data-track="dashboard_button_clicked"
+                      data-user-status="signed_in"
+                    >
                       <Link to={dashboardLink} prefetch="viewport">
                         <span>{dashboardText}</span>
                       </Link>
@@ -135,6 +148,8 @@ export const Navbar = ({
                       variant="outline"
                       size="sm"
                       className={cn(isScrolled && "lg:hidden")}
+                      data-track="login_button_clicked"
+                      data-location="navbar"
                     >
                       <Link to="/sign-in" prefetch="viewport">
                         <span>Login</span>
@@ -144,6 +159,9 @@ export const Navbar = ({
                       asChild
                       size="sm"
                       className={cn(isScrolled && "lg:hidden")}
+                      data-track="signup_button_clicked"
+                      data-location="navbar"
+                      data-variant="primary"
                     >
                       <Link to="/sign-up" prefetch="viewport">
                         <span>Sign Up</span>
@@ -153,6 +171,8 @@ export const Navbar = ({
                       asChild
                       size="sm"
                       className={cn(isScrolled ? "lg:inline-flex" : "hidden")}
+                      data-track="get_started_button_clicked"
+                      data-location="navbar_scrolled"
                     >
                       <Link to="/sign-up" prefetch="viewport">
                         <span>{dashboardText}</span>

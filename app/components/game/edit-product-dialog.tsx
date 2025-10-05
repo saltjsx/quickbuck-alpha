@@ -16,6 +16,7 @@ import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
 import { Edit, Loader2 } from "lucide-react";
 import { useToast } from "~/hooks/use-toast";
+import { track } from "@databuddy/sdk";
 
 interface EditProductDialogProps {
   product: {
@@ -56,21 +57,47 @@ export function EditProductDialog({ product }: EditProductDialogProps) {
     setIsSubmitting(true);
 
     try {
+      const newPrice = parseFloat(price);
+      const newTags = tags
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+
       await updateProduct({
         productId: product._id,
         name,
         description,
-        price: parseFloat(price),
+        price: newPrice,
         imageUrl: imageUrl || undefined,
-        tags: tags
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean),
+        tags: newTags,
+      });
+
+      // Track product update event
+      await track("product_updated", {
+        product_id: product._id,
+        product_name: name,
+        old_price: product.price,
+        new_price: newPrice,
+        price_changed: product.price !== newPrice,
+        price_change_amount: newPrice - product.price,
+        currency: "USD",
+        has_image: !!imageUrl,
+        tags_count: newTags.length,
+        timestamp: new Date().toISOString(),
       });
 
       setOpen(false);
     } catch (error) {
       console.error("Failed to update product:", error);
+
+      // Track product update failure
+      await track("product_update_failed", {
+        product_id: product._id,
+        product_name: name,
+        error_message: error instanceof Error ? error.message : "Unknown error",
+        timestamp: new Date().toISOString(),
+      });
+
       toast({
         title: "Update Failed",
         description: "Failed to update product. Please try again.",
