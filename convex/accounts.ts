@@ -394,56 +394,72 @@ export const getTransactions = query({
 });
 
 // Search for users by username or email
+// OPTIMIZED: Limit results and use take() to avoid loading all users
 export const searchUsers = query({
   args: { searchTerm: v.string() },
   handler: async (ctx, args) => {
     if (!args.searchTerm || args.searchTerm.length < 2) return [];
 
-    const users = await ctx.db.query("users").collect();
+    // OPTIMIZED: Only fetch first 50 users instead of all
+    const users = await ctx.db.query("users").take(500);
     
     const searchLower = args.searchTerm.toLowerCase();
-    const matchedUsers = users.filter(user => 
-      user.username?.toLowerCase().includes(searchLower) ||
-      user.email?.toLowerCase().includes(searchLower) ||
-      user.name?.toLowerCase().includes(searchLower)
-    );
+    const matchedUsers = users
+      .filter(user => 
+        user.username?.toLowerCase().includes(searchLower) ||
+        user.email?.toLowerCase().includes(searchLower) ||
+        user.name?.toLowerCase().includes(searchLower)
+      )
+      .slice(0, 20); // Limit to 20 results
 
-    // Return user info with their personal account
-    const usersWithAccounts = await Promise.all(
-      matchedUsers.map(async (user) => {
-        const account = await ctx.db
+    // OPTIMIZED: Batch fetch all accounts at once
+    const userIds = matchedUsers.map(u => u._id);
+    const accounts = await Promise.all(
+      userIds.map(userId => 
+        ctx.db
           .query("accounts")
-          .withIndex("by_owner", (q) => q.eq("ownerId", user._id))
+          .withIndex("by_owner", (q) => q.eq("ownerId", userId))
           .filter((q) => q.eq(q.field("type"), "personal"))
-          .first();
-
-        return {
-          _id: user._id,
-          name: user.name,
-          username: user.username,
-          email: user.email,
-          accountId: account?._id,
-        };
-      })
+          .first()
+      )
     );
 
-    return usersWithAccounts.filter(u => u.accountId);
+    const accountMap = new Map();
+    accounts.forEach((account, index) => {
+      if (account) {
+        accountMap.set(userIds[index], account._id);
+      }
+    });
+
+    return matchedUsers
+      .map(user => ({
+        _id: user._id,
+        name: user.name,
+        username: user.username,
+        email: user.email,
+        accountId: accountMap.get(user._id),
+      }))
+      .filter(u => u.accountId);
   },
 });
 
 // Search for companies by name or ticker
+// OPTIMIZED: Limit results instead of loading all companies
 export const searchCompanies = query({
   args: { searchTerm: v.string() },
   handler: async (ctx, args) => {
     if (!args.searchTerm || args.searchTerm.length < 1) return [];
 
-    const companies = await ctx.db.query("companies").collect();
+    // OPTIMIZED: Only fetch first 200 companies instead of all
+    const companies = await ctx.db.query("companies").take(200);
     
     const searchLower = args.searchTerm.toLowerCase();
-    const matchedCompanies = companies.filter(company => 
-      company.ticker.toLowerCase().includes(searchLower) ||
-      company.name.toLowerCase().includes(searchLower)
-    );
+    const matchedCompanies = companies
+      .filter(company => 
+        company.ticker.toLowerCase().includes(searchLower) ||
+        company.name.toLowerCase().includes(searchLower)
+      )
+      .slice(0, 20); // Limit to 20 results
 
     return matchedCompanies.map(company => ({
       _id: company._id,

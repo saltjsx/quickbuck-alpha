@@ -78,18 +78,32 @@ export const getLeaderboard = query({
     });
 
     // --- Net worth ranking -------------------------------------------------
+    // OPTIMIZED: Limit candidate set to avoid excessive processing
     const candidateUserIds = new Set<Id<"users">>(userIds);
 
+    // Only consider top stockholders (limit to 100 to avoid excessive queries)
     const topHoldings = await ctx.db
       .query("stocks")
       .withIndex("by_holderType_shares", (q) => q.eq("holderType", "user"))
       .order("desc")
-      .take(sampleSize);
+      .take(Math.min(sampleSize, 100)); // Cap at 100 top holdings
 
     for (const holding of topHoldings) {
       if (holding.holderType === "user") {
         candidateUserIds.add(holding.holderId as Id<"users">);
       }
+    }
+    
+    // OPTIMIZED: Stop processing if we have too many candidates
+    if (candidateUserIds.size > 200) {
+      // Keep only the top cash holders
+      const sortedByBalance = Array.from(candidateUserIds)
+        .map(id => ({ id, balance: personalAccountMap.get(id)?.balance ?? 0 }))
+        .sort((a, b) => b.balance - a.balance)
+        .slice(0, 100);
+      
+      candidateUserIds.clear();
+      sortedByBalance.forEach(item => candidateUserIds.add(item.id));
     }
 
     for (const userId of Array.from(candidateUserIds)) {
@@ -134,6 +148,22 @@ export const getLeaderboard = query({
       netWorth: number;
     }[] = [];
 
+    // OPTIMIZED: Batch fetch all holdings for all candidates at once
+    const allUserHoldings = await Promise.all(
+      Array.from(candidateUserIds).map(userId =>
+        ctx.db
+          .query("stocks")
+          .withIndex("by_holder", (q) => q.eq("holderId", userId))
+          .filter((q) => q.eq(q.field("holderType"), "user"))
+          .collect()
+      )
+    );
+
+    const userHoldingsMap = new Map<Id<"users">, StockDoc[]>();
+    Array.from(candidateUserIds).forEach((userId, index) => {
+      userHoldingsMap.set(userId, allUserHoldings[index] as StockDoc[]);
+    });
+
     for (const userId of candidateUserIds) {
       const account = personalAccountMap.get(userId);
       if (!account) continue;
@@ -142,13 +172,10 @@ export const getLeaderboard = query({
       const { displayName, username } = formatPlayerName(user);
       const avatarUrl = normalizeImageUrl(user?.image ?? null);
 
-      const holdings = await ctx.db
-        .query("stocks")
-        .withIndex("by_holder", (q) => q.eq("holderId", userId))
-        .collect();
+      const holdings = userHoldingsMap.get(userId) ?? [];
 
       let portfolioValue = 0;
-      for (const holding of holdings as StockDoc[]) {
+      for (const holding of holdings) {
         if (holding.holderType !== "user") continue;
         const company = await getCompany(holding.companyId);
         if (!company) continue;

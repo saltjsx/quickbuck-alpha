@@ -259,3 +259,107 @@ export const updateUsername = mutation({
     return { success: true };
   },
 });
+
+// OPTIMIZED: Combined query for dashboard overview
+// This reduces multiple separate queries into one for better performance
+export const getDashboardOverview = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.subject))
+      .unique();
+
+    if (!user) return null;
+    const userId = user._id;
+
+    // Get personal account
+    const personalAccount = await ctx.db
+      .query("accounts")
+      .withIndex("by_owner", (q) => q.eq("ownerId", userId))
+      .filter((q) => q.eq(q.field("type"), "personal"))
+      .first();
+
+    // Get company access and companies
+    const companyAccess = await ctx.db
+      .query("companyAccess")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+
+    const companyIds = companyAccess.map(a => a.companyId);
+    const companies = await Promise.all(companyIds.map(id => ctx.db.get(id)));
+    const validCompanies = companies.filter(Boolean);
+
+    // Batch fetch company accounts
+    const accountIds = validCompanies.map((c: any) => c.accountId);
+    const accounts = await Promise.all(accountIds.map(id => ctx.db.get(id)));
+    
+    const accountBalanceMap = new Map();
+    accounts.forEach((account: any) => {
+      if (account) {
+        accountBalanceMap.set(account._id, account.balance ?? 0);
+      }
+    });
+
+    const enrichedCompanies = validCompanies.map((company: any, index) => {
+      const access = companyAccess.find(a => a.companyId === company._id);
+      return {
+        ...company,
+        balance: accountBalanceMap.get(company.accountId) ?? 0,
+        role: access?.role || "viewer",
+      };
+    });
+
+    // Get portfolio
+    const holdings = await ctx.db
+      .query("stocks")
+      .withIndex("by_holder", (q) => q.eq("holderId", userId))
+      .filter((q) => q.eq(q.field("holderType"), "user"))
+      .collect();
+
+    // Batch fetch companies for portfolio
+    const portfolioCompanyIds = [...new Set(holdings.map((h: any) => h.companyId))];
+    const portfolioCompanies = await Promise.all(
+      portfolioCompanyIds.map(id => ctx.db.get(id))
+    );
+    
+    const portfolioCompanyMap = new Map();
+    portfolioCompanies.forEach((company: any) => {
+      if (company) {
+        portfolioCompanyMap.set(company._id, company);
+      }
+    });
+
+    const portfolio = holdings.map((holding: any) => {
+      const company = portfolioCompanyMap.get(holding.companyId);
+      if (!company) return null;
+
+      const currentValue = holding.shares * company.sharePrice;
+      const costBasis = holding.shares * holding.averagePurchasePrice;
+      const gainLoss = currentValue - costBasis;
+      const gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
+
+      return {
+        ...holding,
+        companyName: company.name,
+        companyTicker: company.ticker,
+        currentPrice: company.sharePrice,
+        currentValue,
+        costBasis,
+        gainLoss,
+        gainLossPercent,
+      };
+    }).filter(Boolean);
+
+    return {
+      personalAccount,
+      companies: enrichedCompanies,
+      portfolio,
+      totalCompanies: enrichedCompanies.length,
+      portfolioValue: portfolio.reduce((sum: number, p: any) => sum + (p?.currentValue || 0), 0),
+    };
+  },
+});

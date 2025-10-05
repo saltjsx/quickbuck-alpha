@@ -506,31 +506,34 @@ export const getCompanyDashboard = query({
     const account = await ctx.db.get(company.accountId);
     const balance = account?.balance ?? 0;
 
-    // OPTIMIZED: Only load last 30 days of transactions for charts
+    // OPTIMIZED: Use indexed queries to get only this company's transactions
     const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
     
-    const recentTransactions = await ctx.db
+    // Query only transactions TO this account
+    const incoming = await ctx.db
       .query("ledger")
-      .withIndex("by_created_at")
-      .order("desc")
+      .withIndex("by_to_account", (q) => q.eq("toAccountId", company.accountId))
       .filter((q) => q.gt(q.field("createdAt"), thirtyDaysAgo))
       .collect();
 
-    // Filter transactions for this company
-    const incoming = recentTransactions.filter(tx => tx.toAccountId === company.accountId);
-    const outgoing = recentTransactions.filter(tx => tx.fromAccountId === company.accountId);
+    // Query only transactions FROM this account
+    const outgoing = await ctx.db
+      .query("ledger")
+      .withIndex("by_from_account", (q) => q.eq("fromAccountId", company.accountId))
+      .filter((q) => q.gt(q.field("createdAt"), thirtyDaysAgo))
+      .collect();
 
     // Calculate revenue (product purchases + batch marketplace)
     const revenueTransactions = incoming.filter(tx => 
       tx.type === "product_purchase" || tx.type === "marketplace_batch"
     );
-    const totalRevenue = revenueTransactions.reduce((sum, tx) => sum + tx.amount, 0);
+    const totalRevenue = revenueTransactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
 
     // Calculate costs (product costs + batch marketplace from company)
     const costTransactions = outgoing.filter(tx => 
       tx.type === "product_cost" || tx.type === "marketplace_batch"
     );
-    const totalCosts = costTransactions.reduce((sum, tx) => sum + tx.amount, 0);
+    const totalCosts = costTransactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
 
     // Calculate profit
     const totalProfit = totalRevenue - totalCosts;
@@ -557,31 +560,26 @@ export const getCompanyDashboard = query({
       };
     });
 
-    // Group by day for charts
+    // Group by day for charts (OPTIMIZED: combine in one pass)
     const dailyData: Record<string, { revenue: number; costs: number; profit: number }> = {};
     
-    revenueTransactions.forEach(tx => {
+    // Process all transactions in one pass
+    [...revenueTransactions, ...costTransactions].forEach(tx => {
       const date = new Date(tx.createdAt).toISOString().split('T')[0];
       if (!dailyData[date]) {
         dailyData[date] = { revenue: 0, costs: 0, profit: 0 };
       }
-      dailyData[date].revenue += tx.amount;
-    });
-
-    costTransactions.forEach(tx => {
-      const date = new Date(tx.createdAt).toISOString().split('T')[0];
-      if (!dailyData[date]) {
-        dailyData[date] = { revenue: 0, costs: 0, profit: 0 };
+      
+      if (tx.type === "product_purchase" || (tx.type === "marketplace_batch" && tx.toAccountId === company.accountId)) {
+        dailyData[date].revenue += tx.amount || 0;
+      } else if (tx.type === "product_cost" || (tx.type === "marketplace_batch" && tx.fromAccountId === company.accountId)) {
+        dailyData[date].costs += tx.amount || 0;
       }
-      dailyData[date].costs += tx.amount;
-    });
-
-    // Calculate profit for each day
-    Object.keys(dailyData).forEach(date => {
+      
       dailyData[date].profit = dailyData[date].revenue - dailyData[date].costs;
     });
 
-    // Convert to array and sort by date
+    // Convert to array and sort by date (limit to 30 most recent days)
     const chartData = Object.entries(dailyData)
       .map(([date, data]) => ({
         date,
@@ -589,7 +587,8 @@ export const getCompanyDashboard = query({
         costs: data.costs,
         profit: data.profit,
       }))
-      .sort((a, b) => a.date.localeCompare(b.date));
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(-30); // Keep only last 30 days for chart
 
     return {
       company: {

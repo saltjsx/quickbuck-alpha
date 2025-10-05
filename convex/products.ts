@@ -58,6 +58,7 @@ export const createProduct = mutation({
 });
 
 // Get all active products
+// OPTIMIZED: Batch fetch all companies at once
 export const getActiveProducts = query({
   args: {},
   handler: async (ctx) => {
@@ -66,18 +67,31 @@ export const getActiveProducts = query({
       .withIndex("by_active", (q) => q.eq("isActive", true))
       .collect();
 
+    // OPTIMIZED: Batch fetch all companies at once
+    const companyIds = [...new Set(products.map(p => p.companyId))];
+    const companies = await Promise.all(companyIds.map(id => ctx.db.get(id)));
+    
+    const companyMap = new Map();
+    companies.forEach(company => {
+      if (company) {
+        companyMap.set(company._id, {
+          name: company.name,
+          logoUrl: company.logoUrl,
+          ticker: company.ticker,
+        });
+      }
+    });
+
     // Enrich with company info
-    const enrichedProducts = await Promise.all(
-      products.map(async (product) => {
-        const company = await ctx.db.get(product.companyId);
-        return {
-          ...product,
-          companyName: company?.name || "Unknown",
-          companyLogoUrl: company?.logoUrl,
-          companyTicker: company?.ticker,
-        };
-      })
-    );
+    const enrichedProducts = products.map(product => {
+      const companyInfo = companyMap.get(product.companyId);
+      return {
+        ...product,
+        companyName: companyInfo?.name || "Unknown",
+        companyLogoUrl: companyInfo?.logoUrl,
+        companyTicker: companyInfo?.ticker,
+      };
+    });
 
     return enrichedProducts;
   },
