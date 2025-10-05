@@ -47,8 +47,8 @@ export function CreateProductDialog({ companyId }: CreateProductDialogProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Profanity checks
-    if (filter.isProfane(name)) {
+    // Profanity checks (lowercase everything for consistent checking)
+    if (filter.isProfane(name.toLowerCase())) {
       toast({
         title: "Profanity Detected",
         description:
@@ -58,7 +58,7 @@ export function CreateProductDialog({ companyId }: CreateProductDialogProps) {
       return;
     }
 
-    if (filter.isProfane(description)) {
+    if (filter.isProfane(description.toLowerCase())) {
       toast({
         title: "Profanity Detected",
         description:
@@ -70,7 +70,7 @@ export function CreateProductDialog({ companyId }: CreateProductDialogProps) {
 
     // Check image URL and filename for profanity
     if (imageUrl) {
-      if (filter.isProfane(imageUrl)) {
+      if (filter.isProfane(imageUrl.toLowerCase())) {
         toast({
           title: "Profanity Detected",
           description:
@@ -81,7 +81,7 @@ export function CreateProductDialog({ companyId }: CreateProductDialogProps) {
       }
 
       const filename = getFilenameFromUrl(imageUrl);
-      if (filter.isProfane(filename)) {
+      if (filter.isProfane(filename.toLowerCase())) {
         toast({
           title: "Profanity Detected",
           description:
@@ -98,7 +98,9 @@ export function CreateProductDialog({ companyId }: CreateProductDialogProps) {
       .map((t) => t.trim())
       .filter(Boolean);
 
-    const profaneTag = productTags.find((tag) => filter.isProfane(tag));
+    const profaneTag = productTags.find((tag) =>
+      filter.isProfane(tag.toLowerCase())
+    );
     if (profaneTag) {
       toast({
         title: "Profanity Detected",

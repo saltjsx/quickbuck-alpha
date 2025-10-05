@@ -43,7 +43,7 @@ export function CreateCompanyDialog() {
 
   const handleAddTag = () => {
     if (tagInput.trim() && !tags.includes(tagInput.trim())) {
-      if (filter.isProfane(tagInput.trim())) {
+      if (filter.isProfane(tagInput.trim().toLowerCase())) {
         toast({
           title: "Profanity Detected",
           description:
@@ -64,8 +64,8 @@ export function CreateCompanyDialog() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Profanity checks
-    if (filter.isProfane(name)) {
+    // Profanity checks (lowercase everything for consistent checking)
+    if (filter.isProfane(name.toLowerCase())) {
       toast({
         title: "Profanity Detected",
         description:
@@ -75,7 +75,7 @@ export function CreateCompanyDialog() {
       return;
     }
 
-    if (filter.isProfane(description)) {
+    if (filter.isProfane(description.toLowerCase())) {
       toast({
         title: "Profanity Detected",
         description:
@@ -85,7 +85,7 @@ export function CreateCompanyDialog() {
       return;
     }
 
-    if (filter.isProfane(ticker)) {
+    if (filter.isProfane(ticker.toLowerCase())) {
       toast({
         title: "Profanity Detected",
         description:
@@ -96,7 +96,7 @@ export function CreateCompanyDialog() {
     }
 
     // Check tags for profanity
-    const profaneTag = tags.find((tag) => filter.isProfane(tag));
+    const profaneTag = tags.find((tag) => filter.isProfane(tag.toLowerCase()));
     if (profaneTag) {
       toast({
         title: "Profanity Detected",
@@ -108,7 +108,7 @@ export function CreateCompanyDialog() {
 
     // Check logo URL and filename for profanity
     if (logoUrl) {
-      if (filter.isProfane(logoUrl)) {
+      if (filter.isProfane(logoUrl.toLowerCase())) {
         toast({
           title: "Profanity Detected",
           description:
@@ -119,7 +119,7 @@ export function CreateCompanyDialog() {
       }
 
       const filename = getFilenameFromUrl(logoUrl);
-      if (filter.isProfane(filename)) {
+      if (filter.isProfane(filename.toLowerCase())) {
         toast({
           title: "Profanity Detected",
           description:
