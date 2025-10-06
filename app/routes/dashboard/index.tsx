@@ -36,6 +36,8 @@ export default function Page() {
   const portfolio = useQuery(api.stocks.getPortfolio);
   const products = useQuery(api.products.getActiveProducts);
 
+  const isLoading = personalAccount === undefined || companies === undefined;
+
   const personalBalance = personalAccount?.balance || 0;
   const totalCompanies = companies?.length || 0;
   const portfolioValue =
@@ -49,7 +51,7 @@ export default function Page() {
       companies?.some((c: any) => c._id === p.companyId)
     ).length || 0;
 
-  if (personalAccount === undefined) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">

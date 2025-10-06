@@ -8,7 +8,7 @@ import { createClerkClient } from "@clerk/react-router/api.server";
 import { Outlet } from "react-router";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -40,14 +40,22 @@ export default function DashboardLayout() {
   const { user } = useLoaderData();
   const upsertUser = useMutation(api.users.upsertUser);
   const initializeAccount = useMutation(api.accounts.initializeAccount);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Ensure user exists in Convex database and has an account
   useEffect(() => {
     const initUser = async () => {
-      // First, ensure user record exists
-      await upsertUser();
-      // Then initialize their account if needed
-      await initializeAccount({});
+      try {
+        // First, ensure user record exists
+        await upsertUser();
+        // Then initialize their account if needed
+        await initializeAccount({});
+        setIsInitialized(true);
+      } catch (error) {
+        console.error("Error initializing user:", error);
+        // Set initialized anyway to avoid infinite loading
+        setIsInitialized(true);
+      }
     };
     initUser();
   }, [upsertUser, initializeAccount]);
@@ -64,7 +72,16 @@ export default function DashboardLayout() {
       <AppSidebar variant="sidebar" user={user} />
       <SidebarInset>
         <SiteHeader />
-        <Outlet />
+        {isInitialized ? (
+          <Outlet />
+        ) : (
+          <div className="flex items-center justify-center min-h-screen">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
+              <p className="mt-4 text-gray-600">Setting up your account...</p>
+            </div>
+          </div>
+        )}
       </SidebarInset>
     </SidebarProvider>
   );

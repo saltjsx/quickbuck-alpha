@@ -68,6 +68,7 @@ function SidebarProvider({
 }) {
   const isMobile = useIsMobile();
   const [openMobile, setOpenMobile] = React.useState(false);
+  const [isHydrated, setIsHydrated] = React.useState(false);
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
@@ -92,6 +93,11 @@ function SidebarProvider({
   const toggleSidebar = React.useCallback(() => {
     return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open);
   }, [isMobile, setOpen, setOpenMobile]);
+
+  // Mark as hydrated after mount to prevent hydration mismatches
+  React.useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   // Adds a keyboard shortcut to toggle the sidebar.
   React.useEffect(() => {
@@ -131,6 +137,7 @@ function SidebarProvider({
       <TooltipProvider delayDuration={0}>
         <div
           data-slot="sidebar-wrapper"
+          data-hydrated={isHydrated}
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH,
