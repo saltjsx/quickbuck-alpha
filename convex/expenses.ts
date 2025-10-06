@@ -343,8 +343,10 @@ export const processCompanyExpenses = internalMutation({
           .filter(tx => tx.type === "product_purchase" || tx.type === "marketplace_batch")
           .reduce((sum, tx) => sum + tx.amount, 0);
 
-        // 1. OPERATING COSTS (2-5% of monthly revenue, minimum $100)
-        const operatingCostRate = 0.02 + Math.random() * 0.03;
+        // 1. OPERATING COSTS (3.5% of monthly revenue, minimum $100)
+        // Use company ID for deterministic variation
+        const seed = parseInt(company._id.slice(-8), 16) % 100;
+        const operatingCostRate = 0.02 + (seed / 3333); // Range: 2-5%
         const operatingCosts = Math.max(100, revenue * operatingCostRate);
 
         // 2. CORPORATE TAXES (21% of profits, paid monthly)
