@@ -36,6 +36,180 @@ function normalizeLimit(requestedLimit?: number) {
   return Math.min(requestedLimit, 25);
 }
 
+// Get all companies with full statistics
+export const getAllCompanies = query({
+  args: {},
+  handler: async (ctx) => {
+    const companies = await ctx.db.query("companies").take(500);
+    
+    // Batch fetch all accounts
+    const accountIds = companies.map(c => c.accountId);
+    const accounts = await Promise.all(accountIds.map(id => ctx.db.get(id)));
+    
+    // Create balance map
+    const balanceMap = new Map();
+    accounts.forEach((account: any) => {
+      if (account) {
+        balanceMap.set(account._id, account.balance ?? 0);
+      }
+    });
+    
+    // Batch fetch owners
+    const ownerIds = companies.map(c => c.ownerId);
+    const owners = await Promise.all(ownerIds.map(id => ctx.db.get(id)));
+    
+    // Create owner map
+    const ownerMap = new Map();
+    owners.forEach((owner: any, index) => {
+      if (owner) {
+        ownerMap.set(ownerIds[index], owner.name || "Unknown");
+      }
+    });
+
+    const enrichedCompanies = companies.map((company) => ({
+      _id: company._id,
+      name: company.name,
+      ticker: company.ticker,
+      sharePrice: company.sharePrice ?? 0,
+      totalShares: company.totalShares ?? 0,
+      marketCap: (company.sharePrice ?? 0) * (company.totalShares ?? 0),
+      balance: balanceMap.get(company.accountId) ?? 0,
+      isPublic: company.isPublic ?? false,
+      monthlyRevenue: company.monthlyRevenue ?? 0,
+      ownerName: ownerMap.get(company.ownerId) || "Unknown",
+      logoUrl: normalizeImageUrl(company.logoUrl),
+      createdAt: company.createdAt,
+    }));
+
+    return enrichedCompanies;
+  },
+});
+
+// Get all players with full statistics
+export const getAllPlayers = query({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").take(500);
+    
+    // Batch fetch personal accounts
+    const userIds = users.map(u => u._id);
+    const accountsResults = await Promise.all(
+      userIds.map(userId =>
+        ctx.db
+          .query("accounts")
+          .withIndex("by_owner", (q) => q.eq("ownerId", userId))
+          .filter((q) => q.eq(q.field("type"), "personal"))
+          .first()
+      )
+    );
+    
+    const accountMap = new Map();
+    accountsResults.forEach((account, index) => {
+      if (account) {
+        accountMap.set(userIds[index], account);
+      }
+    });
+
+    // Batch fetch all stock holdings
+    const allHoldings = await Promise.all(
+      userIds.map(userId =>
+        ctx.db
+          .query("stocks")
+          .withIndex("by_holder", (q) => q.eq("holderId", userId))
+          .filter((q) => q.eq(q.field("holderType"), "user"))
+          .collect()
+      )
+    );
+
+    // Get unique company IDs from all holdings
+    const companyIds = [...new Set(allHoldings.flat().map((h: any) => h.companyId))];
+    const companies = await Promise.all(companyIds.map(id => ctx.db.get(id)));
+    const companyMap = new Map();
+    companies.forEach((company: any) => {
+      if (company) {
+        companyMap.set(company._id, company);
+      }
+    });
+
+    const enrichedPlayers = await Promise.all(
+      users.map(async (user, index) => {
+        const account = accountMap.get(user._id);
+        const holdings = allHoldings[index] as StockDoc[];
+        
+        let portfolioValue = 0;
+        for (const holding of holdings) {
+          const company = companyMap.get(holding.companyId);
+          if (company) {
+            portfolioValue += (holding.shares ?? 0) * (company.sharePrice ?? 0);
+          }
+        }
+
+        const cashBalance = account?.balance ?? 0;
+        const netWorth = cashBalance + portfolioValue;
+
+        return {
+          _id: user._id,
+          name: formatPlayerName(user).displayName,
+          username: user.username,
+          email: user.email,
+          avatarUrl: normalizeImageUrl(user.image),
+          cashBalance,
+          portfolioValue,
+          netWorth,
+          totalHoldings: holdings.length,
+        };
+      })
+    );
+
+    return enrichedPlayers;
+  },
+});
+
+// Get all products with full statistics
+export const getAllProducts = query({
+  args: {},
+  handler: async (ctx) => {
+    const products = await ctx.db.query("products").take(1000);
+
+    // Batch fetch all companies
+    const companyIds = [...new Set(products.map(p => p.companyId))];
+    const companies = await Promise.all(companyIds.map(id => ctx.db.get(id)));
+    
+    const companyMap = new Map();
+    companies.forEach((company: any) => {
+      if (company) {
+        companyMap.set(company._id, {
+          name: company.name,
+          ticker: company.ticker,
+          logoUrl: company.logoUrl,
+        });
+      }
+    });
+
+    const enrichedProducts = products.map((product) => {
+      const company = companyMap.get(product.companyId);
+      return {
+        _id: product._id,
+        name: product.name,
+        price: product.price ?? 0,
+        totalSales: product.totalSales ?? 0,
+        totalRevenue: product.totalRevenue ?? 0,
+        totalCosts: product.totalCosts ?? 0,
+        profit: (product.totalRevenue ?? 0) - (product.totalCosts ?? 0),
+        isActive: product.isActive ?? false,
+        quality: product.quality ?? 100,
+        companyName: company?.name || "Unknown",
+        companyTicker: company?.ticker,
+        companyLogoUrl: normalizeImageUrl(company?.logoUrl),
+        imageUrl: normalizeImageUrl(product.imageUrl),
+        createdAt: product.createdAt,
+      };
+    });
+
+    return enrichedProducts;
+  },
+});
+
 export const getLeaderboard = query({
   args: {
     limit: v.optional(v.number()),
