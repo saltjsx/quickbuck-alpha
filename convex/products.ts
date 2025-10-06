@@ -164,8 +164,8 @@ export const automaticPurchase = internalMutation({
 
     if (products.length === 0) return { message: "No products available" };
 
-  // Random spend between $100,000 and $125,000
-  const totalSpend = Math.floor(Math.random() * 25000) + 100000;
+  // Random spend between $300,000 and $425,000
+  const totalSpend = Math.floor(Math.random() * 125000) + 300000;
 
     // Get system account (buyer)
     let systemAccount = await ctx.db
