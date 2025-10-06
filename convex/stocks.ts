@@ -529,6 +529,61 @@ export const getPortfolio = query({
   },
 });
 
+export const getHolderPortfolio = query({
+  args: { holderId: v.union(v.id("users"), v.id("companies")), holderType: v.union(v.literal("user"), v.literal("company")) },
+  handler: async (ctx, args) => {
+    const holdings = await ctx.db
+      .query("stocks")
+      .withIndex("by_holder", (q) => q.eq("holderId", args.holderId))
+      .filter((q) => q.eq(q.field("holderType"), args.holderType))
+      .collect();
+
+    const portfolio = await Promise.all(
+      holdings.map(async (holding) => {
+        const company = await ctx.db.get(holding.companyId);
+        if (!company) return null;
+
+        const currentValue = holding.shares * company.sharePrice;
+        const costBasis = holding.shares * holding.averagePurchasePrice;
+        const gainLoss = currentValue - costBasis;
+        const gainLossPercent = (gainLoss / costBasis) * 100;
+
+        const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+        const oldPrice = await ctx.db
+          .query("stockPriceHistory")
+          .withIndex("by_company_timestamp", (q) => 
+            q.eq("companyId", holding.companyId).gt("timestamp", oneDayAgo)
+          )
+          .order("asc")
+          .first();
+
+        const priceChange24h = oldPrice 
+          ? company.sharePrice - oldPrice.price
+          : 0;
+        const priceChangePercent24h = oldPrice
+          ? ((company.sharePrice - oldPrice.price) / oldPrice.price) * 100
+          : 0;
+
+        return {
+          ...holding,
+          companyName: company.name,
+          companyTicker: company.ticker,
+          companyLogoUrl: company.logoUrl,
+          currentPrice: company.sharePrice,
+          currentValue,
+          costBasis,
+          gainLoss,
+          gainLossPercent,
+          priceChange24h,
+          priceChangePercent24h,
+        };
+      })
+    );
+
+    return portfolio.filter(Boolean);
+  },
+});
+
 export const getCompanyShareholders = query({
   args: { companyId: v.id("companies") },
   handler: async (ctx, args) => {

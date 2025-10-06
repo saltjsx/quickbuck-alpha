@@ -78,6 +78,33 @@ export default function StockDetailPage() {
   const portfolio = useQuery(api.stocks.getPortfolio);
   const accounts = useQuery(api.accounts.getUserAccounts);
 
+  // Determine holder for selected account
+  const getSelectedHolder = () => {
+    if (!selectedAccount || !accounts) return null;
+    const account = accounts.find((a: any) => a._id === selectedAccount);
+    if (!account) return null;
+
+    if (buyerType === "user") {
+      // For personal accounts, we need to get the user ID
+      // Since portfolio is user-specific, we can use the portfolio query
+      return null; // Use portfolio for user holdings
+    } else if (buyerType === "company" && account.companyId) {
+      return { holderId: account.companyId, holderType: "company" as const };
+    }
+    return null;
+  };
+
+  const selectedHolder = getSelectedHolder();
+  const holderPortfolio = useQuery(
+    api.stocks.getHolderPortfolio,
+    selectedHolder || "skip"
+  );
+
+  const currentHolding =
+    buyerType === "user"
+      ? portfolio?.find((p: any) => p && p.companyId === companyId)
+      : holderPortfolio?.find((p: any) => p && p.companyId === companyId);
+
   const buyStock = useMutation(api.stocks.buyStock);
   const sellStock = useMutation(api.stocks.sellStock);
   const { toast } = useToast();
@@ -384,26 +411,26 @@ export default function StockDetailPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {myHolding && (
+                  {currentHolding && (
                     <div className="p-3 bg-muted rounded-lg">
                       <p className="text-sm text-muted-foreground">
                         Your Holdings
                       </p>
                       <p className="text-lg font-semibold">
-                        {myHolding.shares} shares
+                        {currentHolding.shares} shares
                       </p>
                       <p className="text-sm">
-                        Value: ${myHolding.currentValue.toFixed(2)}
+                        Value: ${currentHolding.currentValue.toFixed(2)}
                         <span
                           className={
-                            myHolding.gainLoss >= 0
+                            currentHolding.gainLoss >= 0
                               ? "text-green-600"
                               : "text-red-600"
                           }
                         >
                           {" "}
-                          ({myHolding.gainLoss >= 0 ? "+" : ""}$
-                          {myHolding.gainLoss.toFixed(2)})
+                          ({currentHolding.gainLoss >= 0 ? "+" : ""}$
+                          {currentHolding.gainLoss.toFixed(2)})
                         </span>
                       </p>
                     </div>
@@ -478,7 +505,9 @@ export default function StockDetailPage() {
                       className="flex-1"
                       variant="destructive"
                       onClick={handleSell}
-                      disabled={isProcessing || !myHolding}
+                      disabled={
+                        isProcessing || !selectedAccount || !shareAmount
+                      }
                     >
                       Sell
                     </Button>
