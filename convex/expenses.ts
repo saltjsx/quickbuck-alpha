@@ -75,6 +75,14 @@ export const purchaseLicense = mutation({
     const company = await ctx.db.get(args.companyId);
     if (!company) throw new Error("Company not found");
 
+    // Validate license type
+    if (!LICENSE_COSTS[args.licenseType]) {
+      throw new Error(
+        `Invalid license type: ${args.licenseType}. ` +
+        `Valid types: ${Object.keys(LICENSE_COSTS).join(", ")}`
+      );
+    }
+
     const cost = LICENSE_COSTS[args.licenseType] || LICENSE_COSTS["other"];
 
     // Check if company has enough balance
