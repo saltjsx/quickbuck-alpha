@@ -164,8 +164,8 @@ export const automaticPurchase = internalMutation({
 
     if (products.length === 0) return { message: "No products available" };
 
-    // Random spend between $10,000 and $15,000
-    const totalSpend = Math.floor(Math.random() * 5000) + 10000;
+    // Random spend between $30,000 and $50,000
+    const totalSpend = Math.floor(Math.random() * 20000) + 30000;
 
     // Get system account (buyer)
     let systemAccount = await ctx.db
@@ -187,18 +187,16 @@ export const automaticPurchase = internalMutation({
       totalCost: number,
       productSales: Map<string, number>, // productId -> count
     }>();
+    
+    // Select 50 random products (or all if less than 50)
+    const numToSelect = Math.min(50, products.length);
+    const selectedProducts = [...products].sort(() => Math.random() - 0.5).slice(0, numToSelect);
 
-    // Keep buying random products until budget is exhausted
-    while (remainingBudget > 0 && products.length > 0) {
-      // Pick random product
-      const randomProduct = products[Math.floor(Math.random() * products.length)];
-      
-      if (randomProduct.price > remainingBudget) {
-        // Can't afford this product, try to find cheaper one
-        const affordableProducts = products.filter(p => p.price <= remainingBudget);
-        if (affordableProducts.length === 0) break;
-        continue;
-      }
+    // Try to buy each selected product if affordable
+    for (const randomProduct of selectedProducts) {
+      if (remainingBudget <= 0) break;
+
+      if (randomProduct.price > remainingBudget) continue; // Skip if can't afford
 
       // Calculate production cost (23%-67% of selling price)
       const costPercentage = 0.23 + Math.random() * 0.44;

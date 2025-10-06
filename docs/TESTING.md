@@ -163,7 +163,7 @@ if (balance > 500 && !company.isPublic) {
 ```javascript
 // Verify purchase budget
 1. Track total purchases in cycle
-2. Assert: total >= $3000
+2. Assert: total >= $30000
 3. Assert: total <= $5000
 ```
 

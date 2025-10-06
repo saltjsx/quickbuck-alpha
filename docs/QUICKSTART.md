@@ -43,7 +43,7 @@ Switch to Marketplace Tab → See your product
 
 Every **2 minutes**, the system automatically:
 
-1. Spends $3,000-$5,000 on random products
+1. Spends $30,000-$50,000 on 50 random products
 2. Your product might get purchased!
 3. Production costs deducted (23-67% of price)
 4. Net profit added to your company account
@@ -237,7 +237,7 @@ The system randomly:
 
 - Selects which products to buy
 - Determines production costs (23-67%)
-- Calculates purchase budget ($3,000-$5,000)
+- Calculates purchase budget ($30,000-$50,000)
 
 **Strategy**: List more products = higher chance of selection!
 

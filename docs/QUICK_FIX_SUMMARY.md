@@ -207,7 +207,7 @@ Once you have your $10,000, you can:
 3. **Earn Money**
 
    - Wait 2 minutes
-   - Products will auto-sell for $3000-$5000
+   - Products will auto-sell for $30000-$50000
    - 23-67% goes to production costs
    - Rest is profit to your company
 
