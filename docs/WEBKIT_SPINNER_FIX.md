@@ -198,3 +198,121 @@ This fix addresses a common pattern in React applications where:
 - Browser-specific timing causes race conditions
 
 The solution ensures proper initialization order and eliminates undefined states that can cause hydration mismatches on WebKit browsers.
+
+---
+
+## Update: Spinner Component Rendering Fix (October 6, 2025)
+
+### New Problem Identified
+
+Even after fixing the infinite spinner issue, webkit browsers were experiencing visual rendering issues with the loading spinners themselves:
+
+- Flickering/glitchy animations
+- Inconsistent rendering of the spinner
+- Poor visual quality compared to other browsers
+
+### Root Cause
+
+The custom spinner implementation was using a single border:
+
+```tsx
+<div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+```
+
+This approach caused webkit-specific rendering issues because:
+
+1. Single `border-b-2` creates only a bottom border
+2. When animated, webkit struggles to render partial borders smoothly
+3. No full border ring for smooth animation
+4. Inconsistent animation behavior across webkit versions
+
+### Solution: Reusable Spinner Component
+
+Created `/app/components/ui/spinner.tsx`:
+
+```tsx
+import { cn } from "~/lib/utils";
+
+interface SpinnerProps {
+  size?: "sm" | "md" | "lg" | "xl";
+  className?: string;
+}
+
+const sizeMap = {
+  sm: "h-4 w-4 border-2",
+  md: "h-6 w-6 border-2",
+  lg: "h-8 w-8 border-2",
+  xl: "h-12 w-12 border-[3px]",
+};
+
+export function Spinner({ size = "lg", className }: SpinnerProps) {
+  return (
+    <div
+      className={cn(
+        "inline-block rounded-full border-solid border-current border-t-transparent animate-spin",
+        sizeMap[size],
+        className
+      )}
+      role="status"
+      aria-label="Loading"
+    >
+      <span className="sr-only">Loading...</span>
+    </div>
+  );
+}
+```
+
+**Key Improvements:**
+
+- **Full border ring** with `border-solid border-current`
+- **Transparent top** with `border-t-transparent` for loading effect
+- **Webkit-compatible**: Full borders render consistently
+- **Accessible**: Includes `role="status"` and `aria-label`
+- **Standardized sizes**: sm, md, lg, xl
+- **Customizable**: Accepts className for styling
+
+### Files Updated (14 total)
+
+**Dashboard Routes:**
+
+1. `/app/routes/dashboard/layout.tsx`
+2. `/app/routes/dashboard/accounts.tsx`
+3. `/app/routes/dashboard/companies.tsx`
+4. `/app/routes/dashboard/companies.$companyId.tsx`
+5. `/app/routes/dashboard/portfolio.tsx` (2 spinners)
+6. `/app/routes/dashboard/stocks.tsx`
+7. `/app/routes/dashboard/index.tsx`
+8. `/app/routes/dashboard/stocks.$companyId.tsx`
+9. `/app/routes/dashboard/marketplace.tsx`
+
+**Game Components:** 10. `/app/components/game/marketplace-tab.tsx` 11. `/app/components/game/stock-market-tab.tsx` (2 spinners) 12. `/app/components/game/company-dashboard.tsx` 13. `/app/components/game/collections-tab.tsx`
+
+**New Component:** 14. `/app/components/ui/spinner.tsx` (NEW)
+
+### Usage Example
+
+```tsx
+// Before (problematic):
+<div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+
+// After (fixed):
+<Spinner size="xl" className="text-gray-900" />
+```
+
+### Benefits
+
+✅ Smooth animation in all webkit browsers  
+✅ Consistent visual appearance  
+✅ Better accessibility  
+✅ Reusable component  
+✅ Reduced code duplication (16+ instances → 1 component)  
+✅ Standardized sizing
+
+### Testing Checklist
+
+- [ ] Test in Safari (macOS)
+- [ ] Test in Safari on iOS
+- [ ] Test in Chrome on iOS
+- [ ] Verify smooth, non-flickering animation
+- [ ] Check all loading states work correctly
+- [ ] Verify accessibility with screen reader

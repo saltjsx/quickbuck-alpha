@@ -10,6 +10,7 @@ import {
 import { Badge } from "~/components/ui/badge";
 import { track } from "@databuddy/sdk";
 import { useEffect } from "react";
+import { Spinner } from "~/components/ui/spinner";
 
 export function MarketplaceTab() {
   const products = useQuery(api.products.getActiveProducts);
@@ -55,7 +56,7 @@ export function MarketplaceTab() {
       <CardContent>
         {products === undefined ? (
           <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+            <Spinner size="lg" className="text-gray-900 mx-auto" />
             <p className="mt-4 text-sm text-muted-foreground">
               Loading products...
             </p>

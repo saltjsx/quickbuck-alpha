@@ -52,6 +52,7 @@ import { EditProductDialog } from "./edit-product-dialog";
 import { EditCompanyDialog } from "./edit-company-dialog";
 import { DeleteCompanyDialog } from "./delete-company-dialog";
 import { useToast } from "~/hooks/use-toast";
+import { Spinner } from "~/components/ui/spinner";
 // import { ProductDebugPanel } from "./product-debug-panel";
 
 interface CompanyDashboardProps {
@@ -103,7 +104,7 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
+          <Spinner size="xl" className="text-gray-900 mx-auto" />
           <p className="mt-4 text-gray-600">Loading dashboard...</p>
         </div>
       </div>

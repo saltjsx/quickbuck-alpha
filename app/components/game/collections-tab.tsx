@@ -9,6 +9,7 @@ import {
 } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Package, TrendingUp, TrendingDown } from "lucide-react";
+import { Spinner } from "~/components/ui/spinner";
 
 export function CollectionsTab() {
   const collection = useQuery(api.collections.getMyCollection);
@@ -17,7 +18,7 @@ export function CollectionsTab() {
   if (collection === undefined || stats === undefined) {
     return (
       <div className="text-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+        <Spinner size="lg" className="text-gray-900 mx-auto" />
         <p className="mt-4 text-sm text-muted-foreground">
           Loading collection...
         </p>

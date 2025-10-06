@@ -9,6 +9,7 @@ import { Outlet } from "react-router";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useEffect, useState } from "react";
+import { Spinner } from "~/components/ui/spinner";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -77,7 +78,7 @@ export default function DashboardLayout() {
         ) : (
           <div className="flex items-center justify-center min-h-screen">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
+              <Spinner size="xl" className="text-gray-900 mx-auto" />
               <p className="mt-4 text-gray-600">Setting up your account...</p>
             </div>
           </div>

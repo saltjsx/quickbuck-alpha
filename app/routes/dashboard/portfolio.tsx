@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { CollectionsTab } from "~/components/game";
 import type { Route } from "./+types/portfolio";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { Spinner } from "~/components/ui/spinner";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -36,7 +37,7 @@ export default function PortfolioPage() {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
+          <Spinner size="xl" className="text-gray-900 mx-auto" />
           <p className="mt-4 text-gray-600">Loading portfolio...</p>
         </div>
       </div>
@@ -322,7 +323,7 @@ function CompanyPortfolioSection({
           </div>
         </div>
         <div className="text-center py-4">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 mx-auto"></div>
+          <Spinner size="md" className="text-gray-900 mx-auto" />
           <p className="mt-2 text-sm text-muted-foreground">
             Loading portfolio...
           </p>
