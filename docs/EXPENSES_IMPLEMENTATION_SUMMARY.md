@@ -253,7 +253,7 @@ All four expense features have been successfully implemented:
 
 ### Scenario 1: New Company
 
-```
+```text
 Day 1:
 - Create company with "tech" tag
 - Buy tech license: -$5,000
@@ -265,7 +265,7 @@ Day 1:
 
 ### Scenario 2: Growing Company
 
-```
+```text
 Month 3:
 - Revenue: $50,000
 - Production costs: $30,000
@@ -277,7 +277,7 @@ Month 3:
 
 ### Scenario 3: Mature Company
 
-```
+```text
 Month 12:
 - Revenue: $500,000
 - Production costs: $300,000

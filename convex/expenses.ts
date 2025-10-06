@@ -56,7 +56,7 @@ function getRequiredLicenseType(tags: string[]): string | null {
 export const purchaseLicense = mutation({
   args: {
     companyId: v.id("companies"),
-    licenseType: v.string(),
+    licenseType: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx);
@@ -75,15 +75,22 @@ export const purchaseLicense = mutation({
     const company = await ctx.db.get(args.companyId);
     if (!company) throw new Error("Company not found");
 
+    // Auto-detect license type if not provided or set to "auto"
+    let licenseType = args.licenseType;
+    if (!licenseType || licenseType === "auto") {
+      const detectedType = getRequiredLicenseType(company.tags || []);
+      licenseType = detectedType || "other";
+    }
+
     // Validate license type
-    if (!LICENSE_COSTS[args.licenseType]) {
+    if (!LICENSE_COSTS[licenseType]) {
       throw new Error(
-        `Invalid license type: ${args.licenseType}. ` +
+        `Invalid license type: ${licenseType}. ` +
         `Valid types: ${Object.keys(LICENSE_COSTS).join(", ")}`
       );
     }
 
-    const cost = LICENSE_COSTS[args.licenseType] || LICENSE_COSTS["other"];
+    const cost = LICENSE_COSTS[licenseType] || LICENSE_COSTS["other"];
 
     // Check if company has enough balance
     const account = await ctx.db.get(company.accountId);
@@ -112,7 +119,7 @@ export const purchaseLicense = mutation({
     const expiresAt = Date.now() + (LICENSE_DURATION_DAYS * 24 * 60 * 60 * 1000);
     const licenseId = await ctx.db.insert("licenses", {
       companyId: args.companyId,
-      licenseType: args.licenseType,
+      licenseType: licenseType,
       cost,
       expiresAt,
       purchasedAt: Date.now(),
@@ -124,7 +131,7 @@ export const purchaseLicense = mutation({
       companyId: args.companyId,
       type: "license_fee",
       amount: cost,
-      description: `${args.licenseType.toUpperCase()} license purchase`,
+      description: `${licenseType.toUpperCase()} license purchase`,
       licenseId,
       createdAt: Date.now(),
     });
@@ -135,7 +142,7 @@ export const purchaseLicense = mutation({
       toAccountId: systemAccount._id,
       amount: cost,
       type: "expense",
-      description: `License fee: ${args.licenseType}`,
+      description: `License fee: ${licenseType}`,
       createdAt: Date.now(),
     });
 
@@ -279,6 +286,35 @@ export const performMaintenance = mutation({
   },
 });
 
+// Helper: Atomically claim a company for expense processing (optimistic locking)
+const tryClaimCompanyForExpenseProcessing = async (
+  ctx: any,
+  companyId: any,
+  expectedLastExpenseDate: number | undefined
+): Promise<boolean> => {
+  const company = await ctx.db.get(companyId);
+  if (!company) return false;
+
+  // Check if the lastExpenseDate matches what we expect
+  if (company.lastExpenseDate !== expectedLastExpenseDate) {
+    return false; // Another process already updated it
+  }
+
+  const now = Date.now();
+  
+  // Check if expenses were charged in last 24 hours
+  if (company.lastExpenseDate && (now - company.lastExpenseDate) < (24 * 60 * 60 * 1000)) {
+    return false; // Too soon to process again
+  }
+
+  // Atomically update lastExpenseDate to claim this company
+  await ctx.db.patch(companyId, {
+    lastExpenseDate: now,
+  });
+
+  return true;
+};
+
 // Cron job: Process all company expenses (operating costs, taxes, quality degradation)
 export const processCompanyExpenses = internalMutation({
   args: {},
@@ -286,28 +322,6 @@ export const processCompanyExpenses = internalMutation({
     const now = Date.now();
     const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
     
-    // Get all companies (limit to 100 at a time to avoid timeouts)
-    // Process all companies in batches
-    let cursor = null;
-    let batch = 0;
-    const BATCH_SIZE = 100;
-    
-    do {
-      const result = cursor
-        ? await ctx.db.query("companies").paginate({ cursor, numItems: BATCH_SIZE })
-        : await ctx.db.query("companies").paginate({ numItems: BATCH_SIZE });
-      
-      const companies = result.page;
-      cursor = result.continueCursor;
-      
-      // Process companies batch...
-      for (const company of companies) {
-        // existing processing logic
-      }
-      
-      batch++;
-    } while (cursor && batch < 10); // Safety limit of 10 batches
-
     // Get system account
     let systemAccount = await ctx.db
       .query("accounts")
@@ -322,117 +336,139 @@ export const processCompanyExpenses = internalMutation({
     let totalExpenses = 0;
     let companiesProcessed = 0;
 
-    for (const company of companies) {
-      try {
-        // Skip if expenses were charged in last 24 hours
-        if (company.lastExpenseDate && (now - company.lastExpenseDate) < (24 * 60 * 60 * 1000)) {
-          continue;
-        }
+    // Process all companies in batches with pagination
+    let continueCursor: string | null = null;
+    let batch = 0;
+    const BATCH_SIZE = 100;
+    
+    do {
+      const result = await ctx.db
+        .query("companies")
+        .paginate({ cursor: continueCursor, numItems: BATCH_SIZE });
+      
+      const companies = result.page;
+      continueCursor = result.continueCursor;
 
-        const account = await ctx.db.get(company.accountId);
-        const balance = account?.balance ?? 0;
+      for (const company of companies) {
+        try {
+          // Atomically claim this company for processing (optimistic locking)
+          const claimed = await tryClaimCompanyForExpenseProcessing(
+            ctx,
+            company._id,
+            company.lastExpenseDate
+          );
 
-        // Calculate 30-day revenue
-        const incoming = await ctx.db
-          .query("ledger")
-          .withIndex("by_to_account", (q) => q.eq("toAccountId", company.accountId))
-          .filter((q) => q.gt(q.field("createdAt"), thirtyDaysAgo))
-          .collect();
+          if (!claimed) {
+            // Already processed by another cron instance or too soon
+            continue;
+          }
 
-        const revenue = incoming
-          .filter(tx => tx.type === "product_purchase" || tx.type === "marketplace_batch")
-          .reduce((sum, tx) => sum + tx.amount, 0);
+          const account = await ctx.db.get(company.accountId);
+          const balance = account?.balance ?? 0;
 
-        // 1. OPERATING COSTS (3.5% of monthly revenue, minimum $100)
-        // Use company ID for deterministic variation
-        const seed = parseInt(company._id.slice(-8), 16) % 100;
-        const operatingCostRate = 0.02 + (seed / 3333); // Range: 2-5%
-        const operatingCosts = Math.max(100, revenue * operatingCostRate);
+          // Calculate 30-day revenue
+          const incoming = await ctx.db
+            .query("ledger")
+            .withIndex("by_to_account", (q) => q.eq("toAccountId", company.accountId))
+            .filter((q) => q.gt(q.field("createdAt"), thirtyDaysAgo))
+            .collect();
 
-        // 2. CORPORATE TAXES (21% of profits, paid monthly)
-        const outgoing = await ctx.db
-          .query("ledger")
-          .withIndex("by_from_account", (q) => q.eq("fromAccountId", company.accountId))
-          .filter((q) => q.gt(q.field("createdAt"), thirtyDaysAgo))
-          .collect();
+          const revenue = incoming
+            .filter(tx => tx.type === "product_purchase" || tx.type === "marketplace_batch")
+            .reduce((sum, tx) => sum + tx.amount, 0);
 
-        const costs = outgoing
-          .filter(tx => tx.type === "product_cost" || tx.type === "marketplace_batch" || tx.type === "expense")
-          .reduce((sum, tx) => sum + tx.amount, 0);
+          // 1. OPERATING COSTS (3.5% of monthly revenue, minimum $100)
+          // Use company ID for deterministic variation
+          const seed = parseInt(company._id.slice(-8), 16) % 100;
+          const operatingCostRate = 0.02 + (seed / 3333); // Range: 2-5%
+          const operatingCosts = Math.max(100, revenue * operatingCostRate);
 
-        const profit = revenue - costs;
-        const taxRate = company.taxRate ?? 0.21; // Default 21% corporate tax
-        const taxes = Math.max(0, profit * taxRate);
+          // 2. CORPORATE TAXES (21% of profits, paid monthly)
+          const outgoing = await ctx.db
+            .query("ledger")
+            .withIndex("by_from_account", (q) => q.eq("fromAccountId", company.accountId))
+            .filter((q) => q.gt(q.field("createdAt"), thirtyDaysAgo))
+            .collect();
 
-        const totalExpenseAmount = operatingCosts + taxes;
+          const costs = outgoing
+            .filter(tx => tx.type === "product_cost" || tx.type === "marketplace_batch" || tx.type === "expense")
+            .reduce((sum, tx) => sum + tx.amount, 0);
 
-        // Only charge if company can afford it (don't bankrupt companies)
-        if (balance >= totalExpenseAmount) {
-          // Deduct expenses
-          await ctx.db.patch(company.accountId, {
-            balance: balance - totalExpenseAmount,
-          });
+          const profit = revenue - costs;
+          const taxRate = company.taxRate ?? 0.21; // Default 21% corporate tax
+          const taxes = Math.max(0, profit * taxRate);
 
-          // Record operating costs expense
-          await ctx.db.insert("expenses", {
-            companyId: company._id,
-            type: "operating_costs",
-            amount: operatingCosts,
-            description: "Monthly operating costs (rent, staff, logistics)",
-            createdAt: now,
-          });
+          const totalExpenseAmount = operatingCosts + taxes;
 
-          // Record operating costs ledger
-          await ctx.db.insert("ledger", {
-            fromAccountId: company.accountId,
-            toAccountId: systemAccount._id,
-            amount: operatingCosts,
-            type: "expense",
-            description: "Operating costs",
-            createdAt: now,
-          });
+          // Only charge if company can afford it (don't bankrupt companies)
+          if (balance >= totalExpenseAmount) {
+            // Deduct expenses
+            await ctx.db.patch(company.accountId, {
+              balance: balance - totalExpenseAmount,
+            });
 
-          // Record tax expense
-          if (taxes > 0) {
+            // Record operating costs expense
             await ctx.db.insert("expenses", {
               companyId: company._id,
-              type: "taxes",
-              amount: taxes,
-              description: `Corporate tax (${(taxRate * 100).toFixed(0)}% of profit)`,
+              type: "operating_costs",
+              amount: operatingCosts,
+              description: "Monthly operating costs (rent, staff, logistics)",
               createdAt: now,
             });
 
-            // Record tax ledger
+            // Record operating costs ledger
             await ctx.db.insert("ledger", {
               fromAccountId: company.accountId,
               toAccountId: systemAccount._id,
-              amount: taxes,
+              amount: operatingCosts,
               type: "expense",
-              description: "Corporate taxes",
+              description: "Operating costs",
               createdAt: now,
+            });
+
+            // Record tax expense
+            if (taxes > 0) {
+              await ctx.db.insert("expenses", {
+                companyId: company._id,
+                type: "taxes",
+                amount: taxes,
+                description: `Corporate tax (${(taxRate * 100).toFixed(0)}% of profit)`,
+                createdAt: now,
+              });
+
+              // Record tax ledger
+              await ctx.db.insert("ledger", {
+                fromAccountId: company.accountId,
+                toAccountId: systemAccount._id,
+                amount: taxes,
+                type: "expense",
+                description: "Corporate taxes",
+                createdAt: now,
+              });
+            }
+
+            totalExpenses += totalExpenseAmount;
+          } else {
+            // Track unpaid taxes for companies that can't afford them
+            const unpaidTaxes = (company.unpaidTaxes ?? 0) + taxes;
+            await ctx.db.patch(company._id, {
+              unpaidTaxes,
             });
           }
 
-          totalExpenses += totalExpenseAmount;
-        } else {
-          // Track unpaid taxes for companies that can't afford them
-          const unpaidTaxes = (company.unpaidTaxes ?? 0) + taxes;
+          // Update company expense tracking (monthlyRevenue only, lastExpenseDate already set)
           await ctx.db.patch(company._id, {
-            unpaidTaxes,
+            monthlyRevenue: revenue,
           });
+
+          companiesProcessed++;
+        } catch (error) {
+          console.error(`Error processing expenses for company ${company._id}:`, error);
         }
-
-        // Update company expense tracking
-        await ctx.db.patch(company._id, {
-          lastExpenseDate: now,
-          monthlyRevenue: revenue,
-        });
-
-        companiesProcessed++;
-      } catch (error) {
-        console.error(`Error processing expenses for company ${company._id}:`, error);
       }
-    }
+
+      batch++;
+    } while (continueCursor && batch < 10); // Safety limit of 10 batches
 
     return {
       companiesProcessed,
@@ -448,33 +484,44 @@ export const degradeProductQuality = internalMutation({
     const now = Date.now();
     const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);
     
-    // Get all active products (limit to avoid timeouts)
-    const products = await ctx.db
-      .query("products")
-      .withIndex("by_active", (q) => q.eq("isActive", true))
-      .take(200);
-
     let productsUpdated = 0;
+    
+    // Process all active products in paginated batches
+    let continueCursor: string | null = null;
+    let batch = 0;
+    const BATCH_SIZE = 200;
+    
+    do {
+      const result = await ctx.db
+        .query("products")
+        .withIndex("by_active", (q) => q.eq("isActive", true))
+        .paginate({ cursor: continueCursor, numItems: BATCH_SIZE });
+      
+      const products = result.page;
+      continueCursor = result.continueCursor;
 
-    for (const product of products) {
-      // Skip if maintenance was performed in last 7 days
-      if (product.lastMaintenanceDate && (now - product.lastMaintenanceDate) < (7 * 24 * 60 * 60 * 1000)) {
-        continue;
+      for (const product of products) {
+        // Skip if maintenance was performed in last 7 days
+        if (product.lastMaintenanceDate && (now - product.lastMaintenanceDate) < (7 * 24 * 60 * 60 * 1000)) {
+          continue;
+        }
+
+        // Initialize quality if not set
+        const currentQuality = product.quality ?? 100;
+        
+        // Degrade quality by 5-15 points per week
+        const degradation = 5 + Math.random() * 10;
+        const newQuality = Math.max(0, currentQuality - degradation);
+
+        await ctx.db.patch(product._id, {
+          quality: newQuality,
+        });
+
+        productsUpdated++;
       }
 
-      // Initialize quality if not set
-      const currentQuality = product.quality ?? 100;
-      
-      // Degrade quality by 5-15 points per week
-      const degradation = 5 + Math.random() * 10;
-      const newQuality = Math.max(0, currentQuality - degradation);
-
-      await ctx.db.patch(product._id, {
-        quality: newQuality,
-      });
-
-      productsUpdated++;
-    }
+      batch++;
+    } while (continueCursor && batch < 50); // Safety limit of 50 batches (10,000 products)
 
     return {
       productsUpdated,
