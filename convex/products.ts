@@ -188,6 +188,11 @@ export const automaticPurchase = internalMutation({
     const idToKey = (id: any) =>
       typeof id === "string" ? id : id?.toString?.() ?? String(id);
 
+    const productMap = new Map<string, any>();
+    for (const product of products) {
+      productMap.set(idToKey(product._id), product);
+    }
+
     // Track sales and costs by company for batching
     const companyTransactions = new Map<
       string,
@@ -258,6 +263,7 @@ export const automaticPurchase = internalMutation({
 
       purchases.push({
         product: product.name,
+        productId: product._id,
         price,
         cost: productionCost,
         profit,
@@ -385,30 +391,38 @@ export const automaticPurchase = internalMutation({
       remainingBudget -= productPrice;
     }
 
-    // Now process all batched transactions
+    // Now process all batched transactions with cached reads
+    const accountCache = new Map<string, number>();
+
     for (const [, tx] of companyTransactions) {
       if (!tx.company || !tx.accountId) continue;
 
       const netProfit = tx.totalRevenue - tx.totalCost;
+      const accountKey = idToKey(tx.accountId);
+      let currentBalance: number | undefined = accountCache.get(accountKey);
 
-      const accountDoc = await ctx.db.get(tx.accountId);
-      if (accountDoc && "balance" in accountDoc) {
-        const newBalance = (accountDoc.balance ?? 0) + netProfit;
-        await ctx.db.patch(tx.accountId, { balance: newBalance });
+      if (currentBalance === undefined) {
+        const accountDoc = await ctx.db.get(tx.accountId);
+        if (!accountDoc || !("balance" in accountDoc)) {
+          continue;
+        }
+        currentBalance = accountDoc.balance ?? 0;
       }
 
-      for (const [productIdStr, salesData] of tx.productSales) {
-        const productDoc = await ctx.db.get(productIdStr as any);
-        if (!productDoc || !("price" in productDoc)) continue;
+      currentBalance += netProfit;
+      accountCache.set(accountKey, currentBalance);
+      await ctx.db.patch(tx.accountId, { balance: currentBalance });
 
-        const product = productDoc as any;
+      for (const [productIdStr, salesData] of tx.productSales) {
+        const product = productMap.get(productIdStr);
+        if (!product) continue;
 
         await ctx.db.insert("ledger", {
           fromAccountId: systemAccount._id,
           toAccountId: tx.accountId,
           amount: salesData.totalRevenue,
           type: "marketplace_batch",
-          productId: productIdStr as any,
+          productId: product._id,
           batchCount: salesData.count,
           description: `Batch purchase of ${salesData.count}x ${product.name}`,
           createdAt: Date.now(),
@@ -419,38 +433,39 @@ export const automaticPurchase = internalMutation({
           toAccountId: systemAccount._id,
           amount: salesData.totalCost,
           type: "marketplace_batch",
-          productId: productIdStr as any,
+          productId: product._id,
           batchCount: salesData.count,
           description: `Batch production cost for ${salesData.count}x ${product.name}`,
           createdAt: Date.now(),
         });
 
         if ("totalSales" in product) {
-          await ctx.db.patch(productIdStr as any, {
+          const updatedTotals = {
             totalSales: (product.totalSales || 0) + salesData.count,
             totalRevenue: (product.totalRevenue || 0) + salesData.totalRevenue,
             totalCosts: (product.totalCosts || 0) + salesData.totalCost,
+          };
+
+          productMap.set(productIdStr, {
+            ...product,
+            ...updatedTotals,
           });
+
+          await ctx.db.patch(product._id, updatedTotals);
         }
       }
     }
 
-    // After all purchases, check which companies should be made public
-    const companiesProcessed = new Set<string>();
-    for (const purchase of purchases) {
-      const product = products.find(p => p.name === purchase.product);
-      if (!product || companiesProcessed.has(product.companyId)) continue;
-      
-      companiesProcessed.add(product.companyId);
-      const company = await ctx.db.get(product.companyId);
-      if (!company || company.isPublic) continue;
+    // After all purchases, check which companies should be made public using cached balances
+    for (const [, tx] of companyTransactions) {
+      const companyDoc = tx.company;
+      if (!companyDoc || companyDoc.isPublic) continue;
 
-      // Get cached balance
-      const account = await ctx.db.get(company.accountId);
-      const balance = account?.balance ?? 0;
+      const accountKey = idToKey(tx.accountId);
+      const balance = accountCache.get(accountKey) ?? 0;
 
       if (balance > 50000) {
-        await ctx.db.patch(company._id, {
+        await ctx.db.patch(companyDoc._id, {
           isPublic: true,
         });
       }
