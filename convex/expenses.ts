@@ -217,7 +217,9 @@ export const performMaintenance = mutation({
     if (!company) throw new Error("Company not found");
 
     // Calculate maintenance cost (5-15% of product price)
-    const maintenanceCost = product.price * (0.05 + Math.random() * 0.10);
+    // Use product ID as seed for deterministic "randomness"
+    const seed = parseInt(args.productId.slice(-8), 16) % 100;
+    const maintenanceCost = product.price * (0.05 + (seed / 1000));
 
     // Check if company has enough balance
     const account = await ctx.db.get(company.accountId);
