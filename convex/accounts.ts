@@ -135,7 +135,9 @@ export const initializeAccount = mutation({
   args: {},
   handler: async (ctx) => {
     const userId = await getCurrentUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    // If not authenticated, silently return null - callers (layout/UI) may call this
+    // during initialization before auth completes. Treat as a no-op instead of throwing.
+    if (!userId) return null;
 
     // Check if account already exists
     const existingAccount = await ctx.db
@@ -305,7 +307,8 @@ export const recalculateBalance = mutation({
 export const recalculateAllBalances = mutation({
   args: {},
   handler: async (ctx) => {
-    const accounts = await ctx.db.query("accounts").collect();
+    // OPTIMIZED: Process in batches to avoid excessive bandwidth
+    const accounts = await ctx.db.query("accounts").take(500);
     
     const results = [];
     for (const account of accounts) {

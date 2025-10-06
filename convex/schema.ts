@@ -34,7 +34,9 @@ export default defineSchema({
   })
     .index("by_from_account", ["fromAccountId"])
     .index("by_to_account", ["toAccountId"])
-    .index("by_created_at", ["createdAt"]),
+    .index("by_created_at", ["createdAt"])
+    .index("by_product", ["productId"]) // For filtering ledger by product
+    .index("by_type", ["type"]), // For filtering ledger by transaction type
 
   // Bank accounts - for both personal and company accounts
   accounts: defineTable({
@@ -121,7 +123,8 @@ export default defineSchema({
     timestamp: v.number(),
   })
     .index("by_company", ["companyId"])
-    .index("by_company_timestamp", ["companyId", "timestamp"]),
+    .index("by_company_timestamp", ["companyId", "timestamp"])
+    .index("by_timestamp", ["timestamp"]), // For filtering all history by time range
 
   // Stock transactions for tracking individual trades
   stockTransactions: defineTable({
@@ -162,7 +165,8 @@ export default defineSchema({
     .index("by_company", ["companyId"])
     .index("by_active", ["isActive"])
     .index("by_active_totalSales", ["isActive", "totalSales"])
-    .index("by_created_by", ["createdBy"]),
+    .index("by_created_by", ["createdBy"])
+    .index("by_company_active", ["companyId", "isActive"]), // For filtering company's active products
 
   // Collections - user-purchased marketplace items
   collections: defineTable({

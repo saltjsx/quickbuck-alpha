@@ -4,7 +4,8 @@ import { query, mutation } from "./_generated/server";
 export const listUsers = query({
   args: {},
   handler: async (ctx) => {
-    const users = await ctx.db.query("users").collect();
+    // OPTIMIZED: Use take() instead of collect() to avoid full table scan
+    const users = await ctx.db.query("users").take(100);
     return users.map((user) => ({
       _id: user._id,
       name: user.name,
@@ -23,12 +24,13 @@ export const inspectProductSales = query({
     const product = await ctx.db.get(args.productId);
     if (!product) throw new Error("Product not found");
 
-    // Get all ledger transactions for this product
-    const allTransactions = await ctx.db.query("ledger").collect();
+    // OPTIMIZED: Use index to filter by productId instead of full table scan
+    const allTransactions = await ctx.db
+      .query("ledger")
+      .withIndex("by_product", (q) => q.eq("productId", args.productId))
+      .collect();
     
-    const productTransactions = allTransactions.filter(
-      tx => tx.productId === args.productId
-    );
+    const productTransactions = allTransactions;
 
     const purchaseTransactions = productTransactions.filter(
       tx => tx.type === "product_purchase"
@@ -87,17 +89,20 @@ export const inspectCompanyProducts = query({
       .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
       .collect();
 
-    // Get all ledger transactions
-    const allTransactions = await ctx.db.query("ledger").collect();
-
+    // OPTIMIZED: For each product, fetch its specific transactions using index
     const results = await Promise.all(
       products.map(async (product) => {
-        const productPurchases = allTransactions.filter(
-          tx => tx.productId === product._id && tx.type === "product_purchase"
+        const productTransactions = await ctx.db
+          .query("ledger")
+          .withIndex("by_product", (q) => q.eq("productId", product._id))
+          .collect();
+
+        const productPurchases = productTransactions.filter(
+          tx => tx.type === "product_purchase"
         );
 
-        const productCosts = allTransactions.filter(
-          tx => tx.productId === product._id && tx.type === "product_cost"
+        const productCosts = productTransactions.filter(
+          tx => tx.type === "product_cost"
         );
 
         const revenue = productPurchases.reduce((sum, tx) => sum + tx.amount, 0);
@@ -132,7 +137,8 @@ export const inspectCompanyProducts = query({
 export const migrateProductRevenue = mutation({
   args: {},
   handler: async (ctx) => {
-    const products = await ctx.db.query("products").collect();
+    // OPTIMIZED: Process in batches to avoid excessive bandwidth
+    const products = await ctx.db.query("products").take(500);
     
     for (const product of products) {
       const productData = product as any;

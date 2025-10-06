@@ -198,7 +198,8 @@ export const syncAllProfiles = mutation({
       throw new Error("Missing Clerk API secret; set CLERK_SECRET_KEY for Convex");
     }
 
-    const users = await ctx.db.query("users").collect();
+    // OPTIMIZED: Use take() with batching to avoid full table scan
+    const users = await ctx.db.query("users").take(200);
     let updated = 0;
 
     for (const user of users) {

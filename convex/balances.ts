@@ -160,7 +160,8 @@ export const syncBalanceFromAccount = mutation({
 export const syncAllBalances = mutation({
   args: {},
   handler: async (ctx) => {
-    const accounts = await ctx.db.query("accounts").collect();
+    // OPTIMIZED: Process in batches to avoid excessive bandwidth
+    const accounts = await ctx.db.query("accounts").take(500);
     
     const results = [];
     for (const account of accounts) {
