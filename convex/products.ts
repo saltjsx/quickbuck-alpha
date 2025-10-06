@@ -272,89 +272,74 @@ export const automaticPurchase = internalMutation({
       return true;
     };
 
-    // IMPROVED: Fair distribution system that balances by price weight instead of raw counts
-
-    const clampPriceForWeight = (price: number) => {
-      if (!Number.isFinite(price)) return 0.01;
-      const positive = Math.max(price, 0.01);
-      return Math.min(positive, 20000);
-    };
-
-    const priceWeight = (price: number) =>
-      Math.pow(clampPriceForWeight(price), 0.8);
-
+    // IMPROVED: Fair distribution system with equal budget split across price ranges
     // Step 1: Categorize products by price tier
     const cheapProducts = products.filter((p) => p.price <= 150);
     const mediumProducts = products.filter((p) => p.price > 150 && p.price < 1000);
     const expensiveProducts = products.filter((p) => p.price >= 1000);
 
-    const weightedTierSum = (tierProducts: any[]) =>
-      tierProducts.reduce((sum, product) => sum + priceWeight(product.price), 0);
-
-    const cheapWeight = weightedTierSum(cheapProducts);
-    const mediumWeight = weightedTierSum(mediumProducts);
-    const expensiveWeight = weightedTierSum(expensiveProducts);
-    const totalWeight = cheapWeight + mediumWeight + expensiveWeight || 1;
-
-    // Step 2: Allocate budget proportionally to weighted price mass
-    const cheapBudget = (cheapWeight / totalWeight) * totalSpend;
-    const mediumBudget = (mediumWeight / totalWeight) * totalSpend;
-    const expensiveBudget = (expensiveWeight / totalWeight) * totalSpend;
+    // Step 2: Split budget equally across the three price ranges
+    const budgetPerTier = totalSpend / 3;
+    const cheapBudget = budgetPerTier;
+    const mediumBudget = budgetPerTier;
+    const expensiveBudget = budgetPerTier;
 
     const MAX_PURCHASES_PER_PRODUCT = 50;
 
-    // Step 3: Purchase from each tier using weighted shares per product
+    // Step 3: Purchase from each tier - select 16 random products and split budget randomly
     const purchaseFromTier = async (tierProducts: any[], tierBudget: number) => {
       if (tierProducts.length === 0 || tierBudget <= 0) return tierBudget;
 
-      const tierWeight =
-        tierProducts.reduce((sum, product) => sum + priceWeight(product.price), 0) || tierProducts.length;
+      // Randomly select up to 16 products from this tier
+      const shuffledTier = [...tierProducts].sort(() => Math.random() - 0.5);
+      const selectedProducts = shuffledTier.slice(0, Math.min(16, tierProducts.length));
+
+      if (selectedProducts.length === 0) return tierBudget;
 
       let tierRemainingBudget = tierBudget;
 
-      const planned = tierProducts.map((product) => {
-        const weight = priceWeight(product.price);
-        const price = Math.max(product.price, 0.01);
-        const share = (weight / tierWeight) * tierBudget;
-        const plannedCount = Math.min(
+      // Generate random budget shares for each selected product
+      const randomShares = selectedProducts.map(() => Math.random());
+      const totalRandomShare = randomShares.reduce((sum, share) => sum + share, 0);
+      
+      // Normalize shares to sum to 1
+      const normalizedShares = randomShares.map(share => share / totalRandomShare);
+
+      // Assign budget to each product based on random shares
+      const productBudgets = selectedProducts.map((product, idx) => ({
+        product,
+        budget: normalizedShares[idx] * tierBudget
+      }));
+
+      // Sort by price (expensive first) to ensure they get their chance
+      productBudgets.sort((a, b) => b.product.price - a.product.price);
+
+      // Purchase products using their allocated budgets
+      for (const { product, budget } of productBudgets) {
+        const productPrice = Math.max(product.price, 0.01);
+        let productBudgetRemaining = budget;
+        let purchaseCount = 0;
+
+        // Calculate how many units we can buy with this product's budget
+        const maxUnits = Math.min(
           MAX_PURCHASES_PER_PRODUCT,
-          Math.floor(share / price)
+          Math.floor(productBudgetRemaining / productPrice)
         );
 
-        return {
-          product,
-          plannedCount,
-        };
-      });
-
-      // Prioritise expensive products first so they are guaranteed purchases when budget allows
-      planned.sort((a, b) => {
-        if (b.product.price === a.product.price) {
-          return Math.random() - 0.5;
-        }
-        return b.product.price - a.product.price;
-      });
-
-      for (const plan of planned) {
-        const productPrice = Math.max(plan.product.price, 0.01);
-        let toBuy = plan.plannedCount;
-
-        if (toBuy <= 0 && tierRemainingBudget >= productPrice) {
-          toBuy = 1;
-        }
-
-        while (toBuy > 0 && tierRemainingBudget >= productPrice) {
-          const success = await recordPurchase(plan.product);
+        // Purchase up to the max units
+        while (purchaseCount < maxUnits && tierRemainingBudget >= productPrice) {
+          const success = await recordPurchase(product);
           if (!success) break;
 
           tierRemainingBudget -= productPrice;
-          toBuy -= 1;
+          productBudgetRemaining -= productPrice;
+          purchaseCount++;
         }
       }
 
-      // Bonus round within tier: random single purchases while budget allows
+      // Bonus round within tier: use any remaining budget for additional random purchases
       if (tierRemainingBudget >= 0.01) {
-        const shuffled = [...tierProducts].sort(() => Math.random() - 0.5);
+        const shuffled = [...selectedProducts].sort(() => Math.random() - 0.5);
         for (const product of shuffled) {
           const productPrice = Math.max(product.price, 0.01);
           if (tierRemainingBudget < productPrice) continue;
@@ -377,8 +362,8 @@ export const automaticPurchase = internalMutation({
     const unusedMedium = await purchaseFromTier(mediumProducts, mediumBudget);
     const unusedExpensive = await purchaseFromTier(expensiveProducts, expensiveBudget);
     
-    // Step 4: Use remaining budget for bonus round - randomly select products
-  remainingBudget = Math.max(unusedCheap + unusedMedium + unusedExpensive, 0);
+    // Step 4: Use remaining budget for bonus round - randomly select products from all tiers
+    remainingBudget = Math.max(unusedCheap + unusedMedium + unusedExpensive, 0);
     const bonusProducts = [...products].sort(() => Math.random() - 0.5).slice(0, 30);
     
     for (const product of bonusProducts) {
