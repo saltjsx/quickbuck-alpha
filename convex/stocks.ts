@@ -503,55 +503,48 @@ export const getPortfolio = query({
     const userId = await getCurrentUserId(ctx);
     if (!userId) return [];
 
+    // BANDWIDTH OPTIMIZATION: Limit holdings to 100 per user
     const holdings = await ctx.db
       .query("stocks")
       .withIndex("by_holder", (q) => q.eq("holderId", userId))
       .filter((q) => q.eq(q.field("holderType"), "user"))
-      .collect();
+      .take(100);
 
-    const portfolio = await Promise.all(
-      holdings.map(async (holding) => {
-        const company = await ctx.db.get(holding.companyId);
-        if (!company) return null;
+    // BANDWIDTH OPTIMIZATION: Batch fetch all companies
+    const companyIds = [...new Set(holdings.map(h => h.companyId))];
+    const companies = await Promise.all(companyIds.map(id => ctx.db.get(id)));
+    const companyMap = new Map();
+    companies.forEach((company: any) => {
+      if (company) {
+        companyMap.set(company._id, company);
+      }
+    });
 
-        const currentValue = holding.shares * company.sharePrice;
-        const costBasis = holding.shares * holding.averagePurchasePrice;
-        const gainLoss = currentValue - costBasis;
-        const gainLossPercent = (gainLoss / costBasis) * 100;
+    // BANDWIDTH OPTIMIZATION: Skip 24h price history for portfolio listing
+    // Can be fetched separately when viewing individual stock details
+    const portfolio = holdings.map((holding) => {
+      const company = companyMap.get(holding.companyId);
+      if (!company) return null;
 
-        const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
-        const oldPrice = await ctx.db
-          .query("stockPriceHistory")
-          .withIndex("by_company_timestamp", (q) => 
-            q.eq("companyId", holding.companyId).gt("timestamp", oneDayAgo)
-          )
-          .order("asc")
-          .first();
+      const currentValue = holding.shares * company.sharePrice;
+      const costBasis = holding.shares * holding.averagePurchasePrice;
+      const gainLoss = currentValue - costBasis;
+      const gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
 
-        const priceChange24h = oldPrice 
-          ? company.sharePrice - oldPrice.price
-          : 0;
-        const priceChangePercent24h = oldPrice
-          ? ((company.sharePrice - oldPrice.price) / oldPrice.price) * 100
-          : 0;
+      return {
+        ...holding,
+        companyName: company.name,
+        companyTicker: company.ticker,
+        companyLogoUrl: company.logoUrl,
+        currentPrice: company.sharePrice,
+        currentValue,
+        costBasis,
+        gainLoss,
+        gainLossPercent,
+      };
+    }).filter(Boolean);
 
-        return {
-          ...holding,
-          companyName: company.name,
-          companyTicker: company.ticker,
-          companyLogoUrl: company.logoUrl,
-          currentPrice: company.sharePrice,
-          currentValue,
-          costBasis,
-          gainLoss,
-          gainLossPercent,
-          priceChange24h,
-          priceChangePercent24h,
-        };
-      })
-    );
-
-    return portfolio.filter(Boolean);
+    return portfolio;
   },
 });
 
@@ -562,24 +555,24 @@ export const getCompanyPortfolios = query({
     const userId = await getCurrentUserId(ctx);
     if (!userId) return [];
 
-    // Get companies user has access to
+    // BANDWIDTH OPTIMIZATION: Reduced from 50 to 20 companies
     const companyAccess = await ctx.db
       .query("companyAccess")
       .withIndex("by_user", (q) => q.eq("userId", userId))
-      .take(50);
+      .take(20);
 
     const companyIds = companyAccess.map(a => a.companyId);
     const companies = await Promise.all(companyIds.map(id => ctx.db.get(id)));
     const validCompanies = companies.filter(Boolean) as any[];
 
-    // Get all holdings for these companies
+    // BANDWIDTH OPTIMIZATION: Limit holdings per company to 50
     const allCompanyHoldings = await Promise.all(
       validCompanies.map(company =>
         ctx.db
           .query("stocks")
           .withIndex("by_holder", (q) => q.eq("holderId", company._id))
           .filter((q) => q.eq(q.field("holderType"), "company"))
-          .collect()
+          .take(50)
       )
     );
 
@@ -633,55 +626,46 @@ export const getCompanyPortfolios = query({
 export const getHolderPortfolio = query({
   args: { holderId: v.union(v.id("users"), v.id("companies")), holderType: v.union(v.literal("user"), v.literal("company")) },
   handler: async (ctx, args) => {
+    // BANDWIDTH OPTIMIZATION: Limit holdings to 100
     const holdings = await ctx.db
       .query("stocks")
       .withIndex("by_holder", (q) => q.eq("holderId", args.holderId))
       .filter((q) => q.eq(q.field("holderType"), args.holderType))
-      .collect();
+      .take(100);
 
-    const portfolio = await Promise.all(
-      holdings.map(async (holding) => {
-        const company = await ctx.db.get(holding.companyId);
-        if (!company) return null;
+    // BANDWIDTH OPTIMIZATION: Batch fetch companies and skip price history
+    const companyIds = [...new Set(holdings.map(h => h.companyId))];
+    const companies = await Promise.all(companyIds.map(id => ctx.db.get(id)));
+    const companyMap = new Map();
+    companies.forEach((company: any) => {
+      if (company) {
+        companyMap.set(company._id, company);
+      }
+    });
 
-        const currentValue = holding.shares * company.sharePrice;
-        const costBasis = holding.shares * holding.averagePurchasePrice;
-        const gainLoss = currentValue - costBasis;
-        const gainLossPercent = (gainLoss / costBasis) * 100;
+    const portfolio = holdings.map((holding) => {
+      const company = companyMap.get(holding.companyId);
+      if (!company) return null;
 
-        const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
-        const oldPrice = await ctx.db
-          .query("stockPriceHistory")
-          .withIndex("by_company_timestamp", (q) => 
-            q.eq("companyId", holding.companyId).gt("timestamp", oneDayAgo)
-          )
-          .order("asc")
-          .first();
+      const currentValue = holding.shares * company.sharePrice;
+      const costBasis = holding.shares * holding.averagePurchasePrice;
+      const gainLoss = currentValue - costBasis;
+      const gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
 
-        const priceChange24h = oldPrice 
-          ? company.sharePrice - oldPrice.price
-          : 0;
-        const priceChangePercent24h = oldPrice
-          ? ((company.sharePrice - oldPrice.price) / oldPrice.price) * 100
-          : 0;
+      return {
+        ...holding,
+        companyName: company.name,
+        companyTicker: company.ticker,
+        companyLogoUrl: company.logoUrl,
+        currentPrice: company.sharePrice,
+        currentValue,
+        costBasis,
+        gainLoss,
+        gainLossPercent,
+      };
+    }).filter(Boolean);
 
-        return {
-          ...holding,
-          companyName: company.name,
-          companyTicker: company.ticker,
-          companyLogoUrl: company.logoUrl,
-          currentPrice: company.sharePrice,
-          currentValue,
-          costBasis,
-          gainLoss,
-          gainLossPercent,
-          priceChange24h,
-          priceChangePercent24h,
-        };
-      })
-    );
-
-    return portfolio.filter(Boolean);
+    return portfolio;
   },
 });
 
@@ -691,40 +675,53 @@ export const getCompanyShareholders = query({
     const company = await ctx.db.get(args.companyId);
     if (!company) throw new Error("Company not found");
 
+    // BANDWIDTH OPTIMIZATION: Limit to top 100 shareholders
     const holdings = await ctx.db
       .query("stocks")
       .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
-      .collect();
+      .take(100);
 
     const totalHeldShares = holdings.reduce((sum, h) => sum + h.shares, 0);
 
-    const shareholders = await Promise.all(
-      holdings.map(async (holding) => {
-        let name = "Unknown";
-        let type = holding.holderType;
-        
-        if (holding.holderType === "user") {
-          const user: any = await ctx.db.get(holding.holderId as any);
-          name = user?.name || user?.username || "Unknown User";
-        } else {
-          const holderCompany: any = await ctx.db.get(holding.holderId as any);
-          name = holderCompany?.name || "Unknown Company";
-        }
+    // BANDWIDTH OPTIMIZATION: Batch fetch all holders
+    const userIds = holdings.filter(h => h.holderType === "user").map(h => h.holderId);
+    const companyIds = holdings.filter(h => h.holderType === "company").map(h => h.holderId);
+    
+    const users = await Promise.all(userIds.map(id => ctx.db.get(id as any)));
+    const companies = await Promise.all(companyIds.map(id => ctx.db.get(id as any)));
+    
+    const userMap = new Map();
+    users.forEach((user: any, index) => {
+      if (user) {
+        userMap.set(userIds[index], user.name || user.username || "Unknown User");
+      }
+    });
+    
+    const companyMapLocal = new Map();
+    companies.forEach((comp: any, index) => {
+      if (comp) {
+        companyMapLocal.set(companyIds[index], comp.name || "Unknown Company");
+      }
+    });
 
-        const ownershipPercent = (holding.shares / company.totalShares) * 100;
-        const currentValue = holding.shares * company.sharePrice;
+    const shareholders = holdings.map((holding) => {
+      const name = holding.holderType === "user" 
+        ? userMap.get(holding.holderId) || "Unknown"
+        : companyMapLocal.get(holding.holderId) || "Unknown";
 
-        return {
-          holderId: holding.holderId,
-          holderType: type,
-          holderName: name,
-          shares: holding.shares,
-          ownershipPercent,
-          currentValue,
-          averagePurchasePrice: holding.averagePurchasePrice,
-        };
-      })
-    );
+      const ownershipPercent = (holding.shares / company.totalShares) * 100;
+      const currentValue = holding.shares * company.sharePrice;
+
+      return {
+        holderId: holding.holderId,
+        holderType: holding.holderType,
+        holderName: name,
+        shares: holding.shares,
+        ownershipPercent,
+        currentValue,
+        averagePurchasePrice: holding.averagePurchasePrice,
+      };
+    });
 
     const founderShares = company.totalShares - totalHeldShares;
     const founderOwnership = (founderShares / company.totalShares) * 100;

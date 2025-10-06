@@ -65,11 +65,11 @@ export const createProduct = mutation({
 export const getActiveProducts = query({
   args: {},
   handler: async (ctx) => {
-    // Limit to 500 active products to reduce bandwidth
+    // BANDWIDTH OPTIMIZATION: Reduced from 500 to 200
     const products = await ctx.db
       .query("products")
       .withIndex("by_active", (q) => q.eq("isActive", true))
-      .take(500);
+      .take(200);
 
     // OPTIMIZED: Batch fetch all companies at once
     const companyIds = [...new Set(products.map(p => p.companyId))];

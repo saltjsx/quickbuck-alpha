@@ -38,9 +38,13 @@ function normalizeLimit(requestedLimit?: number) {
 
 // Get all companies with full statistics
 export const getAllCompanies = query({
-  args: {},
-  handler: async (ctx) => {
-    const companies = await ctx.db.query("companies").take(500);
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    // BANDWIDTH OPTIMIZATION: Reduced from 500 to 200 by default, max 300
+    const limit = Math.min(args.limit || 200, 300);
+    const companies = await ctx.db.query("companies").take(limit);
     
     // Batch fetch all accounts
     const accountIds = companies.map(c => c.accountId);
@@ -87,9 +91,13 @@ export const getAllCompanies = query({
 
 // Get all players with full statistics
 export const getAllPlayers = query({
-  args: {},
-  handler: async (ctx) => {
-    const users = await ctx.db.query("users").take(500);
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    // BANDWIDTH OPTIMIZATION: Reduced from 500 to 200 by default, max 300
+    const limit = Math.min(args.limit || 200, 300);
+    const users = await ctx.db.query("users").take(limit);
     
     // Batch fetch personal accounts
     const userIds = users.map(u => u._id);
@@ -110,14 +118,15 @@ export const getAllPlayers = query({
       }
     });
 
-    // Batch fetch all stock holdings
+    // BANDWIDTH OPTIMIZATION: Only fetch stock holdings for users who have accounts
+    const usersWithAccounts = userIds.filter(id => accountMap.has(id));
     const allHoldings = await Promise.all(
-      userIds.map(userId =>
+      usersWithAccounts.map(userId =>
         ctx.db
           .query("stocks")
           .withIndex("by_holder", (q) => q.eq("holderId", userId))
           .filter((q) => q.eq(q.field("holderType"), "user"))
-          .collect()
+          .take(50) // BANDWIDTH OPTIMIZATION: Limit holdings per user
       )
     );
 
@@ -131,35 +140,39 @@ export const getAllPlayers = query({
       }
     });
 
-    const enrichedPlayers = await Promise.all(
-      users.map(async (user, index) => {
-        const account = accountMap.get(user._id);
-        const holdings = allHoldings[index] as StockDoc[];
-        
-        let portfolioValue = 0;
-        for (const holding of holdings) {
-          const company = companyMap.get(holding.companyId);
-          if (company) {
-            portfolioValue += (holding.shares ?? 0) * (company.sharePrice ?? 0);
-          }
+    // Build holdings map
+    const holdingsMap = new Map();
+    usersWithAccounts.forEach((userId, index) => {
+      holdingsMap.set(userId, allHoldings[index] as StockDoc[]);
+    });
+
+    const enrichedPlayers = users.map((user) => {
+      const account = accountMap.get(user._id);
+      const holdings = holdingsMap.get(user._id) || [];
+      
+      let portfolioValue = 0;
+      for (const holding of holdings) {
+        const company = companyMap.get(holding.companyId);
+        if (company) {
+          portfolioValue += (holding.shares ?? 0) * (company.sharePrice ?? 0);
         }
+      }
 
-        const cashBalance = account?.balance ?? 0;
-        const netWorth = cashBalance + portfolioValue;
+      const cashBalance = account?.balance ?? 0;
+      const netWorth = cashBalance + portfolioValue;
 
-        return {
-          _id: user._id,
-          name: formatPlayerName(user).displayName,
-          username: user.username,
-          email: user.email,
-          avatarUrl: normalizeImageUrl(user.image),
-          cashBalance,
-          portfolioValue,
-          netWorth,
-          totalHoldings: holdings.length,
-        };
-      })
-    );
+      return {
+        _id: user._id,
+        name: formatPlayerName(user).displayName,
+        username: user.username,
+        email: user.email,
+        avatarUrl: normalizeImageUrl(user.image),
+        cashBalance,
+        portfolioValue,
+        netWorth,
+        totalHoldings: holdings.length,
+      };
+    });
 
     return enrichedPlayers;
   },
@@ -167,9 +180,13 @@ export const getAllPlayers = query({
 
 // Get all products with full statistics
 export const getAllProducts = query({
-  args: {},
-  handler: async (ctx) => {
-    const products = await ctx.db.query("products").take(1000);
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    // BANDWIDTH OPTIMIZATION: Reduced from 1000 to 500 by default, max 750
+    const limit = Math.min(args.limit || 500, 750);
+    const products = await ctx.db.query("products").take(limit);
 
     // Batch fetch all companies
     const companyIds = [...new Set(products.map(p => p.companyId))];

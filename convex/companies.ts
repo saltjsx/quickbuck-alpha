@@ -96,8 +96,8 @@ export const createCompany = mutation({
 export const getCompanies = query({
   args: {},
   handler: async (ctx) => {
-    // Limit to 200 companies to reduce bandwidth
-    const companies = await ctx.db.query("companies").take(200);
+    // BANDWIDTH OPTIMIZATION: Reduced from 200 to 100
+    const companies = await ctx.db.query("companies").take(100);
     
     // Batch fetch all accounts using cached balance
     const accountIds = companies.map(c => c.accountId);
@@ -111,22 +111,12 @@ export const getCompanies = query({
       }
     });
     
-    // Batch fetch owners
-    const ownerIds = companies.map(c => c.ownerId);
-    const owners = await Promise.all(ownerIds.map(id => ctx.db.get(id)));
-    
-    // Create owner map
-    const ownerMap = new Map();
-    owners.forEach((owner: any, index) => {
-      if (owner) {
-        ownerMap.set(ownerIds[index], owner.name || "Unknown");
-      }
-    });
+    // BANDWIDTH OPTIMIZATION: Skip owner fetching for marketplace listing
+    // Only fetch owner names when specifically needed
 
     const companiesWithBalance = companies.map((company) => ({
       ...company,
       balance: balanceMap.get(company.accountId) ?? 0,
-      ownerName: ownerMap.get(company.ownerId) || "Unknown",
     }));
 
     return companiesWithBalance;
@@ -137,11 +127,11 @@ export const getCompanies = query({
 export const getPublicCompanies = query({
   args: {},
   handler: async (ctx) => {
-    // Limit to 100 public companies to reduce bandwidth
+    // BANDWIDTH OPTIMIZATION: Reduced from 100 to 50
     const companies = await ctx.db
       .query("companies")
       .withIndex("by_public", (q) => q.eq("isPublic", true))
-      .take(100);
+      .take(50);
     
     // Batch fetch all accounts using cached balance
     const accountIds = companies.map(c => c.accountId);
@@ -155,22 +145,12 @@ export const getPublicCompanies = query({
       }
     });
     
-    // Batch fetch owners
-    const ownerIds = companies.map(c => c.ownerId);
-    const owners = await Promise.all(ownerIds.map(id => ctx.db.get(id)));
-    
-    // Create owner map
-    const ownerMap = new Map();
-    owners.forEach((owner: any, index) => {
-      if (owner) {
-        ownerMap.set(ownerIds[index], owner.name || "Unknown");
-      }
-    });
+    // BANDWIDTH OPTIMIZATION: Skip owner fetching for stock market listing
+    // Owner info not critical for stock listings
 
     const enrichedCompanies = companies.map((company) => ({
       ...company,
       balance: balanceMap.get(company.accountId) ?? 0,
-      ownerName: ownerMap.get(company.ownerId) || "Unknown",
     }));
 
     return enrichedCompanies;
