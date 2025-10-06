@@ -70,20 +70,59 @@ export const getAllCompanies = query({
       }
     });
 
-    const enrichedCompanies = companies.map((company) => ({
-      _id: company._id,
-      name: company.name,
-      ticker: company.ticker,
-      sharePrice: company.sharePrice ?? 0,
-      totalShares: company.totalShares ?? 0,
-      marketCap: (company.sharePrice ?? 0) * (company.totalShares ?? 0),
-      balance: balanceMap.get(company.accountId) ?? 0,
-      isPublic: company.isPublic ?? false,
-      monthlyRevenue: company.monthlyRevenue ?? 0,
-      ownerName: ownerMap.get(company.ownerId) || "Unknown",
-      logoUrl: normalizeImageUrl(company.logoUrl),
-      createdAt: company.createdAt,
-    }));
+    // Batch fetch stock holdings for all companies
+    const allCompanyHoldings = await Promise.all(
+      companies.map(company =>
+        ctx.db
+          .query("stocks")
+          .withIndex("by_holder", (q) => q.eq("holderId", company._id))
+          .filter((q) => q.eq(q.field("holderType"), "company"))
+          .take(50) // Limit holdings per company
+      )
+    );
+
+    // Get unique company IDs from all holdings
+    const heldCompanyIds = [...new Set(allCompanyHoldings.flat().map((h: any) => h.companyId))];
+    const heldCompanies = await Promise.all(heldCompanyIds.map(id => ctx.db.get(id)));
+    const heldCompanyMap = new Map();
+    heldCompanies.forEach((company: any) => {
+      if (company) {
+        heldCompanyMap.set(company._id, company);
+      }
+    });
+
+    const enrichedCompanies = companies.map((company, index) => {
+      const holdings = allCompanyHoldings[index] as StockDoc[];
+      
+      // Calculate stock portfolio value
+      let portfolioValue = 0;
+      for (const holding of holdings) {
+        const heldCompany = heldCompanyMap.get(holding.companyId);
+        if (heldCompany) {
+          portfolioValue += (holding.shares ?? 0) * (heldCompany.sharePrice ?? 0);
+        }
+      }
+
+      const balance = balanceMap.get(company.accountId) ?? 0;
+      const netWorth = balance + portfolioValue;
+
+      return {
+        _id: company._id,
+        name: company.name,
+        ticker: company.ticker,
+        sharePrice: company.sharePrice ?? 0,
+        totalShares: company.totalShares ?? 0,
+        marketCap: (company.sharePrice ?? 0) * (company.totalShares ?? 0),
+        balance,
+        portfolioValue,
+        netWorth,
+        isPublic: company.isPublic ?? false,
+        monthlyRevenue: company.monthlyRevenue ?? 0,
+        ownerName: ownerMap.get(company.ownerId) || "Unknown",
+        logoUrl: normalizeImageUrl(company.logoUrl),
+        createdAt: company.createdAt,
+      };
+    });
 
     return enrichedCompanies;
   },
@@ -407,13 +446,44 @@ export const getLeaderboard = query({
       }
     }
 
+    // Batch fetch company stock holdings
+    const companyIds = companyAccounts
+      .map(acc => acc.companyId)
+      .filter((id): id is Id<"companies"> => id !== undefined);
+    
+    const companyHoldingsResults = await Promise.all(
+      companyIds.map(companyId =>
+        ctx.db
+          .query("stocks")
+          .withIndex("by_holder", (q) => q.eq("holderId", companyId))
+          .filter((q) => q.eq(q.field("holderType"), "company"))
+          .take(50) // Limit holdings per company
+      )
+    );
+
+    const companyHoldingsMap = new Map<Id<"companies">, StockDoc[]>();
+    companyIds.forEach((companyId, index) => {
+      companyHoldingsMap.set(companyId, companyHoldingsResults[index] as StockDoc[]);
+    });
+
     const mostCashCompanies = companyAccounts
       .filter((account) => account.companyId && companyCache.get(account.companyId))
       .slice(0, limit)
       .map((account) => {
         const company = companyCache.get(account.companyId!)!;
+        const holdings = companyHoldingsMap.get(company._id) ?? [];
+        
+        let portfolioValue = 0;
+        for (const holding of holdings) {
+          const heldCompany = companyCache.get(holding.companyId);
+          if (heldCompany) {
+            portfolioValue += (holding.shares ?? 0) * (heldCompany.sharePrice ?? 0);
+          }
+        }
+
         const sharePrice = company.sharePrice ?? 0;
         const totalShares = company.totalShares ?? 0;
+        const cashBalance = account.balance ?? 0;
         const logoUrl = normalizeImageUrl(company.logoUrl ?? null);
         return {
           companyId: company._id,
@@ -422,7 +492,9 @@ export const getLeaderboard = query({
           sharePrice,
           totalShares,
           marketCap: sharePrice * totalShares,
-          balance: account.balance ?? 0,
+          balance: cashBalance,
+          portfolioValue,
+          netWorth: cashBalance + portfolioValue,
           logoUrl,
         };
       });
@@ -459,8 +531,38 @@ export const getLeaderboard = query({
       addCompanyCandidate(company);
     }
 
+    // Fetch holdings for companies not already in companyHoldingsMap
+    const additionalCompanyIds = Array.from(companyCandidates.keys())
+      .filter(id => !companyHoldingsMap.has(id));
+    
+    if (additionalCompanyIds.length > 0) {
+      const additionalHoldingsResults = await Promise.all(
+        additionalCompanyIds.map(companyId =>
+          ctx.db
+            .query("stocks")
+            .withIndex("by_holder", (q) => q.eq("holderId", companyId))
+            .filter((q) => q.eq(q.field("holderType"), "company"))
+            .take(50)
+        )
+      );
+
+      additionalCompanyIds.forEach((companyId, index) => {
+        companyHoldingsMap.set(companyId, additionalHoldingsResults[index] as StockDoc[]);
+      });
+    }
+
     const mostValuableCompanies = Array.from(companyCandidates.values())
       .map((company) => {
+        const holdings = companyHoldingsMap.get(company._id) ?? [];
+        
+        let portfolioValue = 0;
+        for (const holding of holdings) {
+          const heldCompany = companyCache.get(holding.companyId);
+          if (heldCompany) {
+            portfolioValue += (holding.shares ?? 0) * (heldCompany.sharePrice ?? 0);
+          }
+        }
+
         const sharePrice = company.sharePrice ?? 0;
         const totalShares = company.totalShares ?? 0;
         const logoUrl = normalizeImageUrl(company.logoUrl ?? null);
@@ -471,6 +573,8 @@ export const getLeaderboard = query({
           sharePrice,
           totalShares,
           marketCap: sharePrice * totalShares,
+          portfolioValue,
+          netWorth: portfolioValue, // For most valuable companies, net worth is just portfolio (no cash balance included)
           logoUrl,
         };
       })

@@ -54,6 +54,8 @@ type LeaderboardCompanyValue = {
   totalShares?: number;
   marketCap?: number;
   balance?: number;
+  portfolioValue?: number;
+  netWorth?: number;
   logoUrl?: string | null;
 };
 
@@ -220,9 +222,9 @@ export default function LeaderboardPage() {
     | LeaderboardData
     | undefined;
 
-  const allCompanies = useQuery(api.leaderboard.getAllCompanies);
-  const allPlayers = useQuery(api.leaderboard.getAllPlayers);
-  const allProducts = useQuery(api.leaderboard.getAllProducts);
+  const allCompanies = useQuery(api.leaderboard.getAllCompanies, {});
+  const allPlayers = useQuery(api.leaderboard.getAllPlayers, {});
+  const allProducts = useQuery(api.leaderboard.getAllProducts, {});
 
   const isLoading = leaderboard === undefined;
 
@@ -524,7 +526,13 @@ export default function LeaderboardPage() {
                           <TableHead className="w-[50px]">#</TableHead>
                           <TableHead>Company</TableHead>
                           <TableHead>Owner</TableHead>
-                          <TableHead className="text-right">Balance</TableHead>
+                          <TableHead className="text-right">Cash</TableHead>
+                          <TableHead className="text-right">
+                            Stock Holdings
+                          </TableHead>
+                          <TableHead className="text-right">
+                            Net Worth
+                          </TableHead>
                           <TableHead className="text-right">
                             Share Price
                           </TableHead>
@@ -539,7 +547,7 @@ export default function LeaderboardPage() {
                       </TableHeader>
                       <TableBody>
                         {allCompanies
-                          .sort((a, b) => b.marketCap - a.marketCap)
+                          .sort((a, b) => b.netWorth - a.netWorth)
                           .map((company, index) => (
                             <TableRow key={company._id}>
                               <TableCell className="font-medium">
@@ -571,6 +579,12 @@ export default function LeaderboardPage() {
                               <TableCell>{company.ownerName}</TableCell>
                               <TableCell className="text-right">
                                 {formatCurrency(company.balance)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {formatCurrency(company.portfolioValue)}
+                              </TableCell>
+                              <TableCell className="text-right font-semibold">
+                                {formatCurrency(company.netWorth)}
                               </TableCell>
                               <TableCell className="text-right">
                                 {formatCurrency(company.sharePrice)}
