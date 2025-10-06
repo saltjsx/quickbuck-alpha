@@ -46,6 +46,7 @@ export default function TransactionsPage() {
   const userAccounts = useQuery(api.accounts.getUserAccounts);
   const transfer = useMutation(api.accounts.transfer);
   const portfolio = useQuery(api.stocks.getPortfolio);
+  const companyPortfolios = useQuery(api.stocks.getCompanyPortfolios);
   const companies = useQuery(api.companies.getUserCompanies);
   const transferStock = useMutation(api.stocks.transferStock);
 
@@ -200,6 +201,14 @@ export default function TransactionsPage() {
     setIsSubmitting(true);
 
     try {
+      // Determine if transferring from personal account or company account
+      const fromHolderType =
+        selectedStockHolding.ownerType === "company" ? "company" : "user";
+      const fromHolderId =
+        selectedStockHolding.ownerType === "company"
+          ? selectedStockHolding.ownerCompanyId
+          : selectedStockHolding.holderId;
+
       await transferStock({
         companyId: selectedStockHolding.companyId,
         shares: shares,
@@ -208,12 +217,21 @@ export default function TransactionsPage() {
             ? selectedStockRecipient._id
             : selectedStockRecipient._id,
         toType: stockRecipientType,
+        fromHolderId: fromHolderId,
+        fromHolderType: fromHolderType,
       });
+
+      const ownerLabel =
+        selectedStockHolding.ownerType === "company"
+          ? selectedStockHolding.ownerCompanyName
+          : "your personal account";
 
       setStockSuccess(
         `Successfully transferred ${shares} shares of ${
           selectedStockHolding.companyName
-        } to ${selectedStockRecipient.name || selectedStockRecipient.ticker}`
+        } from ${ownerLabel} to ${
+          selectedStockRecipient.name || selectedStockRecipient.ticker
+        }`
       );
       setSharesToTransfer("");
       setSelectedStockRecipient(null);
@@ -604,9 +622,10 @@ export default function TransactionsPage() {
                   <Label htmlFor="stock-selection">
                     Select Stock to Transfer
                   </Label>
-                  {!portfolio || portfolio.length === 0 ? (
+                  {(!portfolio || portfolio.length === 0) &&
+                  (!companyPortfolios || companyPortfolios.length === 0) ? (
                     <div className="p-4 border rounded-lg text-center text-muted-foreground">
-                      <p>You don't own any stocks yet</p>
+                      <p>No stocks available to transfer</p>
                       <Button
                         type="button"
                         variant="outline"
@@ -640,11 +659,17 @@ export default function TransactionsPage() {
                             >
                               {selectedStockHolding.companyTicker}
                             </Badge>
+                            {selectedStockHolding.ownerCompanyName && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Owned by:{" "}
+                                {selectedStockHolding.ownerCompanyName}
+                              </p>
+                            )}
                           </div>
                         </div>
                         <div className="text-right">
                           <p className="text-sm text-muted-foreground">
-                            You own
+                            Available
                           </p>
                           <p className="font-semibold">
                             {selectedStockHolding.shares} shares
@@ -663,48 +688,123 @@ export default function TransactionsPage() {
                     </div>
                   ) : (
                     <div className="space-y-2 max-h-60 overflow-y-auto border rounded-lg divide-y">
-                      {portfolio.map((holding: any) => {
-                        if (!holding) return null;
-                        return (
-                          <button
-                            key={holding._id}
-                            type="button"
-                            onClick={() => setSelectedStockHolding(holding)}
-                            className="w-full p-3 hover:bg-accent text-left transition-colors"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                {holding.companyLogoUrl && (
-                                  <img
-                                    src={holding.companyLogoUrl}
-                                    alt={holding.companyName}
-                                    className="w-8 h-8 rounded"
-                                  />
-                                )}
-                                <div>
-                                  <p className="font-medium">
-                                    {holding.companyName}
-                                  </p>
-                                  <Badge
-                                    variant="outline"
-                                    className="font-mono text-xs"
-                                  >
-                                    {holding.companyTicker}
-                                  </Badge>
+                      {/* Personal Portfolio */}
+                      {portfolio && portfolio.length > 0 && (
+                        <>
+                          <div className="p-2 bg-muted/50 sticky top-0">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase">
+                              Personal Portfolio
+                            </p>
+                          </div>
+                          {portfolio.map((holding: any) => {
+                            if (!holding) return null;
+                            return (
+                              <button
+                                key={holding._id}
+                                type="button"
+                                onClick={() =>
+                                  setSelectedStockHolding({
+                                    ...holding,
+                                    ownerType: "personal",
+                                  })
+                                }
+                                className="w-full p-3 hover:bg-accent text-left transition-colors"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    {holding.companyLogoUrl && (
+                                      <img
+                                        src={holding.companyLogoUrl}
+                                        alt={holding.companyName}
+                                        className="w-8 h-8 rounded"
+                                      />
+                                    )}
+                                    <div>
+                                      <p className="font-medium">
+                                        {holding.companyName}
+                                      </p>
+                                      <Badge
+                                        variant="outline"
+                                        className="font-mono text-xs"
+                                      >
+                                        {holding.companyTicker}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-sm font-semibold">
+                                      {holding.shares} shares
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      @ ${holding.currentPrice.toFixed(2)}
+                                    </p>
+                                  </div>
                                 </div>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-sm font-semibold">
-                                  {holding.shares} shares
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  @ ${holding.currentPrice.toFixed(2)}
-                                </p>
-                              </div>
+                              </button>
+                            );
+                          })}
+                        </>
+                      )}
+
+                      {/* Company Portfolios */}
+                      {companyPortfolios &&
+                        companyPortfolios.map((companyPortfolio: any) => (
+                          <div key={companyPortfolio.companyId}>
+                            <div className="p-2 bg-muted/50 sticky top-0">
+                              <p className="text-xs font-semibold text-muted-foreground uppercase">
+                                {companyPortfolio.companyName} (
+                                {companyPortfolio.companyTicker})
+                              </p>
                             </div>
-                          </button>
-                        );
-                      })}
+                            {companyPortfolio.holdings.map((holding: any) => (
+                              <button
+                                key={holding._id}
+                                type="button"
+                                onClick={() =>
+                                  setSelectedStockHolding({
+                                    ...holding,
+                                    ownerType: "company",
+                                    ownerCompanyId: companyPortfolio.companyId,
+                                    ownerCompanyName:
+                                      companyPortfolio.companyName,
+                                  })
+                                }
+                                className="w-full p-3 hover:bg-accent text-left transition-colors"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    {holding.companyLogoUrl && (
+                                      <img
+                                        src={holding.companyLogoUrl}
+                                        alt={holding.companyName}
+                                        className="w-8 h-8 rounded"
+                                      />
+                                    )}
+                                    <div>
+                                      <p className="font-medium">
+                                        {holding.companyName}
+                                      </p>
+                                      <Badge
+                                        variant="outline"
+                                        className="font-mono text-xs"
+                                      >
+                                        {holding.companyTicker}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-sm font-semibold">
+                                      {holding.shares} shares
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      @ ${holding.currentPrice.toFixed(2)}
+                                    </p>
+                                  </div>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        ))}
                     </div>
                   )}
                 </div>
@@ -976,7 +1076,11 @@ export default function TransactionsPage() {
                   <div className="flex items-center justify-between">
                     <div className="text-center">
                       <p className="text-sm text-muted-foreground">From</p>
-                      <p className="font-semibold">You</p>
+                      <p className="font-semibold">
+                        {selectedStockHolding.ownerType === "company"
+                          ? selectedStockHolding.ownerCompanyName
+                          : "You"}
+                      </p>
                       <p className="text-sm text-muted-foreground">
                         {selectedStockHolding.shares} shares owned
                       </p>

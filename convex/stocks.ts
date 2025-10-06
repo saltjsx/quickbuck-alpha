@@ -400,6 +400,8 @@ export const transferStock = mutation({
     shares: v.number(),
     toId: v.union(v.id("users"), v.id("companies")),
     toType: v.union(v.literal("user"), v.literal("company")),
+    fromHolderId: v.optional(v.union(v.id("users"), v.id("companies"))),
+    fromHolderType: v.optional(v.union(v.literal("user"), v.literal("company"))),
   },
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx);
@@ -409,11 +411,34 @@ export const transferStock = mutation({
     const company = await ctx.db.get(args.companyId);
     if (!company) throw new Error("Company not found");
 
+    // Determine the actual holder (default to current user if not specified)
+    const fromHolderId = args.fromHolderId || userId;
+    const fromHolderType = args.fromHolderType || "user";
+
+    // Check if user has permission to transfer from this holder
+    if (fromHolderType === "company") {
+      // User must have access to the company to transfer its stocks
+      const access = await ctx.db
+        .query("companyAccess")
+        .withIndex("by_company_user", (q) =>
+          q.eq("companyId", fromHolderId as any).eq("userId", userId)
+        )
+        .first();
+
+      if (!access) {
+        throw new Error("You don't have permission to transfer stocks from this company");
+      }
+    } else if (fromHolderId !== userId) {
+      // Can't transfer from another user's account
+      throw new Error("You can only transfer your own stocks");
+    }
+
     const holding = await ctx.db
       .query("stocks")
       .withIndex("by_company_holder", (q) =>
-        q.eq("companyId", args.companyId).eq("holderId", userId)
+        q.eq("companyId", args.companyId).eq("holderId", fromHolderId)
       )
+      .filter((q) => q.eq(q.field("holderType"), fromHolderType))
       .first();
 
     if (!holding || holding.shares < args.shares) {
@@ -428,7 +453,7 @@ export const transferStock = mutation({
       pricePerShare: company.sharePrice,
       totalAmount: args.shares * company.sharePrice,
       transactionType: "transfer",
-      fromId: userId,
+      fromId: fromHolderId,
       toId: args.toId,
       timestamp: Date.now(),
     });
@@ -448,6 +473,7 @@ export const transferStock = mutation({
       .withIndex("by_company_holder", (q) =>
         q.eq("companyId", args.companyId).eq("holderId", args.toId)
       )
+      .filter((q) => q.eq(q.field("holderType"), args.toType))
       .first();
 
     if (receiverHolding) {
@@ -526,6 +552,81 @@ export const getPortfolio = query({
     );
 
     return portfolio.filter(Boolean);
+  },
+});
+
+// Get portfolios for all companies the user has access to
+export const getCompanyPortfolios = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getCurrentUserId(ctx);
+    if (!userId) return [];
+
+    // Get companies user has access to
+    const companyAccess = await ctx.db
+      .query("companyAccess")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .take(50);
+
+    const companyIds = companyAccess.map(a => a.companyId);
+    const companies = await Promise.all(companyIds.map(id => ctx.db.get(id)));
+    const validCompanies = companies.filter(Boolean) as any[];
+
+    // Get all holdings for these companies
+    const allCompanyHoldings = await Promise.all(
+      validCompanies.map(company =>
+        ctx.db
+          .query("stocks")
+          .withIndex("by_holder", (q) => q.eq("holderId", company._id))
+          .filter((q) => q.eq(q.field("holderType"), "company"))
+          .collect()
+      )
+    );
+
+    // Get unique stock companies
+    const stockCompanyIds = [...new Set(allCompanyHoldings.flat().map(h => h.companyId))];
+    const stockCompanies = await Promise.all(stockCompanyIds.map(id => ctx.db.get(id)));
+    const stockCompanyMap = new Map();
+    stockCompanies.forEach((company: any) => {
+      if (company) {
+        stockCompanyMap.set(company._id, company);
+      }
+    });
+
+    // Build portfolio structure
+    const companyPortfolios = validCompanies.map((company, index) => {
+      const holdings = allCompanyHoldings[index];
+      const enrichedHoldings = holdings.map((holding: any) => {
+        const stockCompany = stockCompanyMap.get(holding.companyId);
+        if (!stockCompany) return null;
+
+        const currentValue = holding.shares * stockCompany.sharePrice;
+        const costBasis = holding.shares * holding.averagePurchasePrice;
+        const gainLoss = currentValue - costBasis;
+        const gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
+
+        return {
+          ...holding,
+          companyName: stockCompany.name,
+          companyTicker: stockCompany.ticker,
+          companyLogoUrl: stockCompany.logoUrl,
+          currentPrice: stockCompany.sharePrice,
+          currentValue,
+          costBasis,
+          gainLoss,
+          gainLossPercent,
+        };
+      }).filter(Boolean);
+
+      return {
+        companyId: company._id,
+        companyName: company.name,
+        companyTicker: company.ticker,
+        holdings: enrichedHoldings,
+      };
+    }).filter(c => c.holdings.length > 0); // Only return companies with stock holdings
+
+    return companyPortfolios;
   },
 });
 
