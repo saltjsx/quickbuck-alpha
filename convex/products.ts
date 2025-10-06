@@ -50,6 +50,9 @@ export const createProduct = mutation({
       totalSales: 0,
       totalRevenue: 0,
       totalCosts: 0,
+      quality: 100, // Start with perfect quality
+      lastMaintenanceDate: Date.now(),
+      maintenanceCost: 0,
       createdAt: Date.now(),
     });
 

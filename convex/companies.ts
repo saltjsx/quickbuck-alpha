@@ -66,6 +66,12 @@ export const createCompany = mutation({
       totalShares: 1000000, // 1 million shares by default
       sharePrice: 0.01, // $0.01 per share initially
       marketSentiment: 1.0, // Neutral market sentiment
+      // Initialize expense tracking
+      lastExpenseDate: Date.now(),
+      monthlyRevenue: 0,
+      taxRate: 0.21, // 21% corporate tax rate
+      lastTaxPayment: Date.now(),
+      unpaidTaxes: 0,
       createdAt: Date.now(),
     });
 
@@ -537,8 +543,12 @@ export const getCompanyDashboard = query({
     );
     const totalCosts = costTransactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
 
-    // Calculate profit
-    const totalProfit = totalRevenue - totalCosts;
+    // Calculate expenses (operating costs, taxes, licenses, maintenance)
+    const expenseTransactions = outgoing.filter(tx => tx.type === "expense");
+    const totalExpenses = expenseTransactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
+
+    // Calculate profit (revenue - costs - expenses)
+    const totalProfit = totalRevenue - totalCosts - totalExpenses;
 
     // OPTIMIZED: Use stored totalRevenue and totalCosts from products table
     const productStats = products.map((product) => {
@@ -563,22 +573,24 @@ export const getCompanyDashboard = query({
     });
 
     // Group by day for charts (OPTIMIZED: combine in one pass)
-    const dailyData: Record<string, { revenue: number; costs: number; profit: number }> = {};
+    const dailyData: Record<string, { revenue: number; costs: number; expenses: number; profit: number }> = {};
     
     // Process all transactions in one pass
-    [...revenueTransactions, ...costTransactions].forEach(tx => {
+    [...revenueTransactions, ...costTransactions, ...expenseTransactions].forEach(tx => {
       const date = new Date(tx.createdAt).toISOString().split('T')[0];
       if (!dailyData[date]) {
-        dailyData[date] = { revenue: 0, costs: 0, profit: 0 };
+        dailyData[date] = { revenue: 0, costs: 0, expenses: 0, profit: 0 };
       }
       
       if (tx.type === "product_purchase" || (tx.type === "marketplace_batch" && tx.toAccountId === company.accountId)) {
         dailyData[date].revenue += tx.amount || 0;
       } else if (tx.type === "product_cost" || (tx.type === "marketplace_batch" && tx.fromAccountId === company.accountId)) {
         dailyData[date].costs += tx.amount || 0;
+      } else if (tx.type === "expense") {
+        dailyData[date].expenses += tx.amount || 0;
       }
       
-      dailyData[date].profit = dailyData[date].revenue - dailyData[date].costs;
+      dailyData[date].profit = dailyData[date].revenue - dailyData[date].costs - dailyData[date].expenses;
     });
 
     // Convert to array and sort by date (limit to 30 most recent days)
@@ -587,6 +599,7 @@ export const getCompanyDashboard = query({
         date,
         revenue: data.revenue,
         costs: data.costs,
+        expenses: data.expenses,
         profit: data.profit,
       }))
       .sort((a, b) => a.date.localeCompare(b.date))
@@ -600,6 +613,7 @@ export const getCompanyDashboard = query({
       totals: {
         revenue: totalRevenue,
         costs: totalCosts,
+        expenses: totalExpenses,
         profit: totalProfit,
       },
       products: productStats,
