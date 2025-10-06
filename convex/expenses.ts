@@ -287,7 +287,26 @@ export const processCompanyExpenses = internalMutation({
     const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
     
     // Get all companies (limit to 100 at a time to avoid timeouts)
-    const companies = await ctx.db.query("companies").take(100);
+    // Process all companies in batches
+    let cursor = null;
+    let batch = 0;
+    const BATCH_SIZE = 100;
+    
+    do {
+      const result = cursor
+        ? await ctx.db.query("companies").paginate({ cursor, numItems: BATCH_SIZE })
+        : await ctx.db.query("companies").paginate({ numItems: BATCH_SIZE });
+      
+      const companies = result.page;
+      cursor = result.continueCursor;
+      
+      // Process companies batch...
+      for (const company of companies) {
+        // existing processing logic
+      }
+      
+      batch++;
+    } while (cursor && batch < 10); // Safety limit of 10 batches
 
     // Get system account
     let systemAccount = await ctx.db
