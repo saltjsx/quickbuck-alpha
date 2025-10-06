@@ -244,7 +244,8 @@ export default function Page() {
                     <div>
                       <p className="font-medium">Earn Money</p>
                       <p className="text-sm text-muted-foreground">
-                        Products sell automatically every 2 min
+                        Products sell automatically every 10 min (fair
+                        distribution!)
                       </p>
                     </div>
                   </div>

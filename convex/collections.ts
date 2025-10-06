@@ -97,32 +97,52 @@ export const getMyCollection = query({
     const userId = await getCurrentUserId(ctx);
     if (!userId) return [];
 
+    // Limit to 200 collection items to reduce bandwidth
     const collectionItems = await ctx.db
       .query("collections")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .order("desc")
-      .collect();
+      .take(200);
 
-    // Enrich with product and company info
-    const enrichedItems = await Promise.all(
-      collectionItems.map(async (item) => {
-        const product = await ctx.db.get(item.productId);
-        if (!product) return null;
+    // OPTIMIZED: Batch fetch products and companies
+    const productIds = [...new Set(collectionItems.map(item => item.productId))];
+    const products = await Promise.all(productIds.map(id => ctx.db.get(id)));
+    
+    const productMap = new Map();
+    const companyIds = new Set();
+    products.forEach(product => {
+      if (product) {
+        productMap.set(product._id, product);
+        companyIds.add(product.companyId);
+      }
+    });
+    
+    const companies = await Promise.all(Array.from(companyIds).map(id => ctx.db.get(id as any)));
+    const companyMap = new Map();
+    companies.forEach(company => {
+      if (company) {
+        companyMap.set(company._id, company);
+      }
+    });
 
-        const company = await ctx.db.get(product.companyId);
+    // Enrich items synchronously using maps
+    const enrichedItems = collectionItems.map((item) => {
+      const product = productMap.get(item.productId);
+      if (!product) return null;
 
-        return {
-          ...item,
-          productName: product.name,
-          productDescription: product.description,
-          productImageUrl: product.imageUrl,
-          productTags: product.tags,
-          currentPrice: product.price,
-          companyName: company?.name || "Unknown",
-          companyLogoUrl: company?.logoUrl,
-        };
-      })
-    );
+      const company = companyMap.get(product.companyId);
+
+      return {
+        ...item,
+        productName: product.name,
+        productDescription: product.description,
+        productImageUrl: product.imageUrl,
+        productTags: product.tags,
+        currentPrice: product.price,
+        companyName: company?.name || "Unknown",
+        companyLogoUrl: company?.logoUrl,
+      };
+    });
 
     return enrichedItems.filter((item) => item !== null);
   },
@@ -135,10 +155,11 @@ export const getCollectionStats = query({
     const userId = await getCurrentUserId(ctx);
     if (!userId) return { totalItems: 0, totalSpent: 0, totalValue: 0 };
 
+    // Limit to 200 items for stats calculation to reduce bandwidth
     const collectionItems = await ctx.db
       .query("collections")
       .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
+      .take(200);
 
     const totalSpent = collectionItems.reduce(
       (sum, item) => sum + item.purchasePrice,

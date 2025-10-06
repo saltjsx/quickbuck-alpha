@@ -156,15 +156,19 @@ Browse all products:
 ### Making Money Fast
 
 1. **Multiple Products**: List 5-10 products per company
-2. **Competitive Pricing**: $50-$150 sweet spot
+2. **Diverse Pricing**: Mix cheap, mid-range, and expensive products
 3. **Multiple Companies**: Diversify your revenue streams
 4. **Catchy Names**: Products with good names sell better (psychologically!)
 
-### Pricing Strategy
+### Pricing Strategy (NEW: Fair System! 🎉)
 
-- **Too Low** ($1-$30): Small profits, but higher selection chance
-- **Sweet Spot** ($50-$150): Good profit margins
-- **Too High** ($200+): Large profits if selected, but less likely
+**All price points are now equally viable!** The system ensures fair revenue distribution:
+
+- **Cheap** (≤$150): High volume, consistent revenue
+- **Medium** ($150-$1,000): Balanced volume and margins (recommended for beginners)
+- **Expensive** ($1,000+): Lower volume but high profits per sale
+
+**Key Insight:** All products earn similar revenue per item now. Choose based on your strategy, not just "go cheap"!
 
 ### Calculating Profitability
 
@@ -172,9 +176,23 @@ Browse all products:
 Average Production Cost = 45% of price
 Expected Profit = Price × 55%
 
-Example:
-$100 product = $55 profit per sale
-$200 product = $110 profit per sale
+Example - Revenue Per Cycle (10 min):
+$100 product:  ~10 sales = $1,000 revenue
+$500 product:  ~2 sales = $1,000 revenue
+$2,000 product: ~1 sale = $2,000 revenue
+
+All earn similar or better amounts! ✅
+```
+
+### Recommended Portfolio
+
+**Diversified approach for maximum revenue:**
+
+```
+10 Products Total:
+- 3 Cheap (≤$150):       Steady volume
+- 4 Medium ($200-$800):  Core profit drivers
+- 3 Expensive ($1,000+): High margin items
 ```
 
 ### Investment Strategy
@@ -231,13 +249,23 @@ Create Company → List Products → Earn Money
 **Day 5**: Invested in 3 other companies
 **Week 2**: Net worth: $150,000+
 
-## 🎲 Random Events
+## 🎲 Automatic Purchasing System
 
-The system randomly:
+**Every 10 minutes**, the system purchases products:
 
-- Selects which products to buy
-- Determines production costs (23-67%)
-- Calculates purchase budget ($30,000-$50,000)
+- **Budget**: $300,000-$425,000 per cycle
+- **Distribution**: Fair allocation across all price tiers
+- **Selection**: Products grouped by price, each gets equal opportunity
+- **Production Costs**: Randomly 23-67% of selling price
+
+**New Fair System:**
+
+- Products categorized into price tiers (cheap, mid, expensive)
+- Budget allocated proportionally to each tier
+- Each product gets equal purchase attempts within its tier
+- No more bias toward cheap products!
+
+See `FAIR_PURCHASING_SYSTEM.md` for details.
 
 **Strategy**: List more products = higher chance of selection!
 

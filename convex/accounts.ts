@@ -92,10 +92,11 @@ export const getUserAccounts = query({
       .first();
 
     // Get company accounts where user has access
+    // Limit to 50 company access records to reduce bandwidth
     const companyAccess = await ctx.db
       .query("companyAccess")
       .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
+      .take(50);
 
     // Batch fetch companies
     const companyIds = companyAccess.map(a => a.companyId);

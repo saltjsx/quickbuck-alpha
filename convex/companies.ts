@@ -90,7 +90,8 @@ export const createCompany = mutation({
 export const getCompanies = query({
   args: {},
   handler: async (ctx) => {
-    const companies = await ctx.db.query("companies").collect();
+    // Limit to 200 companies to reduce bandwidth
+    const companies = await ctx.db.query("companies").take(200);
     
     // Batch fetch all accounts using cached balance
     const accountIds = companies.map(c => c.accountId);
@@ -130,10 +131,11 @@ export const getCompanies = query({
 export const getPublicCompanies = query({
   args: {},
   handler: async (ctx) => {
+    // Limit to 100 public companies to reduce bandwidth
     const companies = await ctx.db
       .query("companies")
       .withIndex("by_public", (q) => q.eq("isPublic", true))
-      .collect();
+      .take(100);
     
     // Batch fetch all accounts using cached balance
     const accountIds = companies.map(c => c.accountId);
