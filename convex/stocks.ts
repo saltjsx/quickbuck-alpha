@@ -938,43 +938,61 @@ export const updateStockPrices = internalMutation({
     for (const company of publicCompanies) {
       const companyBalance = balanceMap.get(company.accountId) ?? 0;
       
-      // Update market sentiment with small random walk (±2% per update)
+      // More realistic market sentiment with wider swings (±5% per update)
       const currentSentiment = company.marketSentiment ?? 1.0;
-      const sentimentChange = (Math.random() - 0.5) * 0.04; // ±2%
+      const sentimentChange = (Math.random() - 0.5) * 0.10; // ±5%
       let newSentiment = currentSentiment + sentimentChange;
       
-      // Keep sentiment between 0.8 and 1.2 (±20% from base)
-      newSentiment = Math.max(0.8, Math.min(1.2, newSentiment));
+      // Allow sentiment to vary between 0.6 and 1.4 (±40% from base)
+      // This creates more dramatic market swings
+      newSentiment = Math.max(0.6, Math.min(1.4, newSentiment));
       
       // Calculate fair value based on company fundamentals
       const fairValue = calculateBasePrice(companyBalance, company.totalShares, newSentiment);
       
-      // Calculate how far price is from fair value
-      const priceGap = fairValue - company.sharePrice;
-      const deviationPercent = Math.abs(priceGap / fairValue);
+      // Random market volatility - stocks naturally fluctuate
+      // This creates realistic up AND down movements
+      let volatility: number;
       
-      let newPrice: number;
-      
-      // If price is within 5% of fair value, just apply random fluctuations
-      if (deviationPercent < 0.05) {
-        // Small random market noise (±1.5%) when near fair value
-        const marketNoise = (Math.random() - 0.5) * 0.03;
-        newPrice = company.sharePrice * (1 + marketNoise);
+      // Higher volatility for smaller companies
+      if (companyBalance < 50000) {
+        volatility = 0.04; // ±4% for small companies
+      } else if (companyBalance < 200000) {
+        volatility = 0.03; // ±3% for medium companies
       } else {
-        // If significantly off fair value, converge back
-        // Stronger convergence for larger deviations
-        let convergenceRate = 0.15; // Base 15% convergence
-        if (deviationPercent > 0.15) {
-          convergenceRate = 0.25; // 25% for large deviations (>15% off)
-        }
-        
-        // Add smaller noise when converging
-        const marketNoise = (Math.random() - 0.5) * 0.01;
-        newPrice = company.sharePrice + (priceGap * convergenceRate) + (company.sharePrice * marketNoise);
+        volatility = 0.02; // ±2% for large companies
       }
       
-      // Ensure price stays positive
+      // Random walk with normal distribution tendency
+      // This creates realistic market movements
+      const randomWalk = (Math.random() - 0.5) * 2 * volatility;
+      
+      // Mean reversion towards fair value
+      const priceGap = fairValue - company.sharePrice;
+      const deviationPercent = priceGap / company.sharePrice;
+      
+      // Gentle pull toward fair value (5% convergence per update)
+      const meanReversion = deviationPercent * 0.05;
+      
+      // Combine random walk with mean reversion
+      const totalChange = randomWalk + meanReversion;
+      let newPrice = company.sharePrice * (1 + totalChange);
+      
+      // Add occasional "market events" (10% chance of bigger move)
+      if (Math.random() < 0.10) {
+        const eventImpact = (Math.random() - 0.5) * 0.15; // ±7.5%
+        newPrice *= (1 + eventImpact);
+      }
+      
+      // Ensure price stays positive and reasonable
       newPrice = Math.max(0.01, newPrice);
+      
+      // Prevent extreme single-update changes (max ±15% per update)
+      const maxChange = company.sharePrice * 0.15;
+      const actualChange = newPrice - company.sharePrice;
+      if (Math.abs(actualChange) > maxChange) {
+        newPrice = company.sharePrice + (Math.sign(actualChange) * maxChange);
+      }
 
       await ctx.db.patch(company._id, {
         sharePrice: newPrice,
