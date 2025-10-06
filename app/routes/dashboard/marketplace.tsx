@@ -10,6 +10,7 @@ import {
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { MultiSelect } from "~/components/ui/multi-select";
 import {
   ShoppingBag,
   ShoppingCart,
@@ -285,20 +286,12 @@ export default function MarketplacePage() {
                     <label className="text-sm font-medium mb-2 block">
                       Tags
                     </label>
-                    <div className="flex flex-wrap gap-2">
-                      {allTags.map((tag) => (
-                        <Badge
-                          key={tag}
-                          variant={
-                            selectedTags.has(tag) ? "default" : "outline"
-                          }
-                          className="cursor-pointer hover:bg-accent"
-                          onClick={() => toggleTag(tag)}
-                        >
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
+                    <MultiSelect
+                      options={allTags}
+                      selected={selectedTags}
+                      onChange={setSelectedTags}
+                      placeholder="Select tags to filter..."
+                    />
                   </div>
                 )}
 
