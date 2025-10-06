@@ -102,18 +102,19 @@ export const getUserAccounts = query({
     const companyIds = companyAccess.map(a => a.companyId);
     const companies = await Promise.all(companyIds.map(id => ctx.db.get(id)));
     
+    // Filter out null companies and keep them paired for correct mapping
+    const validCompanies = companies.filter(Boolean) as any[];
+    
     // Batch fetch company accounts
     const companyAccounts = await Promise.all(
-      companies
-        .filter(Boolean)
-        .map((company: any) => ctx.db.get(company.accountId))
+      validCompanies.map((company: any) => ctx.db.get(company.accountId))
     );
 
-    // Build result with company names
+    // Build result with company names - now indices are properly aligned
     const companyAccountsWithNames = companyAccounts
       .map((account: any, index) => {
-        const company = companies[index];
-        return account && company ? { ...account, companyName: (company as any).name } : null;
+        const company = validCompanies[index];
+        return account && company ? { ...account, companyName: company.name } : null;
       })
       .filter(Boolean);
 
