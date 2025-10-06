@@ -184,197 +184,252 @@ export const automaticPurchase = internalMutation({
 
     let remainingBudget = totalSpend;
     const purchases: any[] = [];
-    
+
+    const idToKey = (id: any) =>
+      typeof id === "string" ? id : id?.toString?.() ?? String(id);
+
     // Track sales and costs by company for batching
-    const companyTransactions = new Map<string, {
-      companyId: string,
-      totalRevenue: number,
-      totalCost: number,
-      productSales: Map<string, number>, // productId -> count
-    }>();
-    
-    // IMPROVED: Fair distribution system that gives all products equal opportunity
-    // regardless of price
-    
-    // Step 1: Categorize products by price tier
-    // Cheap: up to $150, Medium: $150-$1000, Expensive: $1000+
-    const cheapProducts = products.filter(p => p.price <= 150);
-    const mediumProducts = products.filter(p => p.price > 150 && p.price < 1000);
-    const expensiveProducts = products.filter(p => p.price >= 1000);
-    
-    // Step 2: Allocate budget proportionally to ensure fair distribution
-    // Each tier gets a share of the budget based on number of products
-    const totalProducts = products.length;
-    const cheapBudget = (cheapProducts.length / totalProducts) * totalSpend;
-    const mediumBudget = (mediumProducts.length / totalProducts) * totalSpend;
-    const expensiveBudget = (expensiveProducts.length / totalProducts) * totalSpend;
-    
-    // Step 3: Purchase from each tier with their allocated budget
-    const purchaseFromTier = async (tierProducts: any[], tierBudget: number) => {
-      if (tierProducts.length === 0) return tierBudget; // Return unused budget
-      
-      // Calculate how many purchases per product on average
-      const avgProductPrice = tierProducts.reduce((sum, p) => sum + p.price, 0) / tierProducts.length;
-      const targetPurchasesPerProduct = Math.max(1, Math.floor(tierBudget / avgProductPrice / tierProducts.length));
-      
-      let tierRemainingBudget = tierBudget;
-      const shuffledProducts = [...tierProducts].sort(() => Math.random() - 0.5);
-      
-      // Give each product equal number of purchases
-      for (let i = 0; i < targetPurchasesPerProduct; i++) {
-        for (const product of shuffledProducts) {
-          if (tierRemainingBudget < product.price) continue;
-          
-          // Calculate production cost (23%-67% of selling price)
-          const costPercentage = 0.23 + Math.random() * 0.44;
-          const productionCost = product.price * costPercentage;
-          const profit = product.price - productionCost;
-
-          // Get company
-          const company = await ctx.db.get(product.companyId);
-          if (!company) continue;
-
-          // Accumulate transactions for this company
-          const companyId = company._id;
-          if (!companyTransactions.has(companyId)) {
-            companyTransactions.set(companyId, {
-              companyId,
-              totalRevenue: 0,
-              totalCost: 0,
-              productSales: new Map(),
-            });
+    const companyTransactions = new Map<
+      string,
+      {
+        companyId: any;
+        accountId: any;
+        company: any;
+        totalRevenue: number;
+        totalCost: number;
+        productSales: Map<
+          string,
+          {
+            count: number;
+            totalRevenue: number;
+            totalCost: number;
           }
-          
-          const companyTx = companyTransactions.get(companyId)!;
-          companyTx.totalRevenue += product.price;
-          companyTx.totalCost += productionCost;
-          
-          const currentSales = companyTx.productSales.get(product._id) || 0;
-          companyTx.productSales.set(product._id, currentSales + 1);
-
-          purchases.push({
-            product: product.name,
-            price: product.price,
-            cost: productionCost,
-            profit,
-          });
-
-          tierRemainingBudget -= product.price;
-        }
+        >;
       }
-      
-      return tierRemainingBudget;
-    };
-    
-    // Purchase from each tier
-    const unusedCheap = await purchaseFromTier(cheapProducts, cheapBudget);
-    const unusedMedium = await purchaseFromTier(mediumProducts, mediumBudget);
-    const unusedExpensive = await purchaseFromTier(expensiveProducts, expensiveBudget);
-    
-    // Step 4: Use remaining budget for bonus round - randomly select products
-    remainingBudget = unusedCheap + unusedMedium + unusedExpensive;
-    const bonusProducts = [...products].sort(() => Math.random() - 0.5).slice(0, 30);
-    
-    for (const product of bonusProducts) {
-      if (remainingBudget < product.price) continue;
-      
+    >();
+
+    const companyCache = new Map<string, any>();
+
+    const recordPurchase = async (product: any) => {
+      if (!product || !Number.isFinite(product.price)) return false;
+
+      const price = Math.max(product.price, 0.01);
       const costPercentage = 0.23 + Math.random() * 0.44;
-      const productionCost = product.price * costPercentage;
-      const profit = product.price - productionCost;
+      const productionCost = price * costPercentage;
+      const profit = price - productionCost;
 
-      const company = await ctx.db.get(product.companyId);
-      if (!company) continue;
+      const companyKey = idToKey(product.companyId);
+      if (!companyCache.has(companyKey)) {
+        const companyDoc = await ctx.db.get(product.companyId);
+        if (!companyDoc) return false;
+        companyCache.set(companyKey, companyDoc);
+      }
 
-      const companyId = company._id;
-      if (!companyTransactions.has(companyId)) {
-        companyTransactions.set(companyId, {
-          companyId,
+      const companyDoc = companyCache.get(companyKey);
+      if (!companyDoc) return false;
+
+      if (!companyTransactions.has(companyKey)) {
+        companyTransactions.set(companyKey, {
+          companyId: companyDoc._id,
+          accountId: companyDoc.accountId,
+          company: companyDoc,
           totalRevenue: 0,
           totalCost: 0,
           productSales: new Map(),
         });
       }
-      
-      const companyTx = companyTransactions.get(companyId)!;
-      companyTx.totalRevenue += product.price;
+
+      const companyTx = companyTransactions.get(companyKey)!;
+      companyTx.totalRevenue += price;
       companyTx.totalCost += productionCost;
-      
-      const currentSales = companyTx.productSales.get(product._id) || 0;
-      companyTx.productSales.set(product._id, currentSales + 1);
+
+      const productKey = idToKey(product._id);
+      const existing =
+        companyTx.productSales.get(productKey) ?? {
+          count: 0,
+          totalRevenue: 0,
+          totalCost: 0,
+        };
+
+      existing.count += 1;
+      existing.totalRevenue += price;
+      existing.totalCost += productionCost;
+      companyTx.productSales.set(productKey, existing);
 
       purchases.push({
         product: product.name,
-        price: product.price,
+        price,
         cost: productionCost,
         profit,
       });
 
-      remainingBudget -= product.price;
+      return true;
+    };
+
+    // IMPROVED: Fair distribution system that balances by price weight instead of raw counts
+
+    const clampPriceForWeight = (price: number) => {
+      if (!Number.isFinite(price)) return 0.01;
+      const positive = Math.max(price, 0.01);
+      return Math.min(positive, 20000);
+    };
+
+    const priceWeight = (price: number) =>
+      Math.pow(clampPriceForWeight(price), 0.8);
+
+    // Step 1: Categorize products by price tier
+    const cheapProducts = products.filter((p) => p.price <= 150);
+    const mediumProducts = products.filter((p) => p.price > 150 && p.price < 1000);
+    const expensiveProducts = products.filter((p) => p.price >= 1000);
+
+    const weightedTierSum = (tierProducts: any[]) =>
+      tierProducts.reduce((sum, product) => sum + priceWeight(product.price), 0);
+
+    const cheapWeight = weightedTierSum(cheapProducts);
+    const mediumWeight = weightedTierSum(mediumProducts);
+    const expensiveWeight = weightedTierSum(expensiveProducts);
+    const totalWeight = cheapWeight + mediumWeight + expensiveWeight || 1;
+
+    // Step 2: Allocate budget proportionally to weighted price mass
+    const cheapBudget = (cheapWeight / totalWeight) * totalSpend;
+    const mediumBudget = (mediumWeight / totalWeight) * totalSpend;
+    const expensiveBudget = (expensiveWeight / totalWeight) * totalSpend;
+
+    const MAX_PURCHASES_PER_PRODUCT = 50;
+
+    // Step 3: Purchase from each tier using weighted shares per product
+    const purchaseFromTier = async (tierProducts: any[], tierBudget: number) => {
+      if (tierProducts.length === 0 || tierBudget <= 0) return tierBudget;
+
+      const tierWeight =
+        tierProducts.reduce((sum, product) => sum + priceWeight(product.price), 0) || tierProducts.length;
+
+      let tierRemainingBudget = tierBudget;
+
+      const planned = tierProducts.map((product) => {
+        const weight = priceWeight(product.price);
+        const price = Math.max(product.price, 0.01);
+        const share = (weight / tierWeight) * tierBudget;
+        const plannedCount = Math.min(
+          MAX_PURCHASES_PER_PRODUCT,
+          Math.floor(share / price)
+        );
+
+        return {
+          product,
+          plannedCount,
+        };
+      });
+
+      // Prioritise expensive products first so they are guaranteed purchases when budget allows
+      planned.sort((a, b) => {
+        if (b.product.price === a.product.price) {
+          return Math.random() - 0.5;
+        }
+        return b.product.price - a.product.price;
+      });
+
+      for (const plan of planned) {
+        const productPrice = Math.max(plan.product.price, 0.01);
+        let toBuy = plan.plannedCount;
+
+        if (toBuy <= 0 && tierRemainingBudget >= productPrice) {
+          toBuy = 1;
+        }
+
+        while (toBuy > 0 && tierRemainingBudget >= productPrice) {
+          const success = await recordPurchase(plan.product);
+          if (!success) break;
+
+          tierRemainingBudget -= productPrice;
+          toBuy -= 1;
+        }
+      }
+
+      // Bonus round within tier: random single purchases while budget allows
+      if (tierRemainingBudget >= 0.01) {
+        const shuffled = [...tierProducts].sort(() => Math.random() - 0.5);
+        for (const product of shuffled) {
+          const productPrice = Math.max(product.price, 0.01);
+          if (tierRemainingBudget < productPrice) continue;
+
+          const success = await recordPurchase(product);
+          if (!success) continue;
+
+          tierRemainingBudget -= productPrice;
+
+          if (tierRemainingBudget < 0.01) {
+            break;
+          }
+        }
+      }
+
+      return tierRemainingBudget;
+    };
+
+    const unusedCheap = await purchaseFromTier(cheapProducts, cheapBudget);
+    const unusedMedium = await purchaseFromTier(mediumProducts, mediumBudget);
+    const unusedExpensive = await purchaseFromTier(expensiveProducts, expensiveBudget);
+    
+    // Step 4: Use remaining budget for bonus round - randomly select products
+  remainingBudget = Math.max(unusedCheap + unusedMedium + unusedExpensive, 0);
+    const bonusProducts = [...products].sort(() => Math.random() - 0.5).slice(0, 30);
+    
+    for (const product of bonusProducts) {
+      const productPrice = Math.max(product.price, 0.01);
+      if (remainingBudget < productPrice) continue;
+
+      const success = await recordPurchase(product);
+      if (!success) continue;
+
+      remainingBudget -= productPrice;
     }
 
     // Now process all batched transactions
-    for (const [companyIdStr, tx] of companyTransactions) {
-      const company = await ctx.db.get(companyIdStr as any);
-      if (!company || !("accountId" in company)) continue;
+    for (const [, tx] of companyTransactions) {
+      if (!tx.company || !tx.accountId) continue;
 
       const netProfit = tx.totalRevenue - tx.totalCost;
-      
-      // Update company balance (only update account, skip balances table for performance)
-      const account = await ctx.db.get(company.accountId);
-      if (account) {
-        const newBalance = (account.balance ?? 0) + netProfit;
-        await ctx.db.patch(company.accountId, { balance: newBalance });
+
+      const accountDoc = await ctx.db.get(tx.accountId);
+      if (accountDoc && "balance" in accountDoc) {
+        const newBalance = (accountDoc.balance ?? 0) + netProfit;
+        await ctx.db.patch(tx.accountId, { balance: newBalance });
       }
 
-      // OPTIMIZED: Create BATCH transactions instead of individual ones
-      for (const [productIdStr, salesCount] of tx.productSales) {
-        const product = await ctx.db.get(productIdStr as any) as any;
-        if (!product) continue;
+      for (const [productIdStr, salesData] of tx.productSales) {
+        const productDoc = await ctx.db.get(productIdStr as any);
+        if (!productDoc || !("price" in productDoc)) continue;
 
-        const prodPrice = product.price || 0;
-        const costPercentage = 0.23 + Math.random() * 0.44;
-        const prodCost = prodPrice * costPercentage;
-        
-        const totalRevenue = prodPrice * salesCount;
-        const totalCost = prodCost * salesCount;
+        const product = productDoc as any;
 
-        // Create ONE batch revenue transaction for all sales
         await ctx.db.insert("ledger", {
           fromAccountId: systemAccount._id,
-          toAccountId: company.accountId,
-          amount: totalRevenue,
+          toAccountId: tx.accountId,
+          amount: salesData.totalRevenue,
           type: "marketplace_batch",
           productId: productIdStr as any,
-          batchCount: salesCount,
-          description: `Batch purchase of ${salesCount}x ${product.name}`,
+          batchCount: salesData.count,
+          description: `Batch purchase of ${salesData.count}x ${product.name}`,
           createdAt: Date.now(),
         });
 
-        // Create ONE batch cost transaction
         await ctx.db.insert("ledger", {
-          fromAccountId: company.accountId,
+          fromAccountId: tx.accountId,
           toAccountId: systemAccount._id,
-          amount: totalCost,
+          amount: salesData.totalCost,
           type: "marketplace_batch",
           productId: productIdStr as any,
-          batchCount: salesCount,
-          description: `Batch production cost for ${salesCount}x ${product.name}`,
+          batchCount: salesData.count,
+          description: `Batch production cost for ${salesData.count}x ${product.name}`,
           createdAt: Date.now(),
         });
-      }
 
-      // Update product sales counts and revenue/costs
-      for (const [productIdStr, salesCount] of tx.productSales) {
-        const product = await ctx.db.get(productIdStr as any);
-        if (product && "totalSales" in product) {
-          const prodPrice = (product as any).price || 0;
-          const costPercentage = 0.23 + Math.random() * 0.44;
-          const prodCost = prodPrice * costPercentage;
-          
+        if ("totalSales" in product) {
           await ctx.db.patch(productIdStr as any, {
-            totalSales: product.totalSales + salesCount,
-            totalRevenue: (product.totalRevenue || 0) + (salesCount * prodPrice),
-            totalCosts: (product.totalCosts || 0) + (salesCount * prodCost),
+            totalSales: (product.totalSales || 0) + salesData.count,
+            totalRevenue: (product.totalRevenue || 0) + salesData.totalRevenue,
+            totalCosts: (product.totalCosts || 0) + salesData.totalCost,
           });
         }
       }
