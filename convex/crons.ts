@@ -24,4 +24,25 @@ crons.daily(
   internal.stocks.cleanupOldPriceHistory
 );
 
+// Process company expenses daily at 12 PM UTC
+crons.daily(
+  "process company expenses",
+  { hourUTC: 12, minuteUTC: 0 },
+  internal.expenses.processCompanyExpenses
+);
+
+// Degrade product quality weekly on Mondays at 6 AM UTC
+crons.weekly(
+  "degrade product quality",
+  { hourUTC: 6, minuteUTC: 0, dayOfWeek: "monday" },
+  internal.expenses.degradeProductQuality
+);
+
+// Expire old licenses daily at 1 AM UTC
+crons.daily(
+  "expire old licenses",
+  { hourUTC: 1, minuteUTC: 0 },
+  internal.expenses.expireLicenses
+);
+
 export default crons;

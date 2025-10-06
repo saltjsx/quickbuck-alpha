@@ -24,7 +24,8 @@ export default defineSchema({
       v.literal("initial_deposit"),
       v.literal("stock_purchase"),
       v.literal("stock_sale"),
-      v.literal("marketplace_batch") // NEW: batch marketplace transactions
+      v.literal("marketplace_batch"), // NEW: batch marketplace transactions
+      v.literal("expense") // Company expenses
     ),
     description: v.optional(v.string()),
     productId: v.optional(v.id("products")),
@@ -69,6 +70,13 @@ export default defineSchema({
     totalShares: v.number(), // Total shares available
     sharePrice: v.number(), // Current share price
     marketSentiment: v.optional(v.number()), // Market sentiment multiplier (0.8 - 1.2)
+    // Expense tracking
+    lastExpenseDate: v.optional(v.number()), // Last time expenses were charged
+    monthlyRevenue: v.optional(v.number()), // Rolling 30-day revenue for calculating expenses
+    // Tax settings
+    taxRate: v.optional(v.number()), // Corporate tax rate (default 21%)
+    lastTaxPayment: v.optional(v.number()), // Last time taxes were paid
+    unpaidTaxes: v.optional(v.number()), // Accumulated unpaid taxes
     createdAt: v.number(),
   })
     .index("by_owner", ["ownerId"])
@@ -145,6 +153,10 @@ export default defineSchema({
     totalSales: v.number(),
     totalRevenue: v.optional(v.number()),
     totalCosts: v.optional(v.number()),
+    // Quality & Maintenance
+    quality: v.optional(v.number()), // Quality rating 0-100 (default 100)
+    lastMaintenanceDate: v.optional(v.number()), // Last time maintenance was performed
+    maintenanceCost: v.optional(v.number()), // Cost to maintain quality per period
     createdAt: v.number(),
   })
     .index("by_company", ["companyId"])
@@ -163,4 +175,36 @@ export default defineSchema({
     .index("by_product", ["productId"])
     .index("by_user_product", ["userId", "productId"])
     .index("by_user_purchased", ["userId", "purchasedAt"]),
+
+  // Licenses - required to operate in certain industries
+  licenses: defineTable({
+    companyId: v.id("companies"),
+    licenseType: v.string(), // "tech", "food", "transport", "finance", "manufacturing", "retail"
+    cost: v.number(), // Purchase cost
+    expiresAt: v.number(), // License expiration date
+    purchasedAt: v.number(),
+    isActive: v.boolean(),
+  })
+    .index("by_company", ["companyId"])
+    .index("by_company_active", ["companyId", "isActive"])
+    .index("by_expiration", ["expiresAt"]),
+
+  // Expenses - tracking all company expenses
+  expenses: defineTable({
+    companyId: v.id("companies"),
+    type: v.union(
+      v.literal("operating_costs"), // Rent, staff wages, logistics
+      v.literal("taxes"), // Corporate taxes
+      v.literal("license_fee"), // License renewal/purchase
+      v.literal("maintenance") // Product R&D/maintenance
+    ),
+    amount: v.number(),
+    description: v.string(),
+    productId: v.optional(v.id("products")), // For maintenance expenses
+    licenseId: v.optional(v.id("licenses")), // For license fees
+    createdAt: v.number(),
+  })
+    .index("by_company", ["companyId"])
+    .index("by_type", ["type"])
+    .index("by_company_created", ["companyId", "createdAt"]),
 });
