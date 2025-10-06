@@ -105,27 +105,42 @@ export function CollectionsTab() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {collection.map((item: any) => {
-                const priceChange = item.currentPrice - item.purchasePrice;
+                const totalCurrentValue = item.currentPrice * item.quantity;
+                const priceChange = totalCurrentValue - item.totalPurchasePrice;
                 const priceChangePercent =
-                  (priceChange / item.purchasePrice) * 100;
+                  (priceChange / item.totalPurchasePrice) * 100;
                 const isPositive = priceChange >= 0;
 
                 return (
                   <div
-                    key={item._id}
+                    key={item.productId}
                     className="border rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
                   >
                     {item.productImageUrl && (
-                      <img
-                        src={item.productImageUrl}
-                        alt={item.productName}
-                        className="w-full h-48 object-cover"
-                      />
+                      <div className="relative">
+                        <img
+                          src={item.productImageUrl}
+                          alt={item.productName}
+                          className="w-full h-48 object-cover"
+                        />
+                        {item.quantity > 1 && (
+                          <Badge className="absolute top-2 right-2 bg-blue-600 text-white">
+                            x{item.quantity}
+                          </Badge>
+                        )}
+                      </div>
                     )}
                     <div className="p-4">
-                      <h3 className="font-semibold text-lg mb-1">
-                        {item.productName}
-                      </h3>
+                      <div className="flex items-start justify-between mb-1">
+                        <h3 className="font-semibold text-lg">
+                          {item.productName}
+                        </h3>
+                        {item.quantity > 1 && !item.productImageUrl && (
+                          <Badge className="bg-blue-600 text-white">
+                            x{item.quantity}
+                          </Badge>
+                        )}
+                      </div>
                       <p className="text-sm text-muted-foreground mb-2">
                         by {item.companyName}
                       </p>
@@ -136,12 +151,22 @@ export function CollectionsTab() {
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-muted-foreground">
-                            Purchased for:
+                            Avg. purchase price:
                           </span>
                           <span className="font-semibold">
-                            ${item.purchasePrice.toFixed(2)}
+                            ${item.averagePurchasePrice.toFixed(2)}
                           </span>
                         </div>
+                        {item.quantity > 1 && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">
+                              Total paid:
+                            </span>
+                            <span className="font-semibold">
+                              ${item.totalPurchasePrice.toFixed(2)}
+                            </span>
+                          </div>
+                        )}
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-muted-foreground">
                             Current price:
@@ -150,6 +175,16 @@ export function CollectionsTab() {
                             ${item.currentPrice.toFixed(2)}
                           </span>
                         </div>
+                        {item.quantity > 1 && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">
+                              Current total value:
+                            </span>
+                            <span className="font-semibold">
+                              ${totalCurrentValue.toFixed(2)}
+                            </span>
+                          </div>
+                        )}
                         <div
                           className={`flex items-center justify-between text-sm ${
                             isPositive ? "text-green-600" : "text-red-600"
@@ -186,8 +221,26 @@ export function CollectionsTab() {
                       )}
 
                       <p className="text-xs text-muted-foreground mt-3">
-                        Purchased{" "}
-                        {new Date(item.purchasedAt).toLocaleDateString()}
+                        {item.quantity === 1 ? (
+                          <>
+                            Purchased{" "}
+                            {new Date(
+                              item.firstPurchasedAt
+                            ).toLocaleDateString()}
+                          </>
+                        ) : (
+                          <>
+                            First:{" "}
+                            {new Date(
+                              item.firstPurchasedAt
+                            ).toLocaleDateString()}
+                            {" • "}
+                            Last:{" "}
+                            {new Date(
+                              item.lastPurchasedAt
+                            ).toLocaleDateString()}
+                          </>
+                        )}
                       </p>
                     </div>
                   </div>

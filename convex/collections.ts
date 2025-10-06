@@ -125,15 +125,54 @@ export const getMyCollection = query({
       }
     });
 
-    // Enrich items synchronously using maps
-    const enrichedItems = collectionItems.map((item) => {
-      const product = productMap.get(item.productId);
+    // Group items by productId
+    const groupedItems = new Map<string, {
+      productId: any;
+      quantity: number;
+      totalPurchasePrice: number;
+      averagePurchasePrice: number;
+      firstPurchasedAt: number;
+      lastPurchasedAt: number;
+      purchases: any[];
+    }>();
+
+    collectionItems.forEach((item) => {
+      const productIdStr = item.productId.toString();
+      if (!groupedItems.has(productIdStr)) {
+        groupedItems.set(productIdStr, {
+          productId: item.productId,
+          quantity: 0,
+          totalPurchasePrice: 0,
+          averagePurchasePrice: 0,
+          firstPurchasedAt: item.purchasedAt,
+          lastPurchasedAt: item.purchasedAt,
+          purchases: [],
+        });
+      }
+      
+      const group = groupedItems.get(productIdStr)!;
+      group.quantity += 1;
+      group.totalPurchasePrice += item.purchasePrice;
+      group.firstPurchasedAt = Math.min(group.firstPurchasedAt, item.purchasedAt);
+      group.lastPurchasedAt = Math.max(group.lastPurchasedAt, item.purchasedAt);
+      group.purchases.push(item);
+    });
+
+    // Calculate average and enrich with product data
+    const enrichedItems = Array.from(groupedItems.values()).map((group) => {
+      const product = productMap.get(group.productId);
       if (!product) return null;
 
       const company = companyMap.get(product.companyId);
+      group.averagePurchasePrice = group.totalPurchasePrice / group.quantity;
 
       return {
-        ...item,
+        productId: group.productId,
+        quantity: group.quantity,
+        averagePurchasePrice: group.averagePurchasePrice,
+        totalPurchasePrice: group.totalPurchasePrice,
+        firstPurchasedAt: group.firstPurchasedAt,
+        lastPurchasedAt: group.lastPurchasedAt,
         productName: product.name,
         productDescription: product.description,
         productImageUrl: product.imageUrl,
