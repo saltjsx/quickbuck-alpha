@@ -193,6 +193,34 @@ export const automaticPurchase = internalMutation({
       productMap.set(idToKey(product._id), product);
     }
 
+    // OPTIMIZATION: Pre-fetch all unique companies at once to avoid N repeated reads
+    const uniqueCompanyIds = [...new Set(products.map(p => p.companyId))];
+    const allCompanies = await Promise.all(
+      uniqueCompanyIds.map(id => ctx.db.get(id))
+    );
+    
+    const companyCache = new Map<string, any>();
+    allCompanies.forEach(company => {
+      if (company) {
+        companyCache.set(idToKey(company._id), company);
+      }
+    });
+
+    // OPTIMIZATION: Pre-fetch all unique accounts at once to avoid repeated reads
+    const uniqueAccountIds = [...new Set(allCompanies
+      .filter(c => c && c.accountId)
+      .map(c => c!.accountId))];
+    const allAccounts = await Promise.all(
+      uniqueAccountIds.map(id => ctx.db.get(id))
+    );
+    
+    const accountCache = new Map<string, any>();
+    allAccounts.forEach(account => {
+      if (account) {
+        accountCache.set(idToKey(account._id), account);
+      }
+    });
+
     // Track sales and costs by company for batching
     const companyTransactions = new Map<
       string,
@@ -213,8 +241,6 @@ export const automaticPurchase = internalMutation({
       }
     >();
 
-    const companyCache = new Map<string, any>();
-
     const recordPurchase = async (product: any) => {
       if (!product || !Number.isFinite(product.price)) return false;
 
@@ -224,6 +250,8 @@ export const automaticPurchase = internalMutation({
       const profit = price - productionCost;
 
       const companyKey = idToKey(product.companyId);
+      
+      // OPTIMIZED: Use pre-fetched company cache (fallback to db.get if missing)
       if (!companyCache.has(companyKey)) {
         const companyDoc = await ctx.db.get(product.companyId);
         if (!companyDoc) return false;
@@ -376,26 +404,30 @@ export const automaticPurchase = internalMutation({
       remainingBudget -= productPrice;
     }
 
-    // Now process all batched transactions with cached reads
-    const accountCache = new Map<string, number>();
-
+    // Now process all batched transactions using pre-fetched account data
     for (const [, tx] of companyTransactions) {
       if (!tx.company || !tx.accountId) continue;
 
       const netProfit = tx.totalRevenue - tx.totalCost;
       const accountKey = idToKey(tx.accountId);
-      let currentBalance: number | undefined = accountCache.get(accountKey);
-
-      if (currentBalance === undefined) {
-        const accountDoc = await ctx.db.get(tx.accountId);
+      
+      // Get account from pre-fetched cache
+      let accountDoc = accountCache.get(accountKey);
+      if (!accountDoc || !("balance" in accountDoc)) {
+        // Fallback: fetch if not in cache (shouldn't happen with pre-fetch)
+        accountDoc = await ctx.db.get(tx.accountId);
         if (!accountDoc || !("balance" in accountDoc)) {
           continue;
         }
-        currentBalance = accountDoc.balance ?? 0;
+        accountCache.set(accountKey, accountDoc);
       }
 
-      currentBalance += netProfit;
-      accountCache.set(accountKey, currentBalance);
+      const currentBalance = (accountDoc.balance ?? 0) + netProfit;
+      
+      // Update cache with new balance for potential future transactions
+      accountCache.set(accountKey, { ...accountDoc, balance: currentBalance });
+      
+      // Patch account balance
       await ctx.db.patch(tx.accountId, { balance: currentBalance });
 
       for (const [productIdStr, salesData] of tx.productSales) {
