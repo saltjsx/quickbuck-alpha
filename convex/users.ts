@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { computeOwnerMetricsFromHoldings } from "./utils/stocks";
 
 const CLERK_API_BASE = "https://api.clerk.com/v1";
 
@@ -305,12 +306,37 @@ export const getDashboardOverview = query({
       }
     });
 
-    const enrichedCompanies = validCompanies.map((company: any, index) => {
+    const ownedCompanies = validCompanies.filter((company: any) => company.ownerId === userId);
+    const ownedHoldings = await Promise.all(
+      ownedCompanies.map((company: any) =>
+        ctx.db
+          .query("stocks")
+          .withIndex("by_company", (q) => q.eq("companyId", company._id))
+          .take(500)
+      )
+    );
+
+    const ownerMetricsMap = new Map();
+    ownedCompanies.forEach((company: any, index: number) => {
+      const holdings = ownedHoldings[index] as any[];
+      const snapshot = computeOwnerMetricsFromHoldings(company, holdings ?? [], userId);
+      ownerMetricsMap.set(company._id, snapshot);
+    });
+
+    const enrichedCompanies = validCompanies.map((company: any) => {
       const access = companyAccess.find(a => a.companyId === company._id);
+      const ownership = ownerMetricsMap.get(company._id);
+      const totalShares = Math.max(company.totalShares ?? 0, 0);
+      const ownerOwnershipPercent = ownership
+        ? (totalShares === 0 ? 0 : (ownership.ownerShares / totalShares) * 100)
+        : (company.ownerId === userId && totalShares > 0 ? 100 : 0);
       return {
         ...company,
         balance: accountBalanceMap.get(company.accountId) ?? 0,
         role: access?.role || "viewer",
+        ownerEquityValue: ownership?.ownerEquityValue ?? 0,
+        ownerShares: ownership?.ownerShares ?? (company.ownerId === userId ? totalShares : 0),
+        ownerOwnershipPercent: ownerOwnershipPercent,
       };
     });
 
@@ -355,12 +381,21 @@ export const getDashboardOverview = query({
       };
     }).filter(Boolean);
 
+    const ownerEquityValue = enrichedCompanies
+      .filter((company: any) => company.ownerId === userId)
+      .reduce((sum: number, company: any) => sum + (company.ownerEquityValue ?? 0), 0);
+
+    const portfolioValue = portfolio.reduce((sum: number, p: any) => sum + (p?.currentValue ?? 0), 0);
+    const cashBalance = personalAccount?.balance ?? 0;
+
     return {
       personalAccount,
       companies: enrichedCompanies,
       portfolio,
       totalCompanies: enrichedCompanies.length,
-      portfolioValue: portfolio.reduce((sum: number, p: any) => sum + (p?.currentValue || 0), 0),
+      portfolioValue,
+      ownerEquityValue,
+      netWorth: cashBalance + portfolioValue + ownerEquityValue,
     };
   },
 });

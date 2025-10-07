@@ -42,6 +42,7 @@ type LeaderboardPlayer = {
   balance?: number;
   cashBalance?: number;
   portfolioValue?: number;
+  ownerEquityValue?: number;
   netWorth?: number;
   avatarUrl?: string | null;
 };
@@ -259,7 +260,7 @@ export default function LeaderboardPage() {
       {
         id: "highest-net-worth",
         title: "Highest Net Worth",
-        description: "Combined cash and portfolio value across the game.",
+        description: "Combined cash, portfolio value, and founder equity.",
         icon: Trophy,
         items: leaderboard.highestNetWorthPlayers.map((player, index) => ({
           key: String(player.accountId ?? index),
@@ -281,6 +282,10 @@ export default function LeaderboardPage() {
             {
               label: "Portfolio",
               value: formatCurrency(player.portfolioValue ?? 0),
+            },
+            {
+              label: "Founder Equity",
+              value: formatCurrency(player.ownerEquityValue ?? 0),
             },
           ],
         })),

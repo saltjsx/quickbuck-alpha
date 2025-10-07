@@ -46,7 +46,17 @@ export default function Page() {
       (sum: number, holding: any) => sum + (holding?.currentValue || 0),
       0
     ) || 0;
-  const totalNetWorth = personalBalance + portfolioValue;
+  const ownerEquity =
+    companies?.reduce((sum: number, company: any) => {
+      if (
+        company?.role === "owner" ||
+        company?.ownerId === personalAccount?.ownerId
+      ) {
+        return sum + (company?.ownerEquityValue || 0);
+      }
+      return sum;
+    }, 0) || 0;
+  const totalNetWorth = personalBalance + portfolioValue + ownerEquity;
   const myProducts =
     products?.filter((p: any) =>
       companies?.some((c: any) => c._id === p.companyId)
@@ -77,7 +87,7 @@ export default function Page() {
 
           {/* Stats Grid */}
           <div className="px-4 lg:px-6">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">
@@ -152,6 +162,27 @@ export default function Page() {
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
                     Stock investments
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    Founder Equity
+                  </CardTitle>
+                  <Building2 className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    $
+                    {ownerEquity.toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Value of your owned companies
                   </p>
                 </CardContent>
               </Card>

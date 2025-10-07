@@ -26,6 +26,7 @@ import type * as products from "../products.js";
 import type * as queries from "../queries.js";
 import type * as stocks from "../stocks.js";
 import type * as users from "../users.js";
+import type * as utils_stocks from "../utils/stocks.js";
 
 /**
  * A utility for referencing Convex functions in your app's API.
@@ -49,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   queries: typeof queries;
   stocks: typeof stocks;
   users: typeof users;
+  "utils/stocks": typeof utils_stocks;
 }>;
 export declare const api: FilterApi<
   typeof fullApi,

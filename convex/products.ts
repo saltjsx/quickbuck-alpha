@@ -183,8 +183,10 @@ export const automaticPurchase = internalMutation({
       throw new Error("System account not found");
     }
 
-    let remainingBudget = totalSpend;
-    const purchases: any[] = [];
+  let remainingBudget = totalSpend;
+  const purchases: any[] = [];
+  const companySpend = new Map<string, number>();
+  const maxCompanySpend = totalSpend * 0.15; // Cap spend per company at 15%
 
     const idToKey = (id: any) =>
       typeof id === "string" ? id : id?.toString?.() ?? String(id);
@@ -195,7 +197,8 @@ export const automaticPurchase = internalMutation({
     }
 
     // OPTIMIZATION: Pre-fetch all unique companies at once to avoid N repeated reads
-    const uniqueCompanyIds = [...new Set(products.map(p => p.companyId))];
+  const uniqueCompanyIds = [...new Set(products.map(p => p.companyId))];
+  const totalActiveCompanies = uniqueCompanyIds.length;
     const allCompanies = await Promise.all(
       uniqueCompanyIds.map(id => ctx.db.get(id))
     );
@@ -242,7 +245,7 @@ export const automaticPurchase = internalMutation({
       }
     >();
 
-    const recordPurchase = async (product: any) => {
+    const recordPurchase = async (product: any, flexibleLimit = false) => {
       if (!product || !Number.isFinite(product.price)) return false;
 
       const price = Math.max(product.price, 0.01);
@@ -261,6 +264,11 @@ export const automaticPurchase = internalMutation({
 
       const companyDoc = companyCache.get(companyKey);
       if (!companyDoc) return false;
+
+      const currentCompanySpend = companySpend.get(companyKey) ?? 0;
+      if (!flexibleLimit && totalActiveCompanies > 1 && currentCompanySpend + price > maxCompanySpend) {
+        return false;
+      }
 
       if (!companyTransactions.has(companyKey)) {
         companyTransactions.set(companyKey, {
@@ -298,6 +306,8 @@ export const automaticPurchase = internalMutation({
         profit,
       });
 
+      companySpend.set(companyKey, currentCompanySpend + price);
+
       return true;
     };
 
@@ -315,72 +325,83 @@ export const automaticPurchase = internalMutation({
 
     const MAX_PURCHASES_PER_PRODUCT = 50;
 
-    // Step 3: Purchase from each tier - select 16 random products and split budget randomly
+    // Step 3: Purchase from each tier with fair company allocation
     const purchaseFromTier = async (tierProducts: any[], tierBudget: number) => {
       if (tierProducts.length === 0 || tierBudget <= 0) return tierBudget;
 
-      // Randomly select up to 16 products from this tier
-      const shuffledTier = [...tierProducts].sort(() => Math.random() - 0.5);
-      const selectedProducts = shuffledTier.slice(0, Math.min(16, tierProducts.length));
+      const companyGroups = new Map<string, any[]>();
+      tierProducts.forEach((product) => {
+        const key = idToKey(product.companyId);
+        const productsForCompany = companyGroups.get(key) ?? [];
+        productsForCompany.push(product);
+        companyGroups.set(key, productsForCompany);
+      });
 
-      if (selectedProducts.length === 0) return tierBudget;
+      const companyEntries = Array.from(companyGroups.entries());
+      if (companyEntries.length === 0) return tierBudget;
 
       let tierRemainingBudget = tierBudget;
+      const equitableAllocation = tierBudget / companyEntries.length;
 
-      // Generate random budget shares for each selected product
-      const randomShares = selectedProducts.map(() => Math.random());
-      const totalRandomShare = randomShares.reduce((sum, share) => sum + share, 0);
-      
-      // Normalize shares to sum to 1
-      const normalizedShares = randomShares.map(share => share / totalRandomShare);
+      // Randomize processing order each run to avoid deterministic bias
+      companyEntries.sort(() => Math.random() - 0.5);
 
-      // Assign budget to each product based on random shares
-      const productBudgets = selectedProducts.map((product, idx) => ({
-        product,
-        budget: normalizedShares[idx] * tierBudget
-      }));
+      for (const [, products] of companyEntries) {
+        let allocation = equitableAllocation;
+        const sortedProducts = [...products].sort((a, b) => {
+          const qualityA = a.quality ?? 100;
+          const qualityB = b.quality ?? 100;
+          if (qualityA !== qualityB) return qualityB - qualityA;
+          return b.price - a.price;
+        });
 
-      // Sort by price (expensive first) to ensure they get their chance
-      productBudgets.sort((a, b) => b.product.price - a.product.price);
+        let rotationIndex = 0;
+        let attempts = 0;
+        const maxAttempts = MAX_PURCHASES_PER_PRODUCT * sortedProducts.length;
 
-      // Purchase products using their allocated budgets
-      for (const { product, budget } of productBudgets) {
-        const productPrice = Math.max(product.price, 0.01);
-        let productBudgetRemaining = budget;
-        let purchaseCount = 0;
+        while (allocation >= 0.01 && tierRemainingBudget >= 0.01 && attempts < maxAttempts) {
+          const product = sortedProducts[rotationIndex % sortedProducts.length];
+          const productPrice = Math.max(product.price, 0.01);
 
-        // Calculate how many units we can buy with this product's budget
-        const maxUnits = Math.min(
-          MAX_PURCHASES_PER_PRODUCT,
-          Math.floor(productBudgetRemaining / productPrice)
-        );
+          if (productPrice > allocation || productPrice > tierRemainingBudget) {
+            rotationIndex++;
+            attempts++;
+            continue;
+          }
 
-        // Purchase up to the max units
-        while (purchaseCount < maxUnits && tierRemainingBudget >= productPrice) {
           const success = await recordPurchase(product);
-          if (!success) break;
+          attempts++;
+          rotationIndex++;
 
+          if (!success) {
+            continue;
+          }
+
+          allocation -= productPrice;
           tierRemainingBudget -= productPrice;
-          productBudgetRemaining -= productPrice;
-          purchaseCount++;
         }
       }
 
-      // Bonus round within tier: use any remaining budget for additional random purchases
       if (tierRemainingBudget >= 0.01) {
-        const shuffled = [...selectedProducts].sort(() => Math.random() - 0.5);
-        for (const product of shuffled) {
+        const prioritizedProducts = [...tierProducts]
+          .sort((a, b) => {
+            const qualityA = a.quality ?? 100;
+            const qualityB = b.quality ?? 100;
+            if (qualityA !== qualityB) return qualityB - qualityA;
+            return a.price - b.price;
+          })
+          .slice(0, 25);
+
+        for (const product of prioritizedProducts) {
           const productPrice = Math.max(product.price, 0.01);
-          if (tierRemainingBudget < productPrice) continue;
+          if (productPrice > tierRemainingBudget) continue;
 
           const success = await recordPurchase(product);
           if (!success) continue;
 
           tierRemainingBudget -= productPrice;
 
-          if (tierRemainingBudget < 0.01) {
-            break;
-          }
+          if (tierRemainingBudget < 0.01) break;
         }
       }
 
@@ -399,7 +420,7 @@ export const automaticPurchase = internalMutation({
       const productPrice = Math.max(product.price, 0.01);
       if (remainingBudget < productPrice) continue;
 
-      const success = await recordPurchase(product);
+      const success = await recordPurchase(product, true);
       if (!success) continue;
 
       remainingBudget -= productPrice;

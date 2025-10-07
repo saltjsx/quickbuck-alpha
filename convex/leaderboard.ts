@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { computeOwnerMetricsFromHoldings } from "./utils/stocks";
 
 const DEFAULT_LIMIT = 5;
 const SAMPLE_MULTIPLIER = 4;
@@ -185,6 +186,39 @@ export const getAllPlayers = query({
       holdingsMap.set(userId, allHoldings[index] as StockDoc[]);
     });
 
+    const ownedCompaniesResults = await Promise.all(
+      userIds.map((userId) =>
+        ctx.db
+          .query("companies")
+          .withIndex("by_owner", (q) => q.eq("ownerId", userId))
+          .take(25)
+      )
+    );
+
+    const companyRefs: Array<{ userId: Id<"users">; company: CompanyDoc }> = [];
+    ownedCompaniesResults.forEach((companies, index) => {
+      companies.forEach((company) => {
+        companyRefs.push({ userId: userIds[index], company: company as CompanyDoc });
+      });
+    });
+
+    const companyHoldings = await Promise.all(
+      companyRefs.map((ref) =>
+        ctx.db
+          .query("stocks")
+          .withIndex("by_company", (q) => q.eq("companyId", ref.company._id))
+          .take(500)
+      )
+    );
+
+    const ownerEquityMap = new Map<Id<"users">, number>();
+    companyRefs.forEach((ref, index) => {
+      const holdings = companyHoldings[index] as StockDoc[];
+      const snapshot = computeOwnerMetricsFromHoldings(ref.company, holdings ?? [], ref.userId);
+      const current = ownerEquityMap.get(ref.userId) ?? 0;
+      ownerEquityMap.set(ref.userId, current + snapshot.ownerEquityValue);
+    });
+
     const enrichedPlayers = users.map((user) => {
       const account = accountMap.get(user._id);
       const holdings = holdingsMap.get(user._id) || [];
@@ -198,7 +232,8 @@ export const getAllPlayers = query({
       }
 
       const cashBalance = account?.balance ?? 0;
-      const netWorth = cashBalance + portfolioValue;
+      const ownerEquityValue = ownerEquityMap.get(user._id) ?? 0;
+      const netWorth = cashBalance + portfolioValue + ownerEquityValue;
 
       return {
         _id: user._id,
@@ -208,6 +243,7 @@ export const getAllPlayers = query({
         avatarUrl: normalizeImageUrl(user.image),
         cashBalance,
         portfolioValue,
+        ownerEquityValue,
         netWorth,
         totalHoldings: holdings.length,
       };
@@ -367,6 +403,44 @@ export const getLeaderboard = query({
       return companyCache.get(companyId);
     };
 
+    const ownedCompaniesResults = await Promise.all(
+      Array.from(candidateUserIds).map((userId) =>
+        ctx.db
+          .query("companies")
+          .withIndex("by_owner", (q) => q.eq("ownerId", userId))
+          .take(25)
+      )
+    );
+
+    const ownedCompanyRefs: Array<{ userId: Id<"users">; company: CompanyDoc }> = [];
+    Array.from(candidateUserIds).forEach((userId, index) => {
+      const companies = ownedCompaniesResults[index];
+      companies.forEach((company) => {
+        const typedCompany = company as CompanyDoc;
+        ownedCompanyRefs.push({ userId, company: typedCompany });
+        if (!companyCache.has(typedCompany._id)) {
+          companyCache.set(typedCompany._id, typedCompany);
+        }
+      });
+    });
+
+    const ownedCompanyHoldings = await Promise.all(
+      ownedCompanyRefs.map((ref) =>
+        ctx.db
+          .query("stocks")
+          .withIndex("by_company", (q) => q.eq("companyId", ref.company._id))
+          .take(500)
+      )
+    );
+
+    const ownerEquityMap = new Map<Id<"users">, number>();
+    ownedCompanyRefs.forEach((ref, index) => {
+      const holdings = ownedCompanyHoldings[index] as StockDoc[];
+      const snapshot = computeOwnerMetricsFromHoldings(ref.company, holdings ?? [], ref.userId);
+      const current = ownerEquityMap.get(ref.userId) ?? 0;
+      ownerEquityMap.set(ref.userId, current + snapshot.ownerEquityValue);
+    });
+
     const netWorthEntries: {
       accountId: Id<"accounts">;
       userId: Id<"users">;
@@ -375,6 +449,7 @@ export const getLeaderboard = query({
       avatarUrl: string | null;
       cashBalance: number;
       portfolioValue: number;
+      ownerEquityValue: number;
       netWorth: number;
     }[] = [];
 
@@ -415,6 +490,7 @@ export const getLeaderboard = query({
       }
 
       const cashBalance = account.balance ?? 0;
+      const ownerEquityValue = ownerEquityMap.get(userId) ?? 0;
       netWorthEntries.push({
         accountId: account._id,
         userId,
@@ -423,7 +499,8 @@ export const getLeaderboard = query({
         avatarUrl,
         cashBalance,
         portfolioValue,
-        netWorth: cashBalance + portfolioValue,
+        ownerEquityValue,
+        netWorth: cashBalance + portfolioValue + ownerEquityValue,
       });
     }
 

@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
+import { calculateFairValue, computeOwnerMetricsFromHoldings } from "./utils/stocks";
 
 function aggregateToHourly(priceHistory: any[]): any[] {
   if (priceHistory.length === 0) return [];
@@ -50,68 +51,34 @@ async function getCurrentUserId(ctx: any) {
   return user?._id || null;
 }
 
-// Calculate base share price from company fundamentals
-function calculateBasePrice(
-  companyBalance: number,
-  totalShares: number,
-  marketSentiment: number = 1.0
-): number {
-  // Calculate book value per share
-  const bookValuePerShare = companyBalance / totalShares;
-  
-  // Apply a valuation multiplier (similar to P/E or P/B ratios)
-  // Companies are typically valued at 3-7x their book value
-  // The multiplier varies based on company size and market sentiment
-  let valuationMultiplier = 5.0; // Base multiplier
-  
-  // Adjust multiplier based on company size (larger companies get higher multiples)
-  if (companyBalance > 1000000) {
-    valuationMultiplier = 7.0;
-  } else if (companyBalance > 500000) {
-    valuationMultiplier = 6.0;
-  } else if (companyBalance > 100000) {
-    valuationMultiplier = 5.5;
-  } else if (companyBalance < 10000) {
-    valuationMultiplier = 3.0;
-  }
-  
-  // Apply market sentiment modifier (-20% to +20%)
-  valuationMultiplier *= marketSentiment;
-  
-  // Calculate fair value
-  const fairValue = bookValuePerShare * valuationMultiplier;
-  
-  return Math.max(0.01, fairValue);
-}
-
 function calculateNewPrice(
   currentPrice: number,
-  sharesBought: number,
+  sharesTraded: number,
   totalShares: number,
   isBuying: boolean,
   fairValue: number
 ): number {
-  const impactPercentage = (sharesBought / totalShares) * 100;
-  let priceChangePercent = 0;
+  const liquidity = Math.max(totalShares, 1);
+  const tradeRatio = Math.min(sharesTraded / liquidity, 0.03); // cap position impact at 3%
 
-  if (impactPercentage < 1) {
-    priceChangePercent = impactPercentage * 0.25;
-  } else if (impactPercentage < 5) {
-    priceChangePercent = 0.25 + (impactPercentage - 1) * 0.4;
-  } else {
-    priceChangePercent = 2 + Math.pow(impactPercentage - 5, 1.5) * 0.1;
+  const direction = isBuying ? 1 : -1;
+  const impactPercent = tradeRatio * 0.6; // translate trade ratio into a gentle swing
+
+  let adjustedPrice = currentPrice * (1 + direction * impactPercent);
+
+  // Clamp intraday movement to ±2% to mirror real-world liquidity
+  const maxChange = 0.02;
+  const changePercent = (adjustedPrice - currentPrice) / Math.max(currentPrice, 0.01);
+  if (changePercent > maxChange) {
+    adjustedPrice = currentPrice * (1 + maxChange);
+  } else if (changePercent < -maxChange) {
+    adjustedPrice = currentPrice * (1 - maxChange);
   }
 
-  priceChangePercent = Math.min(priceChangePercent, 10); // Max 10% change per transaction
-  const multiplier = isBuying ? (1 + priceChangePercent / 100) : (1 - priceChangePercent / 100);
-  let newPrice = currentPrice * multiplier;
+  // Blend with fundamentals to encourage mean reversion
+  const blendedPrice = adjustedPrice * 0.6 + fairValue * 0.4;
 
-  // Gradually pull price toward fair value (prevents extreme deviation)
-  const deviation = newPrice - fairValue;
-  const correctionFactor = 0.1; // 10% correction toward fair value
-  newPrice = newPrice - (deviation * correctionFactor);
-
-  return Math.max(0.01, newPrice);
+  return Math.max(0.01, blendedPrice);
 }
 
 export const buyStock = mutation({
@@ -124,7 +91,12 @@ export const buyStock = mutation({
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx);
     if (!userId) throw new Error("Not authenticated");
-    if (args.shares <= 0) throw new Error("Invalid share amount");
+    if (!Number.isInteger(args.shares) || args.shares <= 0) {
+      throw new Error("Share amount must be a positive whole number");
+    }
+    if (args.shares > 1_000_000) {
+      throw new Error("Cannot purchase more than 1,000,000 shares in a single trade");
+    }
 
     const company = await ctx.db.get(args.companyId);
     if (!company) throw new Error("Company not found");
@@ -146,6 +118,14 @@ export const buyStock = mutation({
         )
         .first();
       if (!access) throw new Error("No access to this company");
+
+      if (buyerId === company._id) {
+        throw new Error("Companies cannot buy back their own shares through the public market");
+      }
+    }
+
+    if (buyerType === "user" && company.ownerId === buyerId) {
+      throw new Error("Company owners already control their equity and cannot buy their own stock");
     }
 
     const totalCost = args.shares * company.sharePrice;
@@ -203,6 +183,9 @@ export const buyStock = mutation({
       .first();
 
     if (holding) {
+      if (holding.shares + args.shares > 1_000_000) {
+        throw new Error("Holding limit exceeded: cannot own more than 1,000,000 shares of a single company");
+      }
       const newTotalShares = holding.shares + args.shares;
       const newAveragePrice = 
         (holding.shares * holding.averagePurchasePrice + totalCost) /
@@ -227,12 +210,16 @@ export const buyStock = mutation({
 
     // Calculate fair value based on fundamentals
     const marketSentiment = company.marketSentiment ?? 1.0;
-    const fairValue = calculateBasePrice(companyBalance + totalCost, company.totalShares, marketSentiment);
+    const fairValue = calculateFairValue({
+      company,
+      cashBalance: companyBalance + totalCost,
+      sentimentOverride: marketSentiment,
+    });
     
     const newPrice = calculateNewPrice(
       company.sharePrice,
       args.shares,
-      company.totalShares,
+      Math.max(company.totalShares, 1),
       true,
       fairValue
     );
@@ -270,7 +257,9 @@ export const sellStock = mutation({
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx);
     if (!userId) throw new Error("Not authenticated");
-    if (args.shares <= 0) throw new Error("Invalid share amount");
+    if (!Number.isInteger(args.shares) || args.shares <= 0) {
+      throw new Error("Share amount must be a positive whole number");
+    }
 
     const company = await ctx.db.get(args.companyId);
     if (!company) throw new Error("Company not found");
@@ -312,17 +301,25 @@ export const sellStock = mutation({
     
     // Calculate fair value based on fundamentals
     const marketSentiment = company.marketSentiment ?? 1.0;
-    const fairValue = calculateBasePrice(companyBalance, company.totalShares, marketSentiment);
+    const fairValue = calculateFairValue({
+      company,
+      cashBalance: Math.max(companyBalance, 0),
+      sentimentOverride: marketSentiment,
+    });
     
     const newPrice = calculateNewPrice(
       company.sharePrice,
       args.shares,
-      company.totalShares,
+      Math.max(company.totalShares, 1),
       false,
       fairValue
     );
 
     const proceeds = args.shares * newPrice;
+
+    if (companyBalance < proceeds) {
+      throw new Error("Company does not have enough liquidity to complete this sale");
+    }
 
     // Get destination account
     const toAccount = await ctx.db.get(args.toAccountId);
@@ -434,13 +431,11 @@ export const transferStock = mutation({
       throw new Error("You can only transfer your own stocks");
     }
 
-    // OPTIMIZED: Use compound index to avoid filter after withIndex
     const holding = await ctx.db
       .query("stocks")
-      .withIndex("by_holder_holderType", (q) =>
-        q.eq("holderId", fromHolderId).eq("holderType", fromHolderType)
+      .withIndex("by_company_holder_holderType", (q) =>
+        q.eq("companyId", args.companyId).eq("holderId", fromHolderId).eq("holderType", fromHolderType)
       )
-      .filter((q) => q.eq(q.field("companyId"), args.companyId))
       .first();
 
     if (!holding || holding.shares < args.shares) {
@@ -470,13 +465,11 @@ export const transferStock = mutation({
       });
     }
 
-    // OPTIMIZED: Use compound index to avoid filter after withIndex
     const receiverHolding = await ctx.db
       .query("stocks")
-      .withIndex("by_holder_holderType", (q) =>
-        q.eq("holderId", args.toId).eq("holderType", args.toType)
+      .withIndex("by_company_holder_holderType", (q) =>
+        q.eq("companyId", args.companyId).eq("holderId", args.toId).eq("holderType", args.toType)
       )
-      .filter((q) => q.eq(q.field("companyId"), args.companyId))
       .first();
 
     if (receiverHolding) {
@@ -683,7 +676,8 @@ export const getCompanyShareholders = query({
       .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
       .take(100);
 
-    const totalHeldShares = holdings.reduce((sum, h) => sum + h.shares, 0);
+  const ownershipSnapshot = computeOwnerMetricsFromHoldings(company, holdings, company.ownerId);
+  const totalHeldShares = holdings.reduce((sum, h) => sum + h.shares, 0);
 
     // BANDWIDTH OPTIMIZATION: Batch fetch all holders
     const userIds = holdings.filter(h => h.holderType === "user").map(h => h.holderId);
@@ -725,18 +719,20 @@ export const getCompanyShareholders = query({
       };
     });
 
-    const founderShares = company.totalShares - totalHeldShares;
+    const founderShares = ownershipSnapshot.ownerShares;
     const founderOwnership = (founderShares / company.totalShares) * 100;
-    
+
     const founder = await ctx.db.get(company.ownerId);
-    
+
     return {
       shareholders: shareholders.sort((a, b) => b.ownershipPercent - a.ownershipPercent),
       founderShares,
       founderOwnership,
+      founderEquityValue: ownershipSnapshot.ownerEquityValue,
       founderName: founder?.name || "Founder",
       totalShares: company.totalShares,
       sharesOutstanding: totalHeldShares,
+      treasuryShares: ownershipSnapshot.treasuryShares,
     };
   },
 });
@@ -940,62 +936,25 @@ export const updateStockPrices = internalMutation({
 
     for (const company of publicCompanies) {
       const companyBalance = balanceMap.get(company.accountId) ?? 0;
-      
-      // More realistic market sentiment with wider swings (±5% per update)
+
       const currentSentiment = company.marketSentiment ?? 1.0;
-      const sentimentChange = (Math.random() - 0.5) * 0.10; // ±5%
-      let newSentiment = currentSentiment + sentimentChange;
-      
-      // Allow sentiment to vary between 0.6 and 1.4 (±40% from base)
-      // This creates more dramatic market swings
-      newSentiment = Math.max(0.6, Math.min(1.4, newSentiment));
-      
-      // Calculate fair value based on company fundamentals
-      const fairValue = calculateBasePrice(companyBalance, company.totalShares, newSentiment);
-      
-      // Random market volatility - stocks naturally fluctuate
-      // This creates realistic up AND down movements
-      let volatility: number;
-      
-      // Higher volatility for smaller companies
-      if (companyBalance < 50000) {
-        volatility = 0.04; // ±4% for small companies
-      } else if (companyBalance < 200000) {
-        volatility = 0.03; // ±3% for medium companies
-      } else {
-        volatility = 0.02; // ±2% for large companies
-      }
-      
-      // Random walk with normal distribution tendency
-      // This creates realistic market movements
-      const randomWalk = (Math.random() - 0.5) * 2 * volatility;
-      
-      // Mean reversion towards fair value
-      const priceGap = fairValue - company.sharePrice;
-      const deviationPercent = priceGap / company.sharePrice;
-      
-      // Gentle pull toward fair value (5% convergence per update)
-      const meanReversion = deviationPercent * 0.05;
-      
-      // Combine random walk with mean reversion
-      const totalChange = randomWalk + meanReversion;
-      let newPrice = company.sharePrice * (1 + totalChange);
-      
-      // Add occasional "market events" (10% chance of bigger move)
-      if (Math.random() < 0.10) {
-        const eventImpact = (Math.random() - 0.5) * 0.15; // ±7.5%
-        newPrice *= (1 + eventImpact);
-      }
-      
-      // Ensure price stays positive and reasonable
-      newPrice = Math.max(0.01, newPrice);
-      
-      // Prevent extreme single-update changes (max ±15% per update)
-      const maxChange = company.sharePrice * 0.15;
-      const actualChange = newPrice - company.sharePrice;
-      if (Math.abs(actualChange) > maxChange) {
-        newPrice = company.sharePrice + (Math.sign(actualChange) * maxChange);
-      }
+      const sentimentChange = (Math.random() - 0.5) * 0.02; // ±1% adjustment per tick
+      const newSentiment = Math.max(0.85, Math.min(1.15, currentSentiment + sentimentChange));
+
+      const fairValue = calculateFairValue({
+        company,
+        cashBalance: companyBalance,
+        sentimentOverride: newSentiment,
+      });
+
+      const meanReversion = (fairValue - company.sharePrice) / Math.max(company.sharePrice, 0.1);
+      const noise = (Math.random() - 0.5) * 0.01; // ±0.5% random drift
+      const totalChange = meanReversion * 0.2 + noise;
+      const clippedChange = Math.max(-0.03, Math.min(0.03, totalChange));
+
+      let newPrice = company.sharePrice * (1 + clippedChange);
+  newPrice = newPrice * 0.6 + fairValue * 0.4; // stay anchored to fundamentals
+  newPrice = Math.max(0.01, newPrice);
 
       await ctx.db.patch(company._id, {
         sharePrice: newPrice,

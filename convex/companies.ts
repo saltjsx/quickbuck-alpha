@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { computeOwnerMetricsFromHoldings } from "./utils/stocks";
 
 // Helper to get current user ID
 async function getCurrentUserId(ctx: any) {
@@ -188,13 +189,38 @@ export const getUserCompanies = query({
       }
     });
 
+    const ownedCompanies = validCompanies.filter((company) => company.ownerId === userId);
+    const ownedHoldings = await Promise.all(
+      ownedCompanies.map((company) =>
+        ctx.db
+          .query("stocks")
+          .withIndex("by_company", (q) => q.eq("companyId", company._id))
+          .take(500)
+      )
+    );
+
+    const ownerMetricsMap = new Map();
+    ownedCompanies.forEach((company, index) => {
+      const holdings = ownedHoldings[index] as any[];
+      const snapshot = computeOwnerMetricsFromHoldings(company, holdings ?? [], userId);
+      ownerMetricsMap.set(company._id, snapshot);
+    });
+
     // Map results
     const result = validCompanies.map((company, index) => {
       const access = companyAccess.find(a => a.companyId === company._id);
+      const ownership = ownerMetricsMap.get(company._id);
+      const totalShares = Math.max(company.totalShares ?? 0, 0);
+      const ownershipPercent = ownership
+        ? (totalShares === 0 ? 0 : (ownership.ownerShares / totalShares) * 100)
+        : (company.ownerId === userId && totalShares > 0 ? 100 : 0);
       return {
         ...company,
         balance: accountBalanceMap.get(company.accountId) ?? 0,
         role: access?.role || "viewer",
+        ownerEquityValue: ownership?.ownerEquityValue ?? 0,
+        ownerShares: ownership?.ownerShares ?? (company.ownerId === userId ? totalShares : 0),
+        ownerOwnershipPercent: ownershipPercent,
       };
     });
 
@@ -489,6 +515,12 @@ export const getCompanyDashboard = query({
       .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
       .collect();
 
+    const companyHoldings = await ctx.db
+      .query("stocks")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .take(500);
+    const ownershipSnapshot = computeOwnerMetricsFromHoldings(company, companyHoldings ?? [], company.ownerId);
+
     // Get cached balance directly from account
     const account = await ctx.db.get(company.accountId);
     const balance = account?.balance ?? 0;
@@ -591,6 +623,11 @@ export const getCompanyDashboard = query({
       company: {
         ...company,
         balance,
+        ownerEquityValue: ownershipSnapshot.ownerEquityValue,
+        ownerShares: ownershipSnapshot.ownerShares,
+        ownerOwnershipPercent: company.totalShares > 0
+          ? (ownershipSnapshot.ownerShares / company.totalShares) * 100
+          : 0,
       },
       totals: {
         revenue: totalRevenue,
