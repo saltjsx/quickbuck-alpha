@@ -67,10 +67,10 @@ export const getPersonalAccount = query({
     const userId = await getCurrentUserId(ctx);
     if (!userId) return null;
 
+    // OPTIMIZED: Use compound index to avoid filter after withIndex
     const account = await ctx.db
       .query("accounts")
-      .withIndex("by_owner", (q) => q.eq("ownerId", userId))
-      .filter((q) => q.eq(q.field("type"), "personal"))
+      .withIndex("by_owner_type", (q) => q.eq("ownerId", userId).eq("type", "personal"))
       .first();
 
     return account;
@@ -85,13 +85,11 @@ export const getUserAccounts = query({
     if (!userId) return [];
 
     // Get personal account
-    const personalAccount = await ctx.db
-      .query("accounts")
-      .withIndex("by_owner", (q) => q.eq("ownerId", userId))
-      .filter((q) => q.eq(q.field("type"), "personal"))
-      .first();
-
-    // Get company accounts where user has access
+    // OPTIMIZED: Use compound index to avoid filter after withIndex
+      const personalAccount = await ctx.db
+        .query("accounts")
+        .withIndex("by_owner_type", (q) => q.eq("ownerId", userId).eq("type", "personal"))
+        .first();    // Get company accounts where user has access
     // Limit to 50 company access records to reduce bandwidth
     const companyAccess = await ctx.db
       .query("companyAccess")
@@ -140,10 +138,10 @@ export const initializeAccount = mutation({
     if (!userId) return null;
 
     // Check if account already exists
+    // OPTIMIZED: Use compound index to avoid filter after withIndex
     const existingAccount = await ctx.db
       .query("accounts")
-      .withIndex("by_owner", (q) => q.eq("ownerId", userId))
-      .filter((q) => q.eq(q.field("type"), "personal"))
+      .withIndex("by_owner_type", (q) => q.eq("ownerId", userId).eq("type", "personal"))
       .first();
 
     if (existingAccount) {
@@ -167,9 +165,10 @@ export const initializeAccount = mutation({
     });
 
     // Create system account if it doesn't exist (for initial deposits)
+    // OPTIMIZED: Use by_name index for system account lookup
     let systemAccount = await ctx.db
       .query("accounts")
-      .filter((q) => q.eq(q.field("name"), "System"))
+      .withIndex("by_name", (q) => q.eq("name", "System"))
       .first();
 
     if (!systemAccount) {
@@ -417,14 +416,13 @@ export const searchUsers = query({
       )
       .slice(0, 20); // Limit to 20 results
 
-    // OPTIMIZED: Batch fetch all accounts at once
+    // OPTIMIZED: Use compound index for efficient querying
     const userIds = matchedUsers.map(u => u._id);
     const accounts = await Promise.all(
       userIds.map(userId => 
         ctx.db
           .query("accounts")
-          .withIndex("by_owner", (q) => q.eq("ownerId", userId))
-          .filter((q) => q.eq(q.field("type"), "personal"))
+          .withIndex("by_owner_type", (q) => q.eq("ownerId", userId).eq("type", "personal"))
           .first()
       )
     );

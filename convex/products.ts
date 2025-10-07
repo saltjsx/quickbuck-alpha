@@ -173,9 +173,10 @@ export const automaticPurchase = internalMutation({
   const totalSpend = Math.floor(Math.random() * 125000) + 300000;
 
     // Get system account (buyer)
+    // OPTIMIZED: Use by_name index for system account lookup
     let systemAccount = await ctx.db
       .query("accounts")
-      .filter((q) => q.eq(q.field("name"), "System"))
+      .withIndex("by_name", (q) => q.eq("name", "System"))
       .first();
 
     if (!systemAccount) {

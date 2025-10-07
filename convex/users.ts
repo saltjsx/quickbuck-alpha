@@ -278,10 +278,10 @@ export const getDashboardOverview = query({
     const userId = user._id;
 
     // Get personal account
+    // OPTIMIZED: Use compound index to avoid filter after withIndex
     const personalAccount = await ctx.db
       .query("accounts")
-      .withIndex("by_owner", (q) => q.eq("ownerId", userId))
-      .filter((q) => q.eq(q.field("type"), "personal"))
+      .withIndex("by_owner_type", (q) => q.eq("ownerId", userId).eq("type", "personal"))
       .first();
 
     // Get company access and companies
@@ -315,10 +315,10 @@ export const getDashboardOverview = query({
     });
 
     // Get portfolio
+    // OPTIMIZED: Use compound index to avoid filter after withIndex
     const holdings = await ctx.db
       .query("stocks")
-      .withIndex("by_holder", (q) => q.eq("holderId", userId))
-      .filter((q) => q.eq(q.field("holderType"), "user"))
+      .withIndex("by_holder_holderType", (q) => q.eq("holderId", userId).eq("holderType", "user"))
       .collect();
 
     // Batch fetch companies for portfolio

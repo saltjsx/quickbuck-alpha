@@ -29,10 +29,10 @@ export const purchaseItem = mutation({
     if (!product.isActive) throw new Error("Product is not available");
 
     // Get user's personal account
+    // OPTIMIZED: Use compound index to avoid filter after withIndex
     const userAccount = await ctx.db
       .query("accounts")
-      .withIndex("by_owner", (q) => q.eq("ownerId", userId))
-      .filter((q) => q.eq(q.field("type"), "personal"))
+      .withIndex("by_owner_type", (q) => q.eq("ownerId", userId).eq("type", "personal"))
       .first();
 
     if (!userAccount) throw new Error("No personal account found");

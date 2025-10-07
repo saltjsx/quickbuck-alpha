@@ -338,10 +338,10 @@ export const getLeaderboard = query({
 
     for (const userId of Array.from(candidateUserIds)) {
       if (!personalAccountMap.has(userId)) {
+        // OPTIMIZED: Use compound index to avoid filter after withIndex
         const account = await ctx.db
           .query("accounts")
-          .withIndex("by_owner", (q) => q.eq("ownerId", userId))
-          .filter((q) => q.eq(q.field("type"), "personal"))
+          .withIndex("by_owner_type", (q) => q.eq("ownerId", userId).eq("type", "personal"))
           .first();
 
         if (account) {
@@ -379,12 +379,12 @@ export const getLeaderboard = query({
     }[] = [];
 
     // OPTIMIZED: Batch fetch all holdings for all candidates at once
+    // OPTIMIZED: Use compound index to avoid filter after withIndex
     const allUserHoldings = await Promise.all(
       Array.from(candidateUserIds).map(userId =>
         ctx.db
           .query("stocks")
-          .withIndex("by_holder", (q) => q.eq("holderId", userId))
-          .filter((q) => q.eq(q.field("holderType"), "user"))
+          .withIndex("by_holder_holderType", (q) => q.eq("holderId", userId).eq("holderType", "user"))
           .collect()
       )
     );
@@ -451,12 +451,12 @@ export const getLeaderboard = query({
       .map(acc => acc.companyId)
       .filter((id): id is Id<"companies"> => id !== undefined);
     
+    // OPTIMIZED: Use compound index to avoid filter after withIndex
     const companyHoldingsResults = await Promise.all(
       companyIds.map(companyId =>
         ctx.db
           .query("stocks")
-          .withIndex("by_holder", (q) => q.eq("holderId", companyId))
-          .filter((q) => q.eq(q.field("holderType"), "company"))
+          .withIndex("by_holder_holderType", (q) => q.eq("holderId", companyId).eq("holderType", "company"))
           .take(50) // Limit holdings per company
       )
     );
@@ -536,12 +536,12 @@ export const getLeaderboard = query({
       .filter(id => !companyHoldingsMap.has(id));
     
     if (additionalCompanyIds.length > 0) {
+      // OPTIMIZED: Use compound index to avoid filter after withIndex
       const additionalHoldingsResults = await Promise.all(
         additionalCompanyIds.map(companyId =>
           ctx.db
             .query("stocks")
-            .withIndex("by_holder", (q) => q.eq("holderId", companyId))
-            .filter((q) => q.eq(q.field("holderType"), "company"))
+            .withIndex("by_holder_holderType", (q) => q.eq("holderId", companyId).eq("holderType", "company"))
             .take(50)
         )
       );

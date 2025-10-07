@@ -195,20 +195,20 @@ export const buyStock = mutation({
       timestamp: Date.now(),
     });
 
-    const existingHolding = await ctx.db
+    const holding = await ctx.db
       .query("stocks")
-      .withIndex("by_company_holder", (q) =>
-        q.eq("companyId", args.companyId).eq("holderId", buyerId)
+      .withIndex("by_company_holder_holderType", (q) =>
+        q.eq("companyId", args.companyId).eq("holderId", buyerId).eq("holderType", buyerType)
       )
       .first();
 
-    if (existingHolding) {
-      const newTotalShares = existingHolding.shares + args.shares;
+    if (holding) {
+      const newTotalShares = holding.shares + args.shares;
       const newAveragePrice = 
-        (existingHolding.shares * existingHolding.averagePurchasePrice + totalCost) /
+        (holding.shares * holding.averagePurchasePrice + totalCost) /
         newTotalShares;
 
-      await ctx.db.patch(existingHolding._id, {
+      await ctx.db.patch(holding._id, {
         shares: newTotalShares,
         averagePurchasePrice: newAveragePrice,
         updatedAt: Date.now(),
@@ -293,10 +293,11 @@ export const sellStock = mutation({
       if (!access) throw new Error("No access to this company");
     }
 
+    // OPTIMIZED: Use compound index to avoid filter after withIndex
     const holding = await ctx.db
       .query("stocks")
-      .withIndex("by_company_holder", (q) =>
-        q.eq("companyId", args.companyId).eq("holderId", sellerId)
+      .withIndex("by_company_holder_holderType", (q) =>
+        q.eq("companyId", args.companyId).eq("holderId", sellerId).eq("holderType", sellerType)
       )
       .first();
 
@@ -433,12 +434,13 @@ export const transferStock = mutation({
       throw new Error("You can only transfer your own stocks");
     }
 
+    // OPTIMIZED: Use compound index to avoid filter after withIndex
     const holding = await ctx.db
       .query("stocks")
-      .withIndex("by_company_holder", (q) =>
-        q.eq("companyId", args.companyId).eq("holderId", fromHolderId)
+      .withIndex("by_holder_holderType", (q) =>
+        q.eq("holderId", fromHolderId).eq("holderType", fromHolderType)
       )
-      .filter((q) => q.eq(q.field("holderType"), fromHolderType))
+      .filter((q) => q.eq(q.field("companyId"), args.companyId))
       .first();
 
     if (!holding || holding.shares < args.shares) {
@@ -468,12 +470,13 @@ export const transferStock = mutation({
       });
     }
 
+    // OPTIMIZED: Use compound index to avoid filter after withIndex
     const receiverHolding = await ctx.db
       .query("stocks")
-      .withIndex("by_company_holder", (q) =>
-        q.eq("companyId", args.companyId).eq("holderId", args.toId)
+      .withIndex("by_holder_holderType", (q) =>
+        q.eq("holderId", args.toId).eq("holderType", args.toType)
       )
-      .filter((q) => q.eq(q.field("holderType"), args.toType))
+      .filter((q) => q.eq(q.field("companyId"), args.companyId))
       .first();
 
     if (receiverHolding) {
@@ -504,10 +507,10 @@ export const getPortfolio = query({
     if (!userId) return [];
 
     // BANDWIDTH OPTIMIZATION: Limit holdings to 100 per user
+    // OPTIMIZED: Use compound index to avoid filter after withIndex
     const holdings = await ctx.db
       .query("stocks")
-      .withIndex("by_holder", (q) => q.eq("holderId", userId))
-      .filter((q) => q.eq(q.field("holderType"), "user"))
+      .withIndex("by_holder_holderType", (q) => q.eq("holderId", userId).eq("holderType", "user"))
       .take(100);
 
     // BANDWIDTH OPTIMIZATION: Batch fetch all companies
@@ -570,8 +573,7 @@ export const getCompanyPortfolios = query({
       validCompanies.map(company =>
         ctx.db
           .query("stocks")
-          .withIndex("by_holder", (q) => q.eq("holderId", company._id))
-          .filter((q) => q.eq(q.field("holderType"), "company"))
+          .withIndex("by_holder_holderType", (q) => q.eq("holderId", company._id).eq("holderType", "company"))
           .take(50)
       )
     );
@@ -627,10 +629,10 @@ export const getHolderPortfolio = query({
   args: { holderId: v.union(v.id("users"), v.id("companies")), holderType: v.union(v.literal("user"), v.literal("company")) },
   handler: async (ctx, args) => {
     // BANDWIDTH OPTIMIZATION: Limit holdings to 100
+    // OPTIMIZED: Use compound index to avoid filter after withIndex
     const holdings = await ctx.db
       .query("stocks")
-      .withIndex("by_holder", (q) => q.eq("holderId", args.holderId))
-      .filter((q) => q.eq(q.field("holderType"), args.holderType))
+      .withIndex("by_holder_holderType", (q) => q.eq("holderId", args.holderId).eq("holderType", args.holderType))
       .take(100);
 
     // BANDWIDTH OPTIMIZATION: Batch fetch companies and skip price history
@@ -795,9 +797,10 @@ export const getStockDetails = query({
     const priceHistory = aggregateToHourly(rawPriceHistory);
 
     // OPTIMIZED: Only get last 50 transactions instead of all
+    // OPTIMIZED: Use compound index for efficient time-ordered queries
     const recentTransactions = await ctx.db
       .query("stockTransactions")
-      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .withIndex("by_company_timestamp", (q) => q.eq("companyId", args.companyId))
       .order("desc")
       .take(50);
 

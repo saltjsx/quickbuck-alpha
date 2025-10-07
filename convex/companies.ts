@@ -366,8 +366,7 @@ export const deleteCompany = mutation({
     if (balance > 0) {
       const personalAccount = await ctx.db
         .query("accounts")
-        .withIndex("by_owner", (q) => q.eq("ownerId", userId))
-        .filter((q) => q.eq(q.field("type"), "personal"))
+        .withIndex("by_owner_type", (q) => q.eq("ownerId", userId).eq("type", "personal"))
         .first();
 
       if (personalAccount) {
@@ -497,18 +496,21 @@ export const getCompanyDashboard = query({
     // OPTIMIZED: Use indexed queries to get only this company's transactions
     const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
     
+    // OPTIMIZED: Use compound index for efficient time-range queries
     // Query only transactions TO this account
     const incoming = await ctx.db
       .query("ledger")
-      .withIndex("by_to_account", (q) => q.eq("toAccountId", company.accountId))
-      .filter((q) => q.gt(q.field("createdAt"), thirtyDaysAgo))
+      .withIndex("by_to_account_created", (q) => 
+        q.eq("toAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
+      )
       .collect();
 
     // Query only transactions FROM this account
     const outgoing = await ctx.db
       .query("ledger")
-      .withIndex("by_from_account", (q) => q.eq("fromAccountId", company.accountId))
-      .filter((q) => q.gt(q.field("createdAt"), thirtyDaysAgo))
+      .withIndex("by_from_account_created", (q) => 
+        q.eq("fromAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
+      )
       .collect();
 
     // Calculate revenue (product purchases + batch marketplace)

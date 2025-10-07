@@ -12,7 +12,6 @@ export default defineSchema({
     .index("by_token", ["tokenIdentifier"])
     .index("by_username", ["username"]),
 
-  // Ledger system - all transactions
   ledger: defineTable({
     fromAccountId: v.id("accounts"),
     toAccountId: v.id("accounts"),
@@ -24,34 +23,38 @@ export default defineSchema({
       v.literal("initial_deposit"),
       v.literal("stock_purchase"),
       v.literal("stock_sale"),
-      v.literal("marketplace_batch"), // NEW: batch marketplace transactions
-      v.literal("expense") // Company expenses
+      v.literal("marketplace_batch"),
+      v.literal("expense")
     ),
     description: v.optional(v.string()),
     productId: v.optional(v.id("products")),
-    batchCount: v.optional(v.number()), // NEW: number of items in batch
+    batchCount: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_from_account", ["fromAccountId"])
     .index("by_to_account", ["toAccountId"])
     .index("by_created_at", ["createdAt"])
-    .index("by_product", ["productId"]) // For filtering ledger by product
-    .index("by_type", ["type"]), // For filtering ledger by transaction type
+    .index("by_product", ["productId"])
+    .index("by_type", ["type"])
+    .index("by_from_account_created", ["fromAccountId", "createdAt"])
+    .index("by_to_account_created", ["toAccountId", "createdAt"])
+    .index("by_to_account_type", ["toAccountId", "type"])
+    .index("by_from_account_type", ["fromAccountId", "type"]),
 
-  // Bank accounts - for both personal and company accounts
   accounts: defineTable({
     name: v.string(),
     type: v.union(v.literal("personal"), v.literal("company")),
-    ownerId: v.id("users"), // The primary owner
+    ownerId: v.id("users"),
     companyId: v.optional(v.id("companies")),
-    balance: v.optional(v.number()), // Cached balance for performance
+    balance: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_owner", ["ownerId"])
     .index("by_company", ["companyId"])
-    .index("by_type_balance", ["type", "balance"]),
+    .index("by_type_balance", ["type", "balance"])
+    .index("by_owner_type", ["ownerId", "type"])
+    .index("by_name", ["name"]),
 
-  // Balances table - fast balance lookups (replaces calculating from ledger)
   balances: defineTable({
     accountId: v.id("accounts"),
     balance: v.number(),
@@ -59,26 +62,23 @@ export default defineSchema({
   })
     .index("by_account", ["accountId"]),
 
-  // Companies
   companies: defineTable({
     name: v.string(),
     description: v.optional(v.string()),
-    tags: v.array(v.string()), // Industry tags for categorization
-    ticker: v.string(), // Stock ticker symbol (e.g., "AAPL")
-    logoUrl: v.optional(v.string()), // Company logo image URL
+    tags: v.array(v.string()),
+    ticker: v.string(),
+    logoUrl: v.optional(v.string()),
     ownerId: v.id("users"),
     accountId: v.id("accounts"),
-    isPublic: v.boolean(), // Listed on stock market (balance > $50,000)
-    totalShares: v.number(), // Total shares available
-    sharePrice: v.number(), // Current share price
-    marketSentiment: v.optional(v.number()), // Market sentiment multiplier (0.8 - 1.2)
-    // Expense tracking
-    lastExpenseDate: v.optional(v.number()), // Last time expenses were charged
-    monthlyRevenue: v.optional(v.number()), // Rolling 30-day revenue for calculating expenses
-    // Tax settings
-    taxRate: v.optional(v.number()), // Corporate tax rate (default 21%)
-    lastTaxPayment: v.optional(v.number()), // Last time taxes were paid
-    unpaidTaxes: v.optional(v.number()), // Accumulated unpaid taxes
+    isPublic: v.boolean(),
+    totalShares: v.number(),
+    sharePrice: v.number(),
+    marketSentiment: v.optional(v.number()),
+    lastExpenseDate: v.optional(v.number()),
+    monthlyRevenue: v.optional(v.number()),
+    taxRate: v.optional(v.number()),
+    lastTaxPayment: v.optional(v.number()),
+    unpaidTaxes: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_owner", ["ownerId"])
@@ -86,9 +86,10 @@ export default defineSchema({
     .index("by_account", ["accountId"])
     .index("by_ticker", ["ticker"])
     .index("by_sharePrice", ["sharePrice"])
-    .index("by_totalShares", ["totalShares"]),
+    .index("by_totalShares", ["totalShares"])
+    .index("by_public_sharePrice", ["isPublic", "sharePrice"])
+    .index("by_public_totalShares", ["isPublic", "totalShares"]),
 
-  // Company access - who can manage the company
   companyAccess: defineTable({
     companyId: v.id("companies"),
     userId: v.id("users"),
@@ -99,10 +100,9 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_company_user", ["companyId", "userId"]),
 
-  // Stock holdings
   stocks: defineTable({
     companyId: v.id("companies"),
-    holderId: v.union(v.id("users"), v.id("companies")), // Can be user or company
+    holderId: v.union(v.id("users"), v.id("companies")),
     holderType: v.union(v.literal("user"), v.literal("company")),
     shares: v.number(),
     averagePurchasePrice: v.number(),
@@ -112,21 +112,21 @@ export default defineSchema({
     .index("by_company", ["companyId"])
     .index("by_holder", ["holderId"])
     .index("by_company_holder", ["companyId", "holderId"])
-    .index("by_holderType_shares", ["holderType", "shares"]),
+    .index("by_holderType_shares", ["holderType", "shares"])
+    .index("by_holder_holderType", ["holderId", "holderType"])
+    .index("by_company_holder_holderType", ["companyId", "holderId", "holderType"]),
 
-  // Stock price history for charts
   stockPriceHistory: defineTable({
     companyId: v.id("companies"),
     price: v.number(),
     marketCap: v.number(),
-    volume: v.number(), // Trading volume in last period
+    volume: v.number(),
     timestamp: v.number(),
   })
     .index("by_company", ["companyId"])
     .index("by_company_timestamp", ["companyId", "timestamp"])
-    .index("by_timestamp", ["timestamp"]), // For filtering all history by time range
+    .index("by_timestamp", ["timestamp"]),
 
-  // Stock transactions for tracking individual trades
   stockTransactions: defineTable({
     companyId: v.id("companies"),
     buyerId: v.union(v.id("users"), v.id("companies")),
@@ -135,15 +135,15 @@ export default defineSchema({
     pricePerShare: v.number(),
     totalAmount: v.number(),
     transactionType: v.union(v.literal("buy"), v.literal("sell"), v.literal("transfer")),
-    fromId: v.optional(v.union(v.id("users"), v.id("companies"))), // For transfers
-    toId: v.optional(v.union(v.id("users"), v.id("companies"))), // For transfers
+    fromId: v.optional(v.union(v.id("users"), v.id("companies"))),
+    toId: v.optional(v.union(v.id("users"), v.id("companies"))),
     timestamp: v.number(),
   })
     .index("by_company", ["companyId"])
     .index("by_buyer", ["buyerId"])
-    .index("by_timestamp", ["timestamp"]),
+    .index("by_timestamp", ["timestamp"])
+    .index("by_company_timestamp", ["companyId", "timestamp"]),
 
-  // Products
   products: defineTable({
     name: v.string(),
     description: v.string(),
@@ -156,19 +156,19 @@ export default defineSchema({
     totalSales: v.number(),
     totalRevenue: v.optional(v.number()),
     totalCosts: v.optional(v.number()),
-    // Quality & Maintenance
-    quality: v.optional(v.number()), // Quality rating 0-100 (default 100)
-    lastMaintenanceDate: v.optional(v.number()), // Last time maintenance was performed
-    maintenanceCost: v.optional(v.number()), // Cost to maintain quality per period
+    quality: v.optional(v.number()),
+    lastMaintenanceDate: v.optional(v.number()),
+    maintenanceCost: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_company", ["companyId"])
     .index("by_active", ["isActive"])
     .index("by_active_totalSales", ["isActive", "totalSales"])
     .index("by_created_by", ["createdBy"])
-    .index("by_company_active", ["companyId", "isActive"]), // For filtering company's active products
+    .index("by_company_active", ["companyId", "isActive"])
+    .index("by_active_totalRevenue", ["isActive", "totalRevenue"])
+    .index("by_active_price", ["isActive", "price"]),
 
-  // Collections - user-purchased marketplace items
   collections: defineTable({
     userId: v.id("users"),
     productId: v.id("products"),
@@ -178,14 +178,14 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_product", ["productId"])
     .index("by_user_product", ["userId", "productId"])
-    .index("by_user_purchased", ["userId", "purchasedAt"]),
+    .index("by_user_purchased", ["userId", "purchasedAt"])
+    .index("by_product_purchased", ["productId", "purchasedAt"]),
 
-  // Licenses - required to operate in certain industries
   licenses: defineTable({
     companyId: v.id("companies"),
-    licenseType: v.string(), // "tech", "food", "transport", "finance", "manufacturing", "retail"
-    cost: v.number(), // Purchase cost
-    expiresAt: v.number(), // License expiration date
+    licenseType: v.string(),
+    cost: v.number(),
+    expiresAt: v.number(),
     purchasedAt: v.number(),
     isActive: v.boolean(),
   })
@@ -193,22 +193,24 @@ export default defineSchema({
     .index("by_company_active", ["companyId", "isActive"])
     .index("by_expiration", ["expiresAt"]),
 
-  // Expenses - tracking all company expenses
   expenses: defineTable({
     companyId: v.id("companies"),
     type: v.union(
-      v.literal("operating_costs"), // Rent, staff wages, logistics
-      v.literal("taxes"), // Corporate taxes
-      v.literal("license_fee"), // License renewal/purchase
-      v.literal("maintenance") // Product R&D/maintenance
+      v.literal("operating_costs"),
+      v.literal("taxes"),
+      v.literal("license_fee"),
+      v.literal("maintenance")
     ),
     amount: v.number(),
     description: v.string(),
-    productId: v.optional(v.id("products")), // For maintenance expenses
-    licenseId: v.optional(v.id("licenses")), // For license fees
+    productId: v.optional(v.id("products")),
+    licenseId: v.optional(v.id("licenses")),
     createdAt: v.number(),
   })
     .index("by_company", ["companyId"])
     .index("by_type", ["type"])
-    .index("by_company_created", ["companyId", "createdAt"]),
+    .index("by_company_created", ["companyId", "createdAt"])
+    .index("by_company_type", ["companyId", "type"])
+    .index("by_company_type_created", ["companyId", "type", "createdAt"]),
 });
+
