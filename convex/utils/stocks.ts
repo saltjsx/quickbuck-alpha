@@ -95,10 +95,13 @@ export function calculateFairValue({
 
   const anchoredPrice = Math.max(company.sharePrice ?? fundamentalsValue, 0.01);
 
-  let fairValue = (fundamentalsValue + growthPremium) * sentiment;
+  // Ensure we never drift far below the traded price when fundamentals are thin
+  const intrinsicValue = Math.max(fundamentalsValue + growthPremium, anchoredPrice * 0.9);
+
+  let fairValue = intrinsicValue * sentiment;
 
   // Keep price anchored to the recent trading price to avoid extreme jumps
-  fairValue = (fairValue * 0.5) + (anchoredPrice * 0.5);
+  fairValue = fairValue * 0.6 + anchoredPrice * 0.4;
 
   if (!Number.isFinite(fairValue) || fairValue <= 0) {
     return Math.max(anchoredPrice, 0.01);
