@@ -6,7 +6,23 @@ import { internalMutation, mutation, query } from "./_generated/server";
  * 
  * This module handles:
  * 1. Operating Costs - rent, staff, logistics (scales with revenue)
- * 2. Taxes - corporate tax on profits
+ *    // Deduct from company balance
+    await ctx.db.patch(company.accountId, {
+      balance: balance - maintenanceCost,
+    });
+
+    // Get system account
+    // OPTIMIZED: Use by_name index for system account lookup
+    let systemAccount = await ctx.db
+      .query("accounts")
+      .withIndex("by_name", (q) => q.eq("name", "System"))
+      .first();
+
+    if (!systemAccount) {
+      throw new Error("System account not found");
+    }
+
+    // Update product quality (restore to 100)orate tax on profits
  * 3. License Fees - required to operate in certain industries
  * 4. Maintenance - product quality degradation and R&D costs
  */
@@ -106,9 +122,10 @@ export const purchaseLicense = mutation({
     });
 
     // Get system account
+    // OPTIMIZED: Use by_name index for system account lookup
     let systemAccount = await ctx.db
       .query("accounts")
-      .filter((q) => q.eq(q.field("name"), "System"))
+      .withIndex("by_name", (q) => q.eq("name", "System"))
       .first();
 
     if (!systemAccount) {
@@ -323,9 +340,10 @@ export const processCompanyExpenses = internalMutation({
     const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
     
     // Get system account
+    // OPTIMIZED: Use by_name index for system account lookup
     let systemAccount = await ctx.db
       .query("accounts")
-      .filter((q) => q.eq(q.field("name"), "System"))
+      .withIndex("by_name", (q) => q.eq("name", "System"))
       .first();
 
     if (!systemAccount) {

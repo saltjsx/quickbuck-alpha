@@ -86,15 +86,17 @@ export const getUserAccounts = query({
 
     // Get personal account
     // OPTIMIZED: Use compound index to avoid filter after withIndex
-      const personalAccount = await ctx.db
-        .query("accounts")
-        .withIndex("by_owner_type", (q) => q.eq("ownerId", userId).eq("type", "personal"))
-        .first();    // Get company accounts where user has access
-    // Limit to 50 company access records to reduce bandwidth
+    const personalAccount = await ctx.db
+      .query("accounts")
+      .withIndex("by_owner_type", (q) => q.eq("ownerId", userId).eq("type", "personal"))
+      .first();
+    
+    // Get company accounts where user has access
+    // BANDWIDTH OPTIMIZATION: Reduced from 50 to 25 company access records
     const companyAccess = await ctx.db
       .query("companyAccess")
       .withIndex("by_user", (q) => q.eq("userId", userId))
-      .take(50);
+      .take(25);
 
     // Batch fetch companies
     const companyIds = companyAccess.map(a => a.companyId);

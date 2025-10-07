@@ -76,8 +76,7 @@ export const getAllCompanies = query({
       companies.map(company =>
         ctx.db
           .query("stocks")
-          .withIndex("by_holder", (q) => q.eq("holderId", company._id))
-          .filter((q) => q.eq(q.field("holderType"), "company"))
+          .withIndex("by_holder_holderType", (q) => q.eq("holderId", company._id).eq("holderType", "company"))
           .take(50) // Limit holdings per company
       )
     );
@@ -145,8 +144,7 @@ export const getAllPlayers = query({
       userIds.map(userId =>
         ctx.db
           .query("accounts")
-          .withIndex("by_owner", (q) => q.eq("ownerId", userId))
-          .filter((q) => q.eq(q.field("type"), "personal"))
+          .withIndex("by_owner_type", (q) => q.eq("ownerId", userId).eq("type", "personal"))
           .first()
       )
     );
@@ -164,8 +162,7 @@ export const getAllPlayers = query({
       usersWithAccounts.map(userId =>
         ctx.db
           .query("stocks")
-          .withIndex("by_holder", (q) => q.eq("holderId", userId))
-          .filter((q) => q.eq(q.field("holderType"), "user"))
+          .withIndex("by_holder_holderType", (q) => q.eq("holderId", userId).eq("holderType", "user"))
           .take(50) // BANDWIDTH OPTIMIZATION: Limit holdings per user
       )
     );
@@ -429,7 +426,7 @@ export const getLeaderboard = query({
         ctx.db
           .query("stocks")
           .withIndex("by_company", (q) => q.eq("companyId", ref.company._id))
-          .take(500)
+          .take(100) // BANDWIDTH OPTIMIZATION: Reduced from 500 to 100
       )
     );
 

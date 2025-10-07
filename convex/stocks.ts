@@ -884,10 +884,12 @@ export const getStockDetails = query({
 export const getAllPublicStocks = query({
   args: {},
   handler: async (ctx) => {
+    // BANDWIDTH OPTIMIZATION: Limit to top 100 public companies instead of all
     const publicCompanies = await ctx.db
       .query("companies")
-      .withIndex("by_public", (q) => q.eq("isPublic", true))
-      .collect();
+      .withIndex("by_public_sharePrice", (q) => q.eq("isPublic", true))
+      .order("desc")
+      .take(100);
 
     // OPTIMIZED: Batch fetch price history for all companies
     const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);

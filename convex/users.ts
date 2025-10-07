@@ -307,12 +307,13 @@ export const getDashboardOverview = query({
     });
 
     const ownedCompanies = validCompanies.filter((company: any) => company.ownerId === userId);
+    // BANDWIDTH OPTIMIZATION: Reduced from 500 to 100 stocks per company
     const ownedHoldings = await Promise.all(
       ownedCompanies.map((company: any) =>
         ctx.db
           .query("stocks")
           .withIndex("by_company", (q) => q.eq("companyId", company._id))
-          .take(500)
+          .take(100)
       )
     );
 

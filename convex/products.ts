@@ -162,10 +162,11 @@ export const automaticPurchase = internalMutation({
   args: {},
   handler: async (ctx) => {
     // Get all active products
+    // BANDWIDTH OPTIMIZATION: Limit to 300 products instead of collecting all
     const products = await ctx.db
       .query("products")
       .withIndex("by_active", (q) => q.eq("isActive", true))
-      .collect();
+      .take(300);
 
     if (products.length === 0) return { message: "No products available" };
 

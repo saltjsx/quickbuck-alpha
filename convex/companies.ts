@@ -190,12 +190,13 @@ export const getUserCompanies = query({
     });
 
     const ownedCompanies = validCompanies.filter((company) => company.ownerId === userId);
+    // BANDWIDTH OPTIMIZATION: Reduced from 500 to 100 stocks per company
     const ownedHoldings = await Promise.all(
       ownedCompanies.map((company) =>
         ctx.db
           .query("stocks")
           .withIndex("by_company", (q) => q.eq("companyId", company._id))
-          .take(500)
+          .take(100)
       )
     );
 
@@ -518,7 +519,7 @@ export const getCompanyDashboard = query({
     const companyHoldings = await ctx.db
       .query("stocks")
       .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
-      .take(500);
+      .take(100); // BANDWIDTH OPTIMIZATION: Reduced from 500 to 100
     const ownershipSnapshot = computeOwnerMetricsFromHoldings(company, companyHoldings ?? [], company.ownerId);
 
     // Get cached balance directly from account
