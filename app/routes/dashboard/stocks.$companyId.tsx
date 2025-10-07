@@ -68,6 +68,31 @@ export default function StockDetailPage() {
   const [buyerType, setBuyerType] = useState<"user" | "company">("user");
   const [timeRange, setTimeRange] = useState("7d");
 
+  const formatTimestamp = (timestamp: number) => {
+    const date = new Date(timestamp);
+
+    if (timeRange === "1h" || timeRange === "6h") {
+      return date.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+
+    if (timeRange === "24h") {
+      return date.toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+
+    return date.toLocaleDateString([], {
+      month: "short",
+      day: "numeric",
+    });
+  };
+
   const stockDetails = useQuery(
     api.stocks.getStockDetails,
     companyId ? { companyId: companyId as Id<"companies">, timeRange } : "skip"
@@ -207,8 +232,12 @@ export default function StockDetailPage() {
     }
   };
 
-  const chartData = priceHistory.map((h) => ({
-    date: new Date(h.timestamp).toLocaleDateString(),
+  const chartData = (
+    priceHistory.length > 0
+      ? priceHistory
+      : [{ timestamp: Date.now(), price: stats.currentPrice }]
+  ).map((h) => ({
+    timestamp: h.timestamp,
     price: h.price,
   }));
 
@@ -340,7 +369,7 @@ export default function StockDetailPage() {
                   Price History
                 </CardTitle>
                 <CardDescription>
-                  Hourly price data for the selected time period
+                  Every price update captured during the selected time period
                 </CardDescription>
                 <CardAction>
                   <Select value={timeRange} onValueChange={setTimeRange}>
@@ -371,11 +400,19 @@ export default function StockDetailPage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={chartData}>
                       <XAxis
-                        dataKey="date"
+                        dataKey="timestamp"
+                        type="number"
+                        domain={["dataMin", "dataMax"]}
                         stroke="#888888"
                         fontSize={12}
                         tickLine={false}
                         axisLine={false}
+                        tickFormatter={(value) =>
+                          typeof value === "number"
+                            ? formatTimestamp(value)
+                            : value
+                        }
+                        minTickGap={24}
                       />
                       <YAxis
                         stroke="#888888"
@@ -388,7 +425,17 @@ export default function StockDetailPage() {
                         ]}
                         tickFormatter={(value) => `$${value.toFixed(2)}`}
                       />
-                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <ChartTooltip
+                        content={
+                          <ChartTooltipContent
+                            labelFormatter={(value) =>
+                              typeof value === "number"
+                                ? formatTimestamp(value)
+                                : value
+                            }
+                          />
+                        }
+                      />
                       <Line
                         type="monotone"
                         dataKey="price"

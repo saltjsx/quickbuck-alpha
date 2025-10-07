@@ -2,43 +2,6 @@ import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
 import { calculateFairValue, computeOwnerMetricsFromHoldings } from "./utils/stocks";
 
-function aggregateToHourly(priceHistory: any[]): any[] {
-  if (priceHistory.length === 0) return [];
-
-  const hourlyData: { [key: string]: any[] } = {};
-
-  // Group by hour
-  priceHistory.forEach(entry => {
-    const date = new Date(entry.timestamp);
-    const hourKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:00`;
-    
-    if (!hourlyData[hourKey]) {
-      hourlyData[hourKey] = [];
-    }
-    hourlyData[hourKey].push(entry);
-  });
-
-  // Aggregate each hour to get open, high, low, close
-  const result = Object.keys(hourlyData)
-    .sort()
-    .map(hourKey => {
-      const entries = hourlyData[hourKey];
-      const prices = entries.map(e => e.price);
-      const volumes = entries.map(e => e.volume || 0);
-      
-      return {
-        timestamp: new Date(hourKey + ':00').getTime(),
-        price: entries[entries.length - 1].price, // Close price
-        open: entries[0].price,
-        high: Math.max(...prices),
-        low: Math.min(...prices),
-        volume: volumes.reduce((sum, v) => sum + v, 0),
-      };
-    });
-
-  return result;
-}
-
 async function getCurrentUserId(ctx: any) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) return null;
@@ -778,19 +741,13 @@ export const getStockDetails = query({
         break;
     }
 
-    // OPTIMIZED: Limit number of price history records
-    const maxRecords = timeRange === "1h" ? 60 : timeRange === "6h" ? 180 : 500;
-    
-    const rawPriceHistory = await ctx.db
+    const priceHistory = await ctx.db
       .query("stockPriceHistory")
       .withIndex("by_company_timestamp", (q) =>
         q.eq("companyId", args.companyId).gt("timestamp", startTime)
       )
       .order("asc")
-      .take(maxRecords);
-
-    // Aggregate to hourly intervals
-    const priceHistory = aggregateToHourly(rawPriceHistory);
+      .collect();
 
     // OPTIMIZED: Only get last 50 transactions instead of all
     // OPTIMIZED: Use compound index for efficient time-ordered queries
@@ -801,14 +758,20 @@ export const getStockDetails = query({
       .take(50);
 
     const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
-    const priceOneDayAgo = rawPriceHistory.find(p => p.timestamp >= oneDayAgo)?.price || company.sharePrice;
+    const priceOneDayAgo = priceHistory.find(p => p.timestamp >= oneDayAgo)?.price ?? company.sharePrice;
     const priceChange24h = company.sharePrice - priceOneDayAgo;
-    const priceChangePercent24h = (priceChange24h / priceOneDayAgo) * 100;
+    const priceChangePercent24h = priceOneDayAgo !== 0 ? (priceChange24h / priceOneDayAgo) * 100 : 0;
 
-    const highPrice = Math.max(...rawPriceHistory.map(p => p.price), company.sharePrice);
-    const lowPrice = Math.min(...rawPriceHistory.map(p => p.price), company.sharePrice);
+    const highPrice = priceHistory.length > 0
+      ? Math.max(...priceHistory.map(p => p.price))
+      : company.sharePrice;
+    const lowPrice = priceHistory.length > 0
+      ? Math.min(...priceHistory.map(p => p.price))
+      : company.sharePrice;
 
-    const totalVolume = recentTransactions.reduce((sum, tx) => sum + tx.shares, 0);
+    const totalVolume = priceHistory
+      .filter(p => p.timestamp >= oneDayAgo)
+      .reduce((sum, p) => sum + (p.volume || 0), 0);
     
     const holdings = await ctx.db
       .query("stocks")
@@ -858,14 +821,14 @@ export const getAllPublicStocks = query({
     // Get all recent price history in fewer queries
     const allDayHistory = await ctx.db
       .query("stockPriceHistory")
-      .withIndex("by_company_timestamp")
-      .filter((q) => q.gt(q.field("timestamp"), oneDayAgo))
+      .withIndex("by_timestamp", (q) => q.gt("timestamp", oneDayAgo))
+      .order("asc")
       .collect();
     
     const allHourHistory = await ctx.db
       .query("stockPriceHistory")
-      .withIndex("by_company_timestamp")
-      .filter((q) => q.gt(q.field("timestamp"), oneHourAgo))
+      .withIndex("by_timestamp", (q) => q.gt("timestamp", oneHourAgo))
+      .order("asc")
       .collect();
 
     // Group by company
@@ -877,20 +840,35 @@ export const getAllPublicStocks = query({
       arr.push(entry);
       dayHistoryByCompany.set(entry.companyId, arr);
     });
-    
+
     allHourHistory.forEach(entry => {
       const arr = hourHistoryByCompany.get(entry.companyId) || [];
       arr.push(entry);
       hourHistoryByCompany.set(entry.companyId, arr);
     });
 
+    for (const [, entries] of dayHistoryByCompany) {
+      entries.sort((a, b) => a.timestamp - b.timestamp);
+    }
+
+    for (const [, entries] of hourHistoryByCompany) {
+      entries.sort((a, b) => a.timestamp - b.timestamp);
+    }
+
     const stocks = publicCompanies.map(company => {
       const dayHistory = dayHistoryByCompany.get(company._id) || [];
       const hourHistory = hourHistoryByCompany.get(company._id) || [];
+      const historySource = hourHistory.length > 0 ? hourHistory : dayHistory;
+      const chartHistory = historySource.length > 0
+        ? historySource.map(entry => ({
+            price: entry.price,
+            timestamp: entry.timestamp,
+          }))
+        : [{ price: company.sharePrice, timestamp: Date.now() }];
       
       const oldPrice = dayHistory[0]?.price || company.sharePrice;
       const priceChange24h = company.sharePrice - oldPrice;
-      const priceChangePercent24h = (priceChange24h / oldPrice) * 100;
+      const priceChangePercent24h = oldPrice !== 0 ? (priceChange24h / oldPrice) * 100 : 0;
 
       const marketCap = company.sharePrice * company.totalShares;
 
@@ -903,10 +881,7 @@ export const getAllPublicStocks = query({
         priceChange24h,
         priceChangePercent24h,
         marketCap,
-        priceHistory: aggregateToHourly(hourHistory).map(h => ({
-          price: h.price,
-          timestamp: h.timestamp,
-        })),
+        priceHistory: chartHistory,
       };
     });
 
@@ -982,23 +957,20 @@ export const cleanupOldPriceHistory = internalMutation({
     // Keep only last 90 days of price history
     const ninetyDaysAgo = Date.now() - (90 * 24 * 60 * 60 * 1000);
     
-    // Get all old records
+    // Get old records in a timestamp-ordered batch
     const oldRecords = await ctx.db
       .query("stockPriceHistory")
-      .withIndex("by_company_timestamp")
-      .filter((q) => q.lt(q.field("timestamp"), ninetyDaysAgo))
-      .collect();
+      .withIndex("by_timestamp", (q) => q.lt("timestamp", ninetyDaysAgo))
+      .order("asc")
+      .take(1000);
 
     // Delete in batches to avoid timeout
     let deleted = 0;
     for (const record of oldRecords) {
       await ctx.db.delete(record._id);
       deleted++;
-      
-      // Limit deletions per run to avoid timeout
-      if (deleted >= 1000) break;
     }
 
-    return { deleted, remaining: oldRecords.length - deleted };
+    return { deleted, remaining: 0 };
   },
 });
