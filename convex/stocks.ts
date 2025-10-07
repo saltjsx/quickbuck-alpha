@@ -65,19 +65,23 @@ export const buyStock = mutation({
     if (!company) throw new Error("Company not found");
     if (!company.isPublic) throw new Error("Company is not publicly traded");
 
-    let buyerId: any = userId;
-    let buyerType: "user" | "company" = "user";
-    
-    if (args.buyerType === "company") {
-      const account = await ctx.db.get(args.fromAccountId);
-      if (!account || !account.companyId) throw new Error("Invalid company account");
-      buyerId = account.companyId;
+    const fromAccount = await ctx.db.get(args.fromAccountId);
+    if (!fromAccount) throw new Error("Account not found");
+
+    const accountIsCompany = !!fromAccount.companyId;
+    const buyerPreference = args.buyerType ?? (accountIsCompany ? "company" : "user");
+
+    let buyerId: any;
+    let buyerType: "user" | "company";
+
+    if (accountIsCompany) {
       buyerType = "company";
-      
+      buyerId = fromAccount.companyId!;
+
       const access = await ctx.db
         .query("companyAccess")
         .withIndex("by_company_user", (q) =>
-          q.eq("companyId", account.companyId!).eq("userId", userId)
+          q.eq("companyId", fromAccount.companyId!).eq("userId", userId)
         )
         .first();
       if (!access) throw new Error("No access to this company");
@@ -85,18 +89,20 @@ export const buyStock = mutation({
       if (buyerId === company._id) {
         throw new Error("Companies cannot buy back their own shares through the public market");
       }
-    }
+    } else {
+      if (buyerPreference === "company") {
+        throw new Error("Selected account is not associated with a company");
+      }
 
-    if (buyerType === "user" && company.ownerId === buyerId) {
-      throw new Error("Company owners already control their equity and cannot buy their own stock");
+      buyerType = "user";
+      buyerId = userId;
+
+      if (company.ownerId === buyerId) {
+        throw new Error("Company owners already control their equity and cannot buy their own stock");
+      }
     }
 
     const totalCost = args.shares * company.sharePrice;
-
-    // Check balance from cached account balance
-    const fromAccount = await ctx.db.get(args.fromAccountId);
-    if (!fromAccount) throw new Error("Account not found");
-    
     const fromBalance = fromAccount.balance ?? 0;
 
     if (fromBalance < totalCost) throw new Error("Insufficient funds");
