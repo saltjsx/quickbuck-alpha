@@ -53,6 +53,59 @@ function calculateNewPrice(
   return Math.max(0.01, finalPrice);
 }
 
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+type AutoPriceContext = {
+  currentPrice: number;
+  fairValue: number;
+  averagePrice: number;
+  momentum: number;
+  volumeRatio: number;
+  directionalFlow: number;
+  volatility: number;
+  currentSentiment: number;
+};
+
+function deriveAutoPrice({
+  currentPrice,
+  fairValue,
+  averagePrice,
+  momentum,
+  volumeRatio,
+  directionalFlow,
+  volatility,
+  currentSentiment,
+}: AutoPriceContext) {
+  const baseline = fairValue * 0.55 + averagePrice * 0.45;
+  const fundamentalsBias = Math.tanh((baseline - currentPrice) / Math.max(baseline, 0.01));
+  const momentumBias = Math.tanh(momentum * 2);
+  const liquidityBias = clamp(directionalFlow * 4, -0.4, 0.4);
+  const stability = 1 - clamp(volatility * 5, 0, 0.7);
+  const noise = (Math.random() - 0.5) * 0.01 * (0.5 + stability);
+
+  let combinedDrift = fundamentalsBias * 0.5 + momentumBias * 0.2 + liquidityBias * 0.2 + noise;
+  combinedDrift = clamp(combinedDrift, -0.04, 0.05);
+
+  let blendedPrice = currentPrice * (1 + combinedDrift);
+  blendedPrice = blendedPrice * 0.5 + baseline * 0.5;
+  blendedPrice *= 1 + volumeRatio * 0.12;
+
+  const protectiveFloor = Math.max(baseline * 0.65, averagePrice * 0.55, 0.05);
+  const protectiveCeiling = Math.max(baseline * 1.6, currentPrice * 1.25);
+  const newPrice = clamp(blendedPrice, protectiveFloor, protectiveCeiling);
+
+  const sentimentTarget = 1 + fundamentalsBias * 0.25 + momentumBias * 0.15 + liquidityBias * 0.1;
+  const sentimentAdjustment = (sentimentTarget - currentSentiment) * 0.35 + noise * 2;
+  const nextSentiment = clamp(currentSentiment + sentimentAdjustment, 0.85, 1.2);
+
+  return { newPrice: Math.max(0.05, newPrice), nextSentiment };
+}
+
+const PRICE_HISTORY_WINDOW_MS = 12 * 60 * 60 * 1000;
+const VOLUME_WINDOW_MS = 6 * 60 * 60 * 1000;
+const PRICE_HISTORY_SAMPLES = 24;
+const TRANSACTION_SAMPLES = 50;
+
 export const buyStock = mutation({
   args: {
     companyId: v.id("companies"),
@@ -914,17 +967,23 @@ export const getAllPublicStocks = query({
 export const updateStockPrices = internalMutation({
   args: {},
   handler: async (ctx) => {
+    const now = Date.now();
+    const priceWindowStart = now - PRICE_HISTORY_WINDOW_MS;
+    const volumeWindowStart = now - VOLUME_WINDOW_MS;
+
     const publicCompanies = await ctx.db
       .query("companies")
-      .withIndex("by_public", (q) => q.eq("isPublic", true))
+      .withIndex("by_public_sharePrice", (q) => q.eq("isPublic", true))
       .collect();
 
-    // Batch fetch all company accounts
-    const accountIds = publicCompanies.map(c => c.accountId);
-    const accounts = await Promise.all(accountIds.map(id => ctx.db.get(id)));
-    
-    // Create balance map
-    const balanceMap = new Map();
+    if (publicCompanies.length === 0) {
+      return { updated: 0 };
+    }
+
+    const accountIds = publicCompanies.map((company) => company.accountId);
+    const accounts = await Promise.all(accountIds.map((id) => ctx.db.get(id)));
+
+    const balanceMap = new Map<string, number>();
     accounts.forEach((account: any) => {
       if (account) {
         balanceMap.set(account._id, account.balance ?? 0);
@@ -933,29 +992,92 @@ export const updateStockPrices = internalMutation({
 
     for (const company of publicCompanies) {
       const companyBalance = balanceMap.get(company.accountId) ?? 0;
+      const currentSentiment = clamp(company.marketSentiment ?? 1.0, 0.85, 1.2);
 
-      const currentSentiment = company.marketSentiment ?? 1.0;
-      const sentimentChange = (Math.random() - 0.5) * 0.02; // ±1% adjustment per tick
-      const newSentiment = Math.max(0.85, Math.min(1.15, currentSentiment + sentimentChange));
+      const priceHistory = await ctx.db
+        .query("stockPriceHistory")
+        .withIndex("by_company_timestamp", (q) =>
+          q.eq("companyId", company._id).gt("timestamp", priceWindowStart)
+        )
+        .order("desc")
+        .take(PRICE_HISTORY_SAMPLES);
+
+      const priceSeries = [
+        { price: company.sharePrice, timestamp: now },
+        ...priceHistory.map((entry) => ({ price: entry.price, timestamp: entry.timestamp })),
+      ];
+
+      const averagePrice =
+        priceSeries.reduce((sum, entry) => sum + entry.price, 0) /
+        Math.max(priceSeries.length, 1);
+
+      const lookbackIndex = Math.min(priceSeries.length - 1, 6);
+      const lookbackSample = lookbackIndex >= 0 ? priceSeries[lookbackIndex] : undefined;
+      const momentum = lookbackSample
+        ? (company.sharePrice - lookbackSample.price) / Math.max(lookbackSample.price, 0.01)
+        : 0;
+
+      let volatility = 0;
+      if (priceSeries.length > 1) {
+        const returns: number[] = [];
+        for (let i = 0; i < priceSeries.length - 1; i++) {
+          const nextPrice = priceSeries[i + 1].price;
+          if (nextPrice > 0) {
+            returns.push((priceSeries[i].price - nextPrice) / nextPrice);
+          }
+        }
+        if (returns.length > 0) {
+          const mean = returns.reduce((sum, value) => sum + value, 0) / returns.length;
+          const variance = returns.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) /
+            returns.length;
+          volatility = Math.sqrt(variance);
+        }
+      }
+
+      const recentTransactions = await ctx.db
+        .query("stockTransactions")
+        .withIndex("by_company_timestamp", (q) =>
+          q.eq("companyId", company._id).gt("timestamp", volumeWindowStart)
+        )
+        .order("desc")
+        .take(TRANSACTION_SAMPLES);
+
+      let totalVolume = 0;
+      let netFlow = 0;
+      for (const tx of recentTransactions) {
+        const quantity = Math.max(tx.shares ?? 0, 0);
+        totalVolume += quantity;
+        if (tx.transactionType === "buy") {
+          netFlow += quantity;
+        } else if (tx.transactionType === "sell") {
+          netFlow -= quantity;
+        }
+      }
+
+      const liquidity = Math.max(company.totalShares, 1);
+      const volumeRatio = clamp(totalVolume / liquidity, 0, 0.2);
+      const directionalFlow = clamp(netFlow / liquidity, -0.1, 0.1);
 
       const fairValue = calculateFairValue({
         company,
         cashBalance: companyBalance,
-        sentimentOverride: newSentiment,
+        sentimentOverride: currentSentiment,
       });
 
-      const meanReversion = (fairValue - company.sharePrice) / Math.max(company.sharePrice, 0.1);
-      const noise = (Math.random() - 0.5) * 0.01; // ±0.5% random drift
-      const totalChange = meanReversion * 0.2 + noise;
-      const clippedChange = Math.max(-0.03, Math.min(0.03, totalChange));
-
-      let newPrice = company.sharePrice * (1 + clippedChange);
-  newPrice = newPrice * 0.6 + fairValue * 0.4; // stay anchored to fundamentals
-  newPrice = Math.max(0.01, newPrice);
+      const { newPrice, nextSentiment } = deriveAutoPrice({
+        currentPrice: company.sharePrice,
+        fairValue,
+        averagePrice,
+        momentum,
+        volumeRatio,
+        directionalFlow,
+        volatility,
+        currentSentiment,
+      });
 
       await ctx.db.patch(company._id, {
         sharePrice: newPrice,
-        marketSentiment: newSentiment,
+        marketSentiment: nextSentiment,
       });
 
       const marketCap = newPrice * company.totalShares;
@@ -963,8 +1085,8 @@ export const updateStockPrices = internalMutation({
         companyId: company._id,
         price: newPrice,
         marketCap,
-        volume: 0,
-        timestamp: Date.now(),
+        volume: Math.round(totalVolume),
+        timestamp: now,
       });
     }
 
