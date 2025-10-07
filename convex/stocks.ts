@@ -25,23 +25,32 @@ function calculateNewPrice(
   const tradeRatio = Math.min(sharesTraded / liquidity, 0.03); // cap position impact at 3%
 
   const direction = isBuying ? 1 : -1;
-  const impactPercent = tradeRatio * 0.6; // translate trade ratio into a gentle swing
-
-  let adjustedPrice = currentPrice * (1 + direction * impactPercent);
-
-  // Clamp intraday movement to ±2% to mirror real-world liquidity
+  const rawImpact = direction * tradeRatio * 0.6; // translate trade ratio into a gentle swing
   const maxChange = 0.02;
-  const changePercent = (adjustedPrice - currentPrice) / Math.max(currentPrice, 0.01);
-  if (changePercent > maxChange) {
-    adjustedPrice = currentPrice * (1 + maxChange);
-  } else if (changePercent < -maxChange) {
-    adjustedPrice = currentPrice * (1 - maxChange);
-  }
+  const clampedImpact = Math.max(-maxChange, Math.min(maxChange, rawImpact));
+
+  const adjustedPrice = currentPrice * (1 + clampedImpact);
 
   // Blend with fundamentals to encourage mean reversion
   const blendedPrice = adjustedPrice * 0.6 + fairValue * 0.4;
+  let finalPrice = Math.max(0.01, blendedPrice);
 
-  return Math.max(0.01, blendedPrice);
+  // Ensure trade direction always nudges price the expected way
+  if (isBuying && finalPrice <= currentPrice) {
+    const guaranteedLift = Math.max(clampedImpact, 0.002);
+    finalPrice = currentPrice * (1 + Math.min(guaranteedLift, maxChange));
+  } else if (!isBuying && finalPrice >= currentPrice) {
+    const guaranteedDrop = Math.min(clampedImpact, -0.002);
+    finalPrice = currentPrice * (1 + Math.max(guaranteedDrop, -maxChange));
+  }
+
+  if (isBuying) {
+    finalPrice = Math.min(finalPrice, currentPrice * (1 + maxChange));
+  } else {
+    finalPrice = Math.max(finalPrice, currentPrice * (1 - maxChange));
+  }
+
+  return Math.max(0.01, finalPrice);
 }
 
 export const buyStock = mutation({
@@ -233,22 +242,33 @@ export const sellStock = mutation({
     const company = await ctx.db.get(args.companyId);
     if (!company) throw new Error("Company not found");
 
-    let sellerId: any = userId;
-    let sellerType: "user" | "company" = "user";
-    
-    if (args.sellerType === "company") {
-      const account = await ctx.db.get(args.toAccountId);
-      if (!account || !account.companyId) throw new Error("Invalid company account");
-      sellerId = account.companyId;
+    const toAccount = await ctx.db.get(args.toAccountId);
+    if (!toAccount) throw new Error("Destination account not found");
+
+    const accountIsCompany = !!toAccount.companyId;
+    const sellerPreference = args.sellerType ?? (accountIsCompany ? "company" : "user");
+
+    let sellerId: any;
+    let sellerType: "user" | "company";
+
+    if (accountIsCompany) {
       sellerType = "company";
-      
+      sellerId = toAccount.companyId!;
+
       const access = await ctx.db
         .query("companyAccess")
         .withIndex("by_company_user", (q) =>
-          q.eq("companyId", account.companyId!).eq("userId", userId)
+          q.eq("companyId", toAccount.companyId!).eq("userId", userId)
         )
         .first();
       if (!access) throw new Error("No access to this company");
+    } else {
+      if (sellerPreference === "company") {
+        throw new Error("Selected account is not associated with a company");
+      }
+
+      sellerType = "user";
+      sellerId = userId;
     }
 
     // OPTIMIZED: Use compound index to avoid filter after withIndex
@@ -289,10 +309,6 @@ export const sellStock = mutation({
     if (companyBalance < proceeds) {
       throw new Error("Company does not have enough liquidity to complete this sale");
     }
-
-    // Get destination account
-    const toAccount = await ctx.db.get(args.toAccountId);
-    if (!toAccount) throw new Error("Destination account not found");
 
     // Get cached balances
     const toBalance = toAccount.balance ?? 0;
