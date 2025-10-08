@@ -7,3 +7,4 @@ export { MarketplaceTab } from "./marketplace-tab";
 export { StockMarketTab } from "./stock-market-tab";
 export { CompanyDashboard } from "./company-dashboard";
 export { CollectionsTab } from "./collections-tab";
+export { GambleTab } from "./gamble-tab";

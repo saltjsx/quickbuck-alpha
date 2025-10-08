@@ -24,7 +24,9 @@ export default defineSchema({
       v.literal("stock_purchase"),
       v.literal("stock_sale"),
       v.literal("marketplace_batch"),
-      v.literal("expense")
+      v.literal("expense"),
+      v.literal("gamble"),
+      v.literal("gamble_payout")
     ),
     description: v.optional(v.string()),
     productId: v.optional(v.id("products")),
@@ -61,6 +63,24 @@ export default defineSchema({
     lastUpdated: v.number(),
   })
     .index("by_account", ["accountId"]),
+
+  gambles: defineTable({
+    userId: v.id("users"),
+    accountId: v.id("accounts"),
+    game: v.union(
+      v.literal("slots"),
+      v.literal("blackjack"),
+      v.literal("roulette")
+    ),
+    bet: v.number(),
+    payout: v.number(),
+    net: v.number(),
+    outcome: v.string(),
+    details: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_created", ["userId", "createdAt"]),
 
   companies: defineTable({
     name: v.string(),

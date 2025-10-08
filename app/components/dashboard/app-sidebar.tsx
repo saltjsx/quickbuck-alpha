@@ -9,6 +9,7 @@ import {
   IconShoppingBag,
   IconTrendingUp,
   IconWallet,
+  IconDice5,
 } from "@tabler/icons-react";
 import { Link } from "react-router";
 import { UserButton } from "@clerk/react-router";
@@ -69,6 +70,11 @@ const data = {
       title: "Portfolio",
       url: "/dashboard/portfolio",
       icon: IconTrendingUp,
+    },
+    {
+      title: "Gamble",
+      url: "/dashboard/gamble",
+      icon: IconDice5,
     },
   ],
 };
