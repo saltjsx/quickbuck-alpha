@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { api } from "../../../convex/_generated/api";
@@ -112,6 +112,18 @@ const rouletteColorLabels: Record<
   green: { label: "Zero", swatch: "bg-emerald-500" },
 };
 
+const SLOT_EMOJIS = ["🍒", "🍋", "🔔", "⭐", "🍀", "7️⃣", "💎"] as const;
+const DEFAULT_SLOT_REELS = SLOT_EMOJIS.slice(0, 3);
+const SLOT_SPIN_DURATION_MS = 3000;
+const SLOT_SPIN_INTERVAL_MS = 90;
+
+function getRandomSlotReels(): string[] {
+  return Array.from({ length: 3 }, () => {
+    const index = Math.floor(Math.random() * SLOT_EMOJIS.length);
+    return SLOT_EMOJIS[index];
+  });
+}
+
 export function GambleTab() {
   const personalAccount = useQuery(api.accounts.getPersonalAccount);
   const history = useQuery(api.gamble.getRecentGambleHistory, { limit: 10 });
@@ -133,6 +145,9 @@ export function GambleTab() {
   const [isBlackjackLoading, setIsBlackjackLoading] = useState(false);
   const [isRouletteLoading, setIsRouletteLoading] = useState(false);
 
+  const [slotDisplay, setSlotDisplay] = useState<string[]>(() =>
+    DEFAULT_SLOT_REELS.slice()
+  );
   const [slotResult, setSlotResult] = useState<SlotResult | null>(null);
   const [blackjackState, setBlackjackState] = useState<BlackjackState | null>(
     null
@@ -142,6 +157,13 @@ export function GambleTab() {
   );
   const [isHitLoading, setIsHitLoading] = useState(false);
   const [isStandLoading, setIsStandLoading] = useState(false);
+
+  const slotSpinIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+    null
+  );
+  const slotRevealTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
 
   const minBet = 10;
   const maxBet = 10000;
@@ -196,12 +218,54 @@ export function GambleTab() {
     return Math.round(bet * 100) / 100;
   };
 
+  const stopSlotAnimation = () => {
+    if (slotSpinIntervalRef.current !== null) {
+      clearInterval(slotSpinIntervalRef.current);
+      slotSpinIntervalRef.current = null;
+    }
+    if (slotRevealTimeoutRef.current !== null) {
+      clearTimeout(slotRevealTimeoutRef.current);
+      slotRevealTimeoutRef.current = null;
+    }
+  };
+
+  const startSlotAnimation = () => {
+    stopSlotAnimation();
+    setSlotDisplay(getRandomSlotReels());
+    slotSpinIntervalRef.current = setInterval(() => {
+      setSlotDisplay(getRandomSlotReels());
+    }, SLOT_SPIN_INTERVAL_MS);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (slotSpinIntervalRef.current !== null) {
+        clearInterval(slotSpinIntervalRef.current);
+        slotSpinIntervalRef.current = null;
+      }
+      if (slotRevealTimeoutRef.current !== null) {
+        clearTimeout(slotRevealTimeoutRef.current);
+        slotRevealTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   const handleSlotSpin = async () => {
     try {
       const bet = ensureValidBet(slotBet);
       setIsSlotsLoading(true);
-      const result = await playSlots({ bet });
-      setSlotResult(result as SlotResult);
+      startSlotAnimation();
+      const resultPromise = playSlots({ bet }) as Promise<SlotResult>;
+      const delayPromise = new Promise<void>((resolve) => {
+        slotRevealTimeoutRef.current = setTimeout(() => {
+          slotRevealTimeoutRef.current = null;
+          resolve();
+        }, SLOT_SPIN_DURATION_MS);
+      });
+      const [result] = await Promise.all([resultPromise, delayPromise]);
+      stopSlotAnimation();
+      setSlotResult(result);
+      setSlotDisplay(result.reels);
       toast({
         title:
           result.outcome === "lose" ? "No luck this time" : "Spin complete!",
@@ -213,6 +277,10 @@ export function GambleTab() {
             : `You earned ${formatCurrency(result.net)} on that spin.`,
       });
     } catch (error: any) {
+      stopSlotAnimation();
+      setSlotDisplay(
+        slotResult ? slotResult.reels : DEFAULT_SLOT_REELS.slice()
+      );
       toast({
         title: "Slot spin failed",
         description: error.message || "Unable to spin right now",
@@ -486,41 +554,54 @@ export function GambleTab() {
             >
               {isSlotsLoading ? "Spinning..." : "Spin the reels"}
             </Button>
-            {slotResult && (
+            {(slotResult || isSlotsLoading) && (
               <div className="space-y-3 rounded-md border bg-muted/30 p-3 text-center">
-                <div className="text-3xl tracking-[0.35em] font-semibold">
-                  {slotResult.reels.join(" ")}
+                <div
+                  className={`text-3xl tracking-[0.35em] font-semibold transition-all ${
+                    isSlotsLoading ? "animate-pulse" : ""
+                  }`}
+                >
+                  {slotDisplay.join(" ")}
                 </div>
-                <div className="flex items-center justify-center gap-2 text-sm">
-                  <Badge
-                    variant={
-                      slotResult.outcome === "win" ? "default" : "secondary"
-                    }
-                  >
-                    {slotResult.outcome === "win"
-                      ? `Multiplier x${slotResult.multiplier}`
-                      : slotResult.outcome === "push"
-                      ? "Break-even"
-                      : "House wins"}
-                  </Badge>
-                  {slotResult.houseEdgeApplied &&
-                    slotResult.payout > slotResult.bet && (
-                      <span className="text-muted-foreground text-xs">
-                        Rake skimmed{" "}
-                        {formatCurrency(
-                          Math.max(
-                            0,
-                            slotResult.multiplier * slotResult.bet -
-                              slotResult.payout
-                          )
+                {isSlotsLoading && (
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                    Spinning the reels...
+                  </p>
+                )}
+                {slotResult && !isSlotsLoading && (
+                  <>
+                    <div className="flex items-center justify-center gap-2 text-sm">
+                      <Badge
+                        variant={
+                          slotResult.outcome === "win" ? "default" : "secondary"
+                        }
+                      >
+                        {slotResult.outcome === "win"
+                          ? `Multiplier x${slotResult.multiplier}`
+                          : slotResult.outcome === "push"
+                          ? "Break-even"
+                          : "House wins"}
+                      </Badge>
+                      {slotResult.houseEdgeApplied &&
+                        slotResult.payout > slotResult.bet && (
+                          <span className="text-muted-foreground text-xs">
+                            Rake skimmed{" "}
+                            {formatCurrency(
+                              Math.max(
+                                0,
+                                slotResult.multiplier * slotResult.bet -
+                                  slotResult.payout
+                              )
+                            )}
+                          </span>
                         )}
-                      </span>
-                    )}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Net result: {formatCurrency(slotResult.net)} · New balance:{" "}
-                  {formatCurrency(slotResult.balance)}
-                </p>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Net result: {formatCurrency(slotResult.net)} · New
+                      balance: {formatCurrency(slotResult.balance)}
+                    </p>
+                  </>
+                )}
               </div>
             )}
           </CardContent>
