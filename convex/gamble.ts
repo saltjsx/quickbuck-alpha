@@ -1,4 +1,5 @@
 import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 
 const MIN_BET = 10;
@@ -15,6 +16,55 @@ const SLOT_PAYOUTS: Record<string, number> = {
   "🍀🍀🍀": 12,
   "7️⃣7️⃣7️⃣": 16,
   "💎💎💎": 24,
+};
+
+type Card = { label: string; value: number };
+type BlackjackClientCard = Card & { hidden?: boolean };
+type BlackjackAction = "deal" | "hit" | "stand" | "auto_stand" | "bust";
+
+type BlackjackActiveState = {
+  status: "player_turn";
+  gameId: Id<"gambles">;
+  bet: number;
+  playerHand: BlackjackClientCard[];
+  dealerHand: BlackjackClientCard[];
+  playerTotal: number;
+  dealerTotal: null;
+  canHit: boolean;
+  canStand: boolean;
+  balance: number;
+  actions: BlackjackAction[];
+};
+
+type BlackjackFinishedState = {
+  status: "finished";
+  gameId: Id<"gambles">;
+  bet: number;
+  playerHand: Card[];
+  dealerHand: Card[];
+  playerTotal: number;
+  dealerTotal: number;
+  payout: number;
+  net: number;
+  outcome: string;
+  balance: number;
+  houseEdgeApplied: boolean;
+  actions: BlackjackAction[];
+};
+
+type BlackjackState = BlackjackActiveState | BlackjackFinishedState;
+
+type BlackjackStateDoc = {
+  _id: Id<"blackjackStates">;
+  gameId: Id<"gambles">;
+  userId: Id<"users">;
+  accountId: Id<"accounts">;
+  bet: number;
+  deck: Card[];
+  playerHand: Card[];
+  dealerHand: Card[];
+  actions: BlackjackAction[];
+  createdAt: number;
 };
 
 const DECK_RANKS = [
@@ -75,7 +125,7 @@ const ROULETTE_COLORS: Record<number, "red" | "black" | "green"> = {
   36: "red",
 };
 
-async function getCurrentUserId(ctx: any) {
+async function getCurrentUserId(ctx: any): Promise<Id<"users"> | null> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) return null;
 
@@ -84,7 +134,7 @@ async function getCurrentUserId(ctx: any) {
     .withIndex("by_token", (q: any) => q.eq("tokenIdentifier", identity.subject))
     .unique();
 
-  return user?._id || null;
+  return user ? (user._id as Id<"users">) : null;
 }
 
 async function getPersonalAccount(ctx: any, userId: string) {
@@ -207,12 +257,10 @@ function buildDeck() {
 
 function drawCard(deck: { label: string; value: number }[]) {
   if (deck.length === 0) throw new Error("Deck exhausted");
-  const index = Math.floor(Math.random() * deck.length);
-  const [card] = deck.splice(index, 1);
-  return card;
+  return deck.pop()!;
 }
 
-function handValue(cards: { label: string; value: number }[]) {
+function handValue(cards: Card[]) {
   let total = 0;
   let aces = 0;
   for (const card of cards) {
@@ -228,10 +276,195 @@ function handValue(cards: { label: string; value: number }[]) {
   return total;
 }
 
-function isSoft17(cards: { label: string; value: number }[]) {
+function isSoft17(cards: Card[]) {
   const total = handValue(cards);
   if (total !== 17) return false;
   return cards.some((card) => card.label.startsWith("A"));
+}
+
+function dealerShouldDraw(cards: Card[]) {
+  const total = handValue(cards);
+  if (total < 17) return true;
+  return total === 17 && isSoft17(cards);
+}
+
+function concealedDealerHand(hand: Card[], reveal: boolean): BlackjackClientCard[] {
+  if (reveal) {
+    return hand;
+  }
+  if (hand.length === 0) {
+    return hand;
+  }
+  return [hand[0], ...hand.slice(1).map(() => ({ label: "??", value: 0, hidden: true }))];
+}
+
+function toActiveState({
+  gameId,
+  bet,
+  playerHand,
+  dealerHand,
+  balance,
+  actions,
+}: {
+  gameId: Id<"gambles">;
+  bet: number;
+  playerHand: Card[];
+  dealerHand: Card[];
+  balance: number;
+  actions: BlackjackAction[];
+}): BlackjackActiveState {
+  const playerTotal = handValue(playerHand);
+  return {
+    status: "player_turn",
+    gameId,
+    bet,
+    playerHand: playerHand.map((card) => ({ ...card })),
+    dealerHand: concealedDealerHand(dealerHand, false),
+    playerTotal,
+    dealerTotal: null,
+    canHit: playerTotal < 21,
+    canStand: true,
+    balance,
+    actions,
+  };
+}
+
+async function loadBlackjackState(
+  ctx: any,
+  gameId: Id<"gambles">,
+  userId: Id<"users">
+): Promise<BlackjackStateDoc> {
+  const state = await ctx.db
+    .query("blackjackStates")
+    .withIndex("by_game", (q: any) => q.eq("gameId", gameId))
+    .unique();
+
+  if (!state) {
+    throw new Error("No active blackjack hand found");
+  }
+
+  if (state.userId !== userId) {
+    throw new Error("This blackjack hand belongs to another player");
+  }
+
+  return state as BlackjackStateDoc;
+}
+
+async function resolveBlackjackRound({
+  ctx,
+  gameId,
+  bet,
+  accountId,
+  casinoAccountId,
+  playerHand,
+  dealerHand,
+  actions,
+  stateId,
+}: {
+  ctx: any;
+  gameId: Id<"gambles">;
+  bet: number;
+  accountId: Id<"accounts">;
+  casinoAccountId: Id<"accounts">;
+  playerHand: Card[];
+  dealerHand: Card[];
+  actions: BlackjackAction[];
+  stateId?: Id<"blackjackStates">;
+}): Promise<BlackjackFinishedState> {
+  const account = await ctx.db.get(accountId);
+  if (!account) throw new Error("Player account missing");
+  const casinoAccount = await ctx.db.get(casinoAccountId);
+  if (!casinoAccount) throw new Error("Casino account missing");
+
+  let playerBalance = account.balance ?? 0;
+  let houseBalance = casinoAccount.balance ?? 0;
+
+  const playerTotal = handValue(playerHand);
+  const dealerTotal = handValue(dealerHand);
+
+  const playerBlackjack = playerHand.length === 2 && playerTotal === 21;
+  const dealerBlackjack = dealerHand.length === 2 && dealerTotal === 21;
+
+  let rawPayout = 0;
+  let outcome: string;
+
+  if (playerTotal > 21) {
+    outcome = "bust";
+  } else if (dealerTotal > 21) {
+    rawPayout = bet * 2;
+    outcome = "dealer_bust";
+  } else if (playerBlackjack && !dealerBlackjack) {
+    rawPayout = bet * 2.5;
+    outcome = "blackjack";
+  } else if (playerBlackjack && dealerBlackjack) {
+    rawPayout = bet;
+    outcome = "push";
+  } else if (dealerBlackjack && !playerBlackjack) {
+    outcome = "dealer_blackjack";
+  } else if (playerTotal > dealerTotal) {
+    rawPayout = bet * 2;
+    outcome = "win";
+  } else if (playerTotal === dealerTotal) {
+    rawPayout = bet;
+    outcome = "push";
+  } else {
+    outcome = "lose";
+  }
+
+  const payout = rawPayout > 0 ? applyHouseEdge(rawPayout, bet) : 0;
+
+  if (payout > 0) {
+    houseBalance -= payout;
+    playerBalance += payout;
+    await ctx.db.patch(casinoAccountId, { balance: houseBalance });
+    await ctx.db.patch(accountId, { balance: playerBalance });
+    await recordLedger(
+      ctx,
+      casinoAccountId,
+      accountId,
+      payout,
+      "Blackjack payout",
+      "gamble_payout"
+    );
+  }
+
+  const net = payout - bet;
+  const houseEdgeApplied = payout > bet;
+
+  const detailPayload = {
+    playerHand,
+    dealerHand,
+    playerTotal,
+    dealerTotal,
+    actions,
+  };
+
+  await ctx.db.patch(gameId, {
+    payout,
+    net,
+    outcome,
+    details: JSON.stringify(detailPayload),
+  });
+
+  if (stateId) {
+    await ctx.db.delete(stateId);
+  }
+
+  return {
+    status: "finished",
+    gameId,
+    bet,
+    playerHand,
+    dealerHand,
+    playerTotal,
+    dealerTotal,
+    payout,
+    net,
+    outcome,
+    balance: playerBalance,
+    houseEdgeApplied,
+    actions,
+  };
 }
 
 function clampRouletteNumber(value: number) {
@@ -330,97 +563,175 @@ export const playBlackjack = mutation({
     if (balance < bet) throw new Error("Insufficient funds");
 
     const casinoAccount = await getCasinoAccount(ctx, userId);
-    let playerBalance = balance - bet;
-    let houseBalance = (casinoAccount.balance ?? 0) + bet;
+    const playerBalance = balance - bet;
+    const houseBalance = (casinoAccount.balance ?? 0) + bet;
 
     await ctx.db.patch(account._id, { balance: playerBalance });
     await ctx.db.patch(casinoAccount._id, { balance: houseBalance });
     await recordLedger(ctx, account._id, casinoAccount._id, bet, "Blackjack wager", "gamble");
 
-    const deck = buildDeck();
-    const playerHand = [drawCard(deck), drawCard(deck)];
-    const dealerHand = [drawCard(deck), drawCard(deck)];
+    let deck = buildDeck();
+    const playerHand: Card[] = [drawCard(deck), drawCard(deck)];
+    const dealerHand: Card[] = [drawCard(deck), drawCard(deck)];
+    const actions: BlackjackAction[] = ["deal"];
 
-    while (handValue(playerHand) < 16) {
-      playerHand.push(drawCard(deck));
-    }
-
-    while (handValue(dealerHand) < 17 || isSoft17(dealerHand)) {
-      dealerHand.push(drawCard(deck));
-    }
-
-    const playerTotal = handValue(playerHand);
-    const dealerTotal = handValue(dealerHand);
-
-    const playerBlackjack = playerHand.length === 2 && playerTotal === 21;
-    const dealerBlackjack = dealerHand.length === 2 && dealerTotal === 21;
-
-    let rawPayout = 0;
-    let outcome: string;
-
-    if (playerTotal > 21) {
-      outcome = "bust";
-    } else if (dealerTotal > 21) {
-      rawPayout = bet * 2;
-      outcome = "dealer_bust";
-    } else if (playerBlackjack && !dealerBlackjack) {
-      rawPayout = bet * 2.5;
-      outcome = "blackjack";
-    } else if (playerBlackjack && dealerBlackjack) {
-      rawPayout = bet;
-      outcome = "push";
-    } else if (dealerBlackjack) {
-      outcome = "dealer_blackjack";
-    } else if (playerTotal > dealerTotal) {
-      rawPayout = bet * 2;
-      outcome = "win";
-    } else if (playerTotal === dealerTotal) {
-      rawPayout = bet;
-      outcome = "push";
-    } else {
-      outcome = "lose";
-    }
-
-    const payout = rawPayout > 0 ? applyHouseEdge(rawPayout, bet) : 0;
-
-    if (payout > 0) {
-      houseBalance -= payout;
-      playerBalance += payout;
-      await ctx.db.patch(casinoAccount._id, { balance: houseBalance });
-      await ctx.db.patch(account._id, { balance: playerBalance });
-      await recordLedger(ctx, casinoAccount._id, account._id, payout, "Blackjack payout", "gamble_payout");
-    }
-
-    const net = payout - bet;
-
-    await recordGame(ctx, {
+    const gameId = await ctx.db.insert("gambles", {
       userId,
       accountId: account._id,
       game: "blackjack",
       bet,
-      payout,
-      net,
-      outcome,
-      details: {
-        playerHand,
-        dealerHand,
-        playerTotal,
-        dealerTotal,
-      },
+      payout: 0,
+      net: -bet,
+      outcome: "in_progress",
+      createdAt: Date.now(),
     });
 
-    return {
+    const playerBlackjack = handValue(playerHand) === 21;
+    const dealerBlackjack = handValue(dealerHand) === 21;
+
+    if (playerBlackjack || dealerBlackjack) {
+      return await resolveBlackjackRound({
+        ctx,
+        gameId,
+        bet,
+        accountId: account._id,
+        casinoAccountId: casinoAccount._id,
+        playerHand,
+        dealerHand,
+        actions,
+      });
+    }
+
+    await ctx.db.insert("blackjackStates", {
+      gameId,
+      userId,
+      accountId: account._id,
+      bet,
+      deck,
+      playerHand,
+      dealerHand,
+      actions,
+      createdAt: Date.now(),
+    });
+
+    return toActiveState({
+      gameId,
       bet,
       playerHand,
       dealerHand,
-      playerTotal,
-      dealerTotal,
-      payout,
-      net,
-      outcome,
       balance: playerBalance,
-      houseEdgeApplied: payout > bet,
-    };
+      actions,
+    });
+  },
+});
+
+export const blackjackHit = mutation({
+  args: { gameId: v.id("gambles") },
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const state = await loadBlackjackState(ctx, args.gameId, userId);
+
+    let deck = [...state.deck];
+    if (deck.length === 0) {
+      deck = buildDeck();
+    }
+
+    const playerHand = [...state.playerHand];
+    playerHand.push(drawCard(deck));
+
+    const actionsAfterHit = [...state.actions, "hit"] as BlackjackAction[];
+    const playerTotal = handValue(playerHand);
+
+    if (playerTotal > 21) {
+      const casinoAccount = await getCasinoAccount(ctx, userId);
+      return await resolveBlackjackRound({
+        ctx,
+        gameId: state.gameId,
+        bet: state.bet,
+        accountId: state.accountId,
+        casinoAccountId: casinoAccount._id,
+        playerHand,
+        dealerHand: [...state.dealerHand],
+        actions: [...actionsAfterHit, "bust"] as BlackjackAction[],
+        stateId: state._id,
+      });
+    }
+
+    if (playerTotal === 21) {
+      let dealerHand = [...state.dealerHand];
+      while (dealerShouldDraw(dealerHand)) {
+        if (deck.length === 0) {
+          deck = buildDeck();
+        }
+        dealerHand.push(drawCard(deck));
+      }
+
+      const casinoAccount = await getCasinoAccount(ctx, userId);
+      return await resolveBlackjackRound({
+        ctx,
+        gameId: state.gameId,
+        bet: state.bet,
+        accountId: state.accountId,
+        casinoAccountId: casinoAccount._id,
+        playerHand,
+        dealerHand,
+        actions: [...actionsAfterHit, "auto_stand"] as BlackjackAction[],
+        stateId: state._id,
+      });
+    }
+
+    await ctx.db.patch(state._id, {
+      deck,
+      playerHand,
+      actions: actionsAfterHit,
+    });
+
+    const account = await ctx.db.get(state.accountId);
+    const balance = account?.balance ?? 0;
+
+    return toActiveState({
+      gameId: state.gameId,
+      bet: state.bet,
+      playerHand,
+      dealerHand: state.dealerHand,
+      balance,
+      actions: actionsAfterHit,
+    });
+  },
+});
+
+export const blackjackStand = mutation({
+  args: { gameId: v.id("gambles") },
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const state = await loadBlackjackState(ctx, args.gameId, userId);
+
+    let deck = [...state.deck];
+    let dealerHand = [...state.dealerHand];
+    while (dealerShouldDraw(dealerHand)) {
+      if (deck.length === 0) {
+        deck = buildDeck();
+      }
+      dealerHand.push(drawCard(deck));
+    }
+
+    const casinoAccount = await getCasinoAccount(ctx, userId);
+
+    return await resolveBlackjackRound({
+      ctx,
+      gameId: state.gameId,
+      bet: state.bet,
+      accountId: state.accountId,
+      casinoAccountId: casinoAccount._id,
+      playerHand: [...state.playerHand],
+      dealerHand,
+      actions: [...state.actions, "stand"] as BlackjackAction[],
+      stateId: state._id,
+    });
   },
 });
 
@@ -534,9 +845,11 @@ export const getRecentGambleHistory = query({
       .order("desc")
       .take(limit);
 
-    return history.map((entry: any) => ({
-      ...entry,
-      details: entry.details ? JSON.parse(entry.details) : undefined,
-    }));
+    return history
+      .filter((entry: any) => entry.outcome !== "in_progress")
+      .map((entry: any) => ({
+        ...entry,
+        details: entry.details ? JSON.parse(entry.details) : undefined,
+      }));
   },
 });

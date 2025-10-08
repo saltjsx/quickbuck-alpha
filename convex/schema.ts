@@ -82,6 +82,35 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_created", ["userId", "createdAt"]),
 
+  blackjackStates: defineTable({
+    gameId: v.id("gambles"),
+    userId: v.id("users"),
+    accountId: v.id("accounts"),
+    bet: v.number(),
+    deck: v.array(
+      v.object({
+        label: v.string(),
+        value: v.number(),
+      })
+    ),
+    playerHand: v.array(
+      v.object({
+        label: v.string(),
+        value: v.number(),
+      })
+    ),
+    dealerHand: v.array(
+      v.object({
+        label: v.string(),
+        value: v.number(),
+      })
+    ),
+    actions: v.array(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_game", ["gameId"]),
+
   companies: defineTable({
     name: v.string(),
     description: v.optional(v.string()),

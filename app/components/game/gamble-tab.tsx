@@ -42,10 +42,29 @@ type SlotResult = {
   houseEdgeApplied: boolean;
 };
 
-type BlackjackResult = {
+type BlackjackClientCard = { label: string; value: number; hidden?: boolean };
+type BlackjackAction = "deal" | "hit" | "stand" | "auto_stand" | "bust";
+
+type BlackjackActiveState = {
+  status: "player_turn";
+  gameId: Id<"gambles">;
   bet: number;
-  playerHand: { label: string; value: number }[];
-  dealerHand: { label: string; value: number }[];
+  playerHand: BlackjackClientCard[];
+  dealerHand: BlackjackClientCard[];
+  playerTotal: number;
+  dealerTotal: null;
+  canHit: boolean;
+  canStand: boolean;
+  balance: number;
+  actions: BlackjackAction[];
+};
+
+type BlackjackFinishedState = {
+  status: "finished";
+  gameId: Id<"gambles">;
+  bet: number;
+  playerHand: BlackjackClientCard[];
+  dealerHand: BlackjackClientCard[];
   playerTotal: number;
   dealerTotal: number;
   payout: number;
@@ -53,7 +72,10 @@ type BlackjackResult = {
   outcome: string;
   balance: number;
   houseEdgeApplied: boolean;
+  actions: BlackjackAction[];
 };
+
+type BlackjackState = BlackjackActiveState | BlackjackFinishedState;
 
 type RouletteResult = {
   bet: number;
@@ -96,6 +118,8 @@ export function GambleTab() {
 
   const playSlots = useMutation(api.gamble.playSlotMachine);
   const playBlackjack = useMutation(api.gamble.playBlackjack);
+  const hitBlackjack = useMutation(api.gamble.blackjackHit);
+  const standBlackjack = useMutation(api.gamble.blackjackStand);
   const playRoulette = useMutation(api.gamble.playRoulette);
 
   const [slotBet, setSlotBet] = useState(100);
@@ -110,11 +134,14 @@ export function GambleTab() {
   const [isRouletteLoading, setIsRouletteLoading] = useState(false);
 
   const [slotResult, setSlotResult] = useState<SlotResult | null>(null);
-  const [blackjackResult, setBlackjackResult] =
-    useState<BlackjackResult | null>(null);
+  const [blackjackState, setBlackjackState] = useState<BlackjackState | null>(
+    null
+  );
   const [rouletteResult, setRouletteResult] = useState<RouletteResult | null>(
     null
   );
+  const [isHitLoading, setIsHitLoading] = useState(false);
+  const [isStandLoading, setIsStandLoading] = useState(false);
 
   const minBet = 10;
   const maxBet = 10000;
@@ -136,7 +163,11 @@ export function GambleTab() {
           typeof details.playerTotal === "number" &&
           typeof details.dealerTotal === "number"
         ) {
-          return `You ${details.playerTotal} · Dealer ${details.dealerTotal}`;
+          const actions =
+            Array.isArray(details.actions) && details.actions.length > 0
+              ? ` · Moves: ${details.actions.join(" → ")}`
+              : "";
+          return `You ${details.playerTotal} · Dealer ${details.dealerTotal}${actions}`;
         }
         return null;
       case "roulette":
@@ -192,19 +223,57 @@ export function GambleTab() {
     }
   };
 
+  const describeBlackjackOutcome = (state: BlackjackFinishedState) => {
+    switch (state.outcome) {
+      case "lose":
+      case "bust":
+      case "dealer_blackjack":
+        return `Dealer takes your ${formatCurrency(state.bet)}.`;
+      case "push":
+        return "Push. Your stake returns to you.";
+      case "blackjack":
+        return `Blackjack! Net profit: ${formatCurrency(state.net)}.`;
+      case "dealer_bust":
+        return `Dealer busts. Net profit: ${formatCurrency(state.net)}.`;
+      case "win":
+        return `You win ${formatCurrency(state.net)} this hand.`;
+      default:
+        return `Result: ${state.outcome.replace(
+          /_/g,
+          " "
+        )}. Net ${formatCurrency(state.net)}.`;
+    }
+  };
+
   const handleBlackjackDeal = async () => {
+    if (blackjackState?.status === "player_turn") {
+      toast({
+        title: "Finish your hand",
+        description: "Hit or stand before dealing a new one.",
+      });
+      return;
+    }
     try {
       const bet = ensureValidBet(blackjackBet);
       setIsBlackjackLoading(true);
-      const result = await playBlackjack({ bet });
-      setBlackjackResult(result as BlackjackResult);
-      const outcomeMessage =
-        result.outcome === "lose" || result.outcome === "dealer_blackjack"
-          ? `Dealer takes your ${formatCurrency(result.bet)}.`
-          : result.outcome === "push"
-          ? "Push. You get your stake back."
-          : `Nice hand! Net profit: ${formatCurrency(result.net)}.`;
-      toast({ title: "Blackjack resolved", description: outcomeMessage });
+      const result = (await playBlackjack({ bet })) as BlackjackState;
+      setBlackjackState(result);
+      if (result.status === "player_turn") {
+        const dealerUpCard = result.dealerHand[0];
+        toast({
+          title: "Cards dealt",
+          description: `You: ${result.playerHand
+            .map((card) => card.label)
+            .join(" ")} (${result.playerTotal}). Dealer shows ${
+            dealerUpCard?.hidden ? "??" : dealerUpCard?.label ?? "?"
+          }.`,
+        });
+      } else {
+        toast({
+          title: "Blackjack resolved",
+          description: describeBlackjackOutcome(result),
+        });
+      }
     } catch (error: any) {
       toast({
         title: "Could not deal",
@@ -213,6 +282,62 @@ export function GambleTab() {
       });
     } finally {
       setIsBlackjackLoading(false);
+    }
+  };
+
+  const handleBlackjackHit = async () => {
+    if (!blackjackState || blackjackState.status !== "player_turn") return;
+    try {
+      setIsHitLoading(true);
+      const result = (await hitBlackjack({
+        gameId: blackjackState.gameId,
+      })) as BlackjackState;
+      setBlackjackState(result);
+      if (result.status === "player_turn") {
+        const drawn = result.playerHand[result.playerHand.length - 1];
+        toast({
+          title: "Hit",
+          description: `You drew ${drawn.label}. Total now ${result.playerTotal}.`,
+        });
+      } else {
+        toast({
+          title: "Blackjack resolved",
+          description: describeBlackjackOutcome(result),
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Could not hit",
+        description: error.message || "Something went wrong with the shoe",
+        variant: "destructive",
+      });
+    } finally {
+      setIsHitLoading(false);
+    }
+  };
+
+  const handleBlackjackStand = async () => {
+    if (!blackjackState || blackjackState.status !== "player_turn") return;
+    try {
+      setIsStandLoading(true);
+      const result = (await standBlackjack({
+        gameId: blackjackState.gameId,
+      })) as BlackjackState;
+      setBlackjackState(result);
+      if (result.status === "finished") {
+        toast({
+          title: "Stand resolved",
+          description: describeBlackjackOutcome(result),
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Could not stand",
+        description: error.message || "Something went wrong with the shoe",
+        variant: "destructive",
+      });
+    } finally {
+      setIsStandLoading(false);
     }
   };
 
@@ -405,10 +530,10 @@ export function GambleTab() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BadgeDollarSign className="h-5 w-5 text-primary" />
-              Blackjack - Auto play
+              Blackjack
             </CardTitle>
             <CardDescription>
-              We auto-hit until 16 and the dealer plays classic house rules.
+              Make the calls yourself—hit or stand against classic house rules.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -428,20 +553,50 @@ export function GambleTab() {
                 className="mt-2"
               />
             </div>
-            <Button
-              className="w-full"
-              size="lg"
-              disabled={isBlackjackLoading}
-              onClick={handleBlackjackDeal}
-            >
-              {isBlackjackLoading ? "Dealing..." : "Deal a hand"}
-            </Button>
-            {blackjackResult && (
+            <div className="flex flex-wrap gap-3">
+              <Button
+                className="flex-1 min-w-[140px]"
+                size="lg"
+                disabled={
+                  isBlackjackLoading || blackjackState?.status === "player_turn"
+                }
+                onClick={handleBlackjackDeal}
+              >
+                {isBlackjackLoading
+                  ? "Dealing..."
+                  : blackjackState?.status === "player_turn"
+                  ? "Hand in progress"
+                  : "Deal a hand"}
+              </Button>
+              {blackjackState?.status === "player_turn" && (
+                <>
+                  <Button
+                    className="flex-1 min-w-[100px]"
+                    variant="secondary"
+                    size="lg"
+                    disabled={isHitLoading || !blackjackState.canHit}
+                    onClick={handleBlackjackHit}
+                  >
+                    {isHitLoading ? "Hitting..." : "Hit"}
+                  </Button>
+                  <Button
+                    className="flex-1 min-w-[100px]"
+                    size="lg"
+                    disabled={isStandLoading || !blackjackState.canStand}
+                    onClick={handleBlackjackStand}
+                  >
+                    {isStandLoading ? "Standing..." : "Stand"}
+                  </Button>
+                </>
+              )}
+            </div>
+
+            {blackjackState?.status === "player_turn" && (
               <div className="space-y-4 rounded-md border bg-muted/30 p-3">
                 <div>
                   <p className="text-xs uppercase text-muted-foreground">You</p>
                   <div className="flex flex-wrap gap-2 mt-1">
-                    {blackjackResult.playerHand.map((card, index) => (
+                    {blackjackState.playerHand.map((card, index) => (
                       <Badge
                         key={`${card.label}-${index}`}
                         variant="outline"
@@ -452,7 +607,7 @@ export function GambleTab() {
                     ))}
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Total: {blackjackResult.playerTotal}
+                    Total: {blackjackState.playerTotal}
                   </p>
                 </div>
                 <Separator />
@@ -461,7 +616,60 @@ export function GambleTab() {
                     Dealer
                   </p>
                   <div className="flex flex-wrap gap-2 mt-1">
-                    {blackjackResult.dealerHand.map((card, index) => (
+                    {blackjackState.dealerHand.map((card, index) => (
+                      <Badge
+                        key={`${card.label}-${index}`}
+                        variant="secondary"
+                        className={`text-base ${
+                          card.hidden ? "opacity-60" : ""
+                        }`}
+                      >
+                        {card.hidden ? "??" : card.label}
+                      </Badge>
+                    ))}
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Total: ??
+                  </p>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Moves: {blackjackState.actions.join(" → ")}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Bet: {formatCurrency(blackjackState.bet)}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Balance after bet: {formatCurrency(blackjackState.balance)}
+                </div>
+              </div>
+            )}
+
+            {blackjackState?.status === "finished" && (
+              <div className="space-y-4 rounded-md border bg-muted/30 p-3">
+                <div>
+                  <p className="text-xs uppercase text-muted-foreground">You</p>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {blackjackState.playerHand.map((card, index) => (
+                      <Badge
+                        key={`${card.label}-${index}`}
+                        variant="outline"
+                        className="text-base"
+                      >
+                        {card.label}
+                      </Badge>
+                    ))}
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Total: {blackjackState.playerTotal}
+                  </p>
+                </div>
+                <Separator />
+                <div>
+                  <p className="text-xs uppercase text-muted-foreground">
+                    Dealer
+                  </p>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {blackjackState.dealerHand.map((card, index) => (
                       <Badge
                         key={`${card.label}-${index}`}
                         variant="secondary"
@@ -472,15 +680,29 @@ export function GambleTab() {
                     ))}
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Total: {blackjackResult.dealerTotal}
+                    Total: {blackjackState.dealerTotal}
                   </p>
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  Result: {blackjackResult.outcome.replace(/_/g, " ")} · Net{" "}
-                  {formatCurrency(blackjackResult.net)}
+                  Result: {blackjackState.outcome.replace(/_/g, " ")} · Net{" "}
+                  {formatCurrency(blackjackState.net)}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  New balance: {formatCurrency(blackjackResult.balance)}
+                  New balance: {formatCurrency(blackjackState.balance)}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Moves: {blackjackState.actions.join(" → ")}
+                </div>
+                {blackjackState.houseEdgeApplied && (
+                  <div className="text-xs text-muted-foreground">
+                    House rake applied to your winnings.
+                  </div>
+                )}
+                <div className="text-xs text-muted-foreground">
+                  Bet: {formatCurrency(blackjackState.bet)}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Payout: {formatCurrency(blackjackState.payout)}
                 </div>
               </div>
             )}
