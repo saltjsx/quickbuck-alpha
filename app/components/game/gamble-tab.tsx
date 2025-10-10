@@ -166,7 +166,6 @@ export function GambleTab() {
   );
 
   const minBet = 10;
-  const maxBet = 10000;
 
   const balance = personalAccount?.balance ?? 0;
 
@@ -211,9 +210,6 @@ export function GambleTab() {
     }
     if (bet < minBet) {
       throw new Error(`Minimum bet is $${minBet}`);
-    }
-    if (bet > maxBet) {
-      throw new Error(`Maximum bet is $${maxBet}`);
     }
     return Math.round(bet * 100) / 100;
   };
@@ -539,7 +535,6 @@ export function GambleTab() {
               <Input
                 type="number"
                 min={minBet}
-                max={maxBet}
                 step="10"
                 value={slotBet}
                 onChange={(event) => setSlotBet(Number(event.target.value))}
@@ -625,7 +620,6 @@ export function GambleTab() {
               <Input
                 type="number"
                 min={minBet}
-                max={maxBet}
                 step="25"
                 value={blackjackBet}
                 onChange={(event) =>
@@ -808,7 +802,6 @@ export function GambleTab() {
               <Input
                 type="number"
                 min={minBet}
-                max={maxBet}
                 step="10"
                 value={rouletteBet}
                 onChange={(event) => setRouletteBet(Number(event.target.value))}

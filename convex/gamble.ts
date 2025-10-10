@@ -3,7 +3,7 @@ import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 
 const MIN_BET = 10;
-const MAX_BET = 10000;
+// Maximum bet limit removed - platform allows larger wagers. Keep a minimum to avoid dust bets.
 const HOUSE_EDGE = 0.04; // 4% rake on winning payouts keeps things slightly unfair
 
 const SLOT_SYMBOLS = ["🍒", "🍋", "🔔", "⭐", "🍀", "7️⃣", "💎"];
@@ -216,9 +216,7 @@ function ensureBet(bet: number) {
   if (normalized < MIN_BET) {
     throw new Error(`Minimum bet is $${MIN_BET}`);
   }
-  if (normalized > MAX_BET) {
-    throw new Error(`Maximum bet is $${MAX_BET}`);
-  }
+  // No maximum enforced on server side. Allow larger wagers as requested.
   return normalized;
 }
 
