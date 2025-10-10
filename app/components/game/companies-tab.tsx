@@ -7,6 +7,7 @@ import {
 } from "~/components/ui/card";
 import { CreateCompanyDialog } from "./create-company-dialog";
 import { CreateProductDialog } from "./create-product-dialog";
+import { DistributeDividendDialog } from "./distribute-dividend-dialog";
 import type { FunctionReturnType } from "convex/server";
 import type { api } from "../../../convex/_generated/api";
 
@@ -78,6 +79,14 @@ export function CompaniesTab({ companies }: CompaniesTabProps) {
                 </div>
                 <div className="flex items-center gap-2">
                   <CreateProductDialog companyId={company._id} />
+                  {company.role === "owner" && company.isPublic && (
+                    <DistributeDividendDialog
+                      companyId={company._id}
+                      companyName={company.name}
+                      companyBalance={company.balance}
+                      companyOwnerId={company.ownerId}
+                    />
+                  )}
                   {company.balance > 50000 && !company.isPublic && (
                     <p className="text-sm text-green-600">
                       ✨ Eligible for stock market listing!
