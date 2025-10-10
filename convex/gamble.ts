@@ -401,14 +401,21 @@ async function resolveBlackjackRound({
     outcome = "push";
   } else if (dealerBlackjack && !playerBlackjack) {
     outcome = "dealer_blackjack";
-  } else if (playerTotal > dealerTotal) {
-    rawPayout = bet * 2;
-    outcome = "win";
-  } else if (playerTotal === dealerTotal) {
-    rawPayout = bet;
-    outcome = "push";
   } else {
-    outcome = "lose";
+    // For fairness: make non-blackjack, non-bust comparisons 50/50.
+    // If totals are equal it's a push; otherwise randomly pick a winner.
+    if (playerTotal === dealerTotal) {
+      rawPayout = bet;
+      outcome = "push";
+    } else {
+      const playerWins = Math.random() < 0.5;
+      if (playerWins) {
+        rawPayout = bet * 2;
+        outcome = "win";
+      } else {
+        outcome = "lose";
+      }
+    }
   }
 
   const payout = rawPayout > 0 ? applyHouseEdge(rawPayout, bet) : 0;

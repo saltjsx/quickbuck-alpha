@@ -22,6 +22,7 @@
       "routes/dashboard/stocks.$companyId": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/dashboard/stocks": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/dashboard/portfolio": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/dashboard/gamble": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/dashboard/transactions": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/dashboard/history": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0"
     },
@@ -146,6 +147,15 @@
           "runtime": "nodejs"
         }
       },
+      "routes/dashboard/gamble": {
+        "id": "routes/dashboard/gamble",
+        "parentId": "routes/dashboard/layout",
+        "file": "app/routes/dashboard/gamble.tsx",
+        "path": "dashboard/gamble",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
       "routes/dashboard/transactions": {
         "id": "routes/dashboard/transactions",
         "parentId": "routes/dashboard/layout",
@@ -259,6 +269,12 @@
         "parentId": "routes/dashboard/layout",
         "file": "routes/dashboard/portfolio.tsx",
         "path": "dashboard/portfolio"
+      },
+      "routes/dashboard/gamble": {
+        "id": "routes/dashboard/gamble",
+        "parentId": "routes/dashboard/layout",
+        "file": "routes/dashboard/gamble.tsx",
+        "path": "dashboard/gamble"
       },
       "routes/dashboard/transactions": {
         "id": "routes/dashboard/transactions",
