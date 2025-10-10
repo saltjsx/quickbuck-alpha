@@ -22,11 +22,21 @@ function calculateNewPrice(
   fairValue: number
 ): number {
   const liquidity = Math.max(totalShares, 1);
-  const tradeRatio = Math.min(sharesTraded / liquidity, 0.03); // cap position impact at 3%
-
+  // Calculate actual trade ratio without artificial cap
+  const tradeRatio = sharesTraded / liquidity;
+  
+  // Apply square root dampening to make large trades have proportionally larger impact
+  // but prevent extreme price swings
+  const dampened = Math.sqrt(tradeRatio) * Math.sign(tradeRatio);
+  
   const direction = isBuying ? 1 : -1;
-  const rawImpact = direction * tradeRatio * 0.6; // translate trade ratio into a gentle swing
-  const maxChange = 0.02;
+  // Scale the impact based on trade size with better curve
+  const rawImpact = direction * dampened * 0.5;
+  
+  // Dynamic max change based on trade size - larger trades can move price more
+  const baseMaxChange = 0.02;
+  const tradeMultiplier = Math.min(tradeRatio * 2, 1); // Up to 2x impact for large trades
+  const maxChange = baseMaxChange + (tradeMultiplier * 0.03); // Can go up to 5% for very large trades
   const clampedImpact = Math.max(-maxChange, Math.min(maxChange, rawImpact));
 
   const adjustedPrice = currentPrice * (1 + clampedImpact);
@@ -126,6 +136,27 @@ export const buyStock = mutation({
     const company = await ctx.db.get(args.companyId);
     if (!company) throw new Error("Company not found");
     if (!company.isPublic) throw new Error("Company is not publicly traded");
+    
+    // ANTI-EXPLOIT: Rate limiting - prevent rapid-fire small trades
+    const fiveSecondsAgo = Date.now() - (5 * 1000);
+    const recentBuys = await ctx.db
+      .query("stockTransactions")
+      .withIndex("by_company_timestamp", (q) => 
+        q.eq("companyId", args.companyId).gt("timestamp", fiveSecondsAgo)
+      )
+      .filter((q) => q.eq(q.field("transactionType"), "buy"))
+      .collect();
+    
+    const buyerRecentBuys = recentBuys.filter(tx => tx.buyerId === userId);
+    if (buyerRecentBuys.length >= 3) {
+      throw new Error("Rate limit exceeded: Please wait a few seconds between trades");
+    }
+    
+    // ANTI-EXPLOIT: Minimum trade size relative to total shares
+    const minTradeSize = Math.max(1, Math.ceil(company.totalShares * 0.0001)); // 0.01% minimum
+    if (args.shares < minTradeSize && company.totalShares > 1000) {
+      throw new Error(`Minimum trade size is ${minTradeSize} shares (0.01% of total shares)`);
+    }
 
     const fromAccount = await ctx.db.get(args.fromAccountId);
     if (!fromAccount) throw new Error("Account not found");
@@ -294,6 +325,30 @@ export const sellStock = mutation({
 
     const company = await ctx.db.get(args.companyId);
     if (!company) throw new Error("Company not found");
+    
+    // ANTI-EXPLOIT: Rate limiting - prevent rapid-fire small trades
+    // Check recent transactions from this user/company for this stock
+    const fiveSecondsAgo = Date.now() - (5 * 1000);
+    const recentSells = await ctx.db
+      .query("stockTransactions")
+      .withIndex("by_company_timestamp", (q) => 
+        q.eq("companyId", args.companyId).gt("timestamp", fiveSecondsAgo)
+      )
+      .filter((q) => q.eq(q.field("transactionType"), "sell"))
+      .collect();
+    
+    // Check if this seller has made recent sells
+    const sellerRecentSells = recentSells.filter(tx => tx.buyerId === userId);
+    if (sellerRecentSells.length >= 3) {
+      throw new Error("Rate limit exceeded: Please wait a few seconds between trades");
+    }
+    
+    // ANTI-EXPLOIT: Minimum trade size relative to total shares
+    // Prevent microtrading to manipulate prices
+    const minTradeSize = Math.max(1, Math.ceil(company.totalShares * 0.0001)); // 0.01% minimum
+    if (args.shares < minTradeSize && company.totalShares > 1000) {
+      throw new Error(`Minimum trade size is ${minTradeSize} shares (0.01% of total shares)`);
+    }
 
     const toAccount = await ctx.db.get(args.toAccountId);
     if (!toAccount) throw new Error("Destination account not found");
