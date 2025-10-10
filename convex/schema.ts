@@ -26,7 +26,8 @@ export default defineSchema({
       v.literal("marketplace_batch"),
       v.literal("expense"),
       v.literal("gamble"),
-      v.literal("gamble_payout")
+      v.literal("gamble_payout"),
+      v.literal("dividend")
     ),
     description: v.optional(v.string()),
     productId: v.optional(v.id("products")),

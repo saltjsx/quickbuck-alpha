@@ -641,3 +641,166 @@ export const getCompanyDashboard = query({
     };
   },
 });
+
+// Distribute dividends to shareholders (excluding founder)
+export const distributeDividends = mutation({
+  args: {
+    companyId: v.id("companies"),
+    totalAmount: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    // Validate amount
+    if (args.totalAmount <= 0) {
+      throw new Error("Dividend amount must be positive");
+    }
+
+    const company = await ctx.db.get(args.companyId);
+    if (!company) throw new Error("Company not found");
+
+    // Check if user is the owner
+    if (company.ownerId !== userId) {
+      throw new Error("Only the company owner can distribute dividends");
+    }
+
+    // Get company balance
+    const companyAccount = await ctx.db.get(company.accountId);
+    if (!companyAccount) throw new Error("Company account not found");
+    
+    const companyBalance = companyAccount.balance ?? 0;
+    if (companyBalance < args.totalAmount) {
+      throw new Error(`Insufficient funds. Company has $${companyBalance.toFixed(2)} but you're trying to distribute $${args.totalAmount.toFixed(2)}`);
+    }
+
+    // Get all shareholders (excluding founder)
+    const allHoldings = await ctx.db
+      .query("stocks")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .collect();
+
+    // Filter out founder's holdings
+    const investorHoldings = allHoldings.filter(holding => {
+      if (holding.holderType === "user" && holding.holderId === company.ownerId) {
+        return false; // Exclude founder
+      }
+      return true; // Include all other investors
+    });
+
+    if (investorHoldings.length === 0) {
+      throw new Error("No external investors to distribute dividends to");
+    }
+
+    // Calculate total shares held by investors (excluding founder)
+    const totalInvestorShares = investorHoldings.reduce((sum, h) => sum + h.shares, 0);
+    
+    if (totalInvestorShares === 0) {
+      throw new Error("No investor shares found");
+    }
+
+    // Distribute dividends proportionally to each investor
+    const distributions: Array<{
+      holderId: any;
+      holderType: "user" | "company";
+      shares: number;
+      amount: number;
+      accountId: any;
+    }> = [];
+
+    // Collect all unique holders and their total shares
+    const holderMap = new Map<string, { holderId: any; holderType: "user" | "company"; shares: number }>();
+    
+    for (const holding of investorHoldings) {
+      const key = `${holding.holderType}-${holding.holderId}`;
+      const existing = holderMap.get(key);
+      if (existing) {
+        existing.shares += holding.shares;
+      } else {
+        holderMap.set(key, {
+          holderId: holding.holderId,
+          holderType: holding.holderType,
+          shares: holding.shares,
+        });
+      }
+    }
+
+    // Calculate dividend for each holder
+    let totalDistributed = 0;
+    
+    for (const holder of holderMap.values()) {
+      const dividendAmount = (holder.shares / totalInvestorShares) * args.totalAmount;
+      
+      // Find the appropriate account for this holder
+      let recipientAccount;
+      if (holder.holderType === "user") {
+        recipientAccount = await ctx.db
+          .query("accounts")
+          .withIndex("by_owner_type", (q) => 
+            q.eq("ownerId", holder.holderId).eq("type", "personal")
+          )
+          .first();
+      } else {
+        // Company holder
+        const holderCompany = await ctx.db.get(holder.holderId as any);
+        if (holderCompany && 'accountId' in holderCompany) {
+          recipientAccount = await ctx.db.get(holderCompany.accountId);
+        }
+      }
+
+      if (!recipientAccount) {
+        console.warn(`Could not find account for holder ${holder.holderId}`);
+        continue;
+      }
+
+      distributions.push({
+        holderId: holder.holderId,
+        holderType: holder.holderType,
+        shares: holder.shares,
+        amount: dividendAmount,
+        accountId: recipientAccount._id,
+      });
+      
+      totalDistributed += dividendAmount;
+    }
+
+    // Execute all distributions
+    for (const dist of distributions) {
+      // Update recipient balance
+      const recipientAccount = await ctx.db.get(dist.accountId);
+      if (!recipientAccount || !('balance' in recipientAccount)) continue;
+      
+      const recipientBalance = recipientAccount.balance ?? 0;
+      await ctx.db.patch(dist.accountId, {
+        balance: recipientBalance + dist.amount,
+      });
+
+      // Create ledger entry
+      await ctx.db.insert("ledger", {
+        fromAccountId: company.accountId,
+        toAccountId: dist.accountId,
+        amount: dist.amount,
+        type: "dividend",
+        description: `Dividend payment from ${company.name} (${dist.shares.toLocaleString()} shares)`,
+        createdAt: Date.now(),
+      });
+    }
+
+    // Deduct total from company account
+    await ctx.db.patch(company.accountId, {
+      balance: companyBalance - totalDistributed,
+    });
+
+    return {
+      success: true,
+      totalDistributed,
+      recipientCount: distributions.length,
+      distributions: distributions.map(d => ({
+        holderId: d.holderId,
+        holderType: d.holderType,
+        shares: d.shares,
+        amount: d.amount,
+      })),
+    };
+  },
+});

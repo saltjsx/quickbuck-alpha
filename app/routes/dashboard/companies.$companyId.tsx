@@ -3,9 +3,9 @@ import { useParams, Link } from "react-router";
 import type { Route } from "./+types/companies.$companyId";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { CompanyDashboard } from "~/components/game/company-dashboard";
+import { CompanyDashboard, DistributeDividendDialog } from "~/components/game";
 import { Button } from "~/components/ui/button";
-import { ArrowLeft, Building2, TrendingUp } from "lucide-react";
+import { ArrowLeft, Building2, TrendingUp, DollarSign } from "lucide-react";
 import { Badge } from "~/components/ui/badge";
 import { useState } from "react";
 import { Spinner } from "~/components/ui/spinner";
@@ -157,23 +157,42 @@ export default function CompanyDashboardPage() {
                 </div>
               </div>
 
-              {/* Go Public Button */}
-              {!company.isPublic && (
-                <div className="flex flex-col gap-2">
-                  <Button
-                    onClick={handleCheckPublicStatus}
-                    disabled={isChecking}
-                    variant="default"
-                    size="sm"
-                  >
-                    <TrendingUp className="h-4 w-4 mr-2" />
-                    {isChecking ? "Checking..." : "Go Public"}
-                  </Button>
-                  <p className="text-xs text-muted-foreground text-right">
-                    Requires $50k+ balance
-                  </p>
-                </div>
-              )}
+              {/* Action Buttons */}
+              <div className="flex gap-2">
+                {/* Dividend Button - Only for owner */}
+                {company.role === "owner" && company.isPublic && (
+                  <DistributeDividendDialog
+                    companyId={companyId}
+                    companyName={company.name}
+                    companyBalance={company.balance}
+                    companyOwnerId={company.ownerId}
+                    trigger={
+                      <Button variant="outline" size="sm">
+                        <DollarSign className="h-4 w-4 mr-2" />
+                        Dividends
+                      </Button>
+                    }
+                  />
+                )}
+
+                {/* Go Public Button */}
+                {!company.isPublic && company.role === "owner" && (
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      onClick={handleCheckPublicStatus}
+                      disabled={isChecking}
+                      variant="default"
+                      size="sm"
+                    >
+                      <TrendingUp className="h-4 w-4 mr-2" />
+                      {isChecking ? "Checking..." : "Go Public"}
+                    </Button>
+                    <p className="text-xs text-muted-foreground text-right">
+                      Requires $50k+ balance
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Status Message */}
