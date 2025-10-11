@@ -1,21 +1,47 @@
-# React Starter Kit (RSK)
+# QuickBuck 💰
 
-A modern, production-ready SaaS starter template for building full-stack React applications using React Router v7, Convex, and Clerk. Ready for Vercel deployment with built-in AI chat capabilities.
+**A multiplayer business simulation game where you build companies, create products, trade stocks, and compete for wealth.**
 
-## Features
+QuickBuck is a realistic business simulator combining company management, stock trading, product marketplaces, and strategic competition. Build your empire from the ground up!
 
-- 🚀 **React Router v7** - Modern full-stack React framework with SSR
-- ⚡️ **Hot Module Replacement (HMR)** - Fast development experience
-- 📦 **Asset bundling and optimization** - Production-ready builds
-- 🔄 **Data loading and mutations** - Built-in loader/action patterns
-- 🔒 **TypeScript by default** - Type safety throughout
-- 🎨 **TailwindCSS v4** - Modern utility-first CSS
-- 🔐 **Authentication with Clerk** - Complete user management
-- ️ **Real-time database with Convex** - Serverless backend
-- 🤖 **AI Chat Integration** - OpenAI-powered chat functionality
-- 📊 **Interactive Dashboard** - User management and analytics
-- 📱 **Responsive Design** - Mobile-first approach
-- 🚢 **Vercel Deployment Ready** - One-click deployment
+## 🎮 Game Features
+
+### Business Building
+- 🏢 **Create Companies** - Build and manage multiple businesses
+- 📦 **Product Development** - Design and price products strategically
+- 💼 **Financial Management** - Track revenue, costs, and profits
+- 📊 **Analytics Dashboard** - Real-time business metrics
+
+### Stock Market
+- 📈 **Public Trading** - IPO when company reaches $50K
+- � **Dynamic Pricing** - Supply and demand-based pricing
+- 🤝 **Shareholder Dividends** - Distribute profits to investors
+- 📉 **Portfolio Management** - Diversify investments
+
+### Marketplace & Collections
+- � **Product Marketplace** - Buy products from other companies
+- 🎨 **Collection System** - Build valuable product portfolios
+- � **Asset Appreciation** - Track collection value over time
+
+### Casino & Gaming
+- 🎰 **Slot Machines** - Test your luck with various payouts
+- � **Blackjack** - Strategic card game with 50/50 fairness
+- 🎲 **Roulette** - Bet on colors or numbers
+
+### Competitive Features
+- 🏆 **Global Leaderboards** - Compete for top net worth
+- 👥 **Multiplayer Economy** - Interact with other players
+- 🎯 **Strategic Competition** - Multiple paths to success
+
+## 📚 Player Documentation
+
+**New to QuickBuck?** Start here:
+- � **[Quick Start Guide](./docs/QUICK_START.md)** - Get running in 10 minutes
+- � **[Player Guide](./docs/PLAYER_GUIDE.md)** - Complete game features & strategies
+- 🎯 **[Advanced Strategies](./docs/ADVANCED_STRATEGIES.md)** - Master-level tactics
+- ⚙️ **[Game Mechanics](./docs/GAME_MECHANICS.md)** - Technical reference
+
+**See the full documentation**: [docs/README.md](./docs/README.md)
 
 ## Tech Stack
 
