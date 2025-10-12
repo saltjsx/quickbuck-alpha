@@ -878,6 +878,13 @@ export const getStockDetails = query({
       )
       .order("asc")
       .collect();
+    
+    // BANDWIDTH OPTIMIZATION: Sample down large history datasets
+    let sampledHistory = priceHistory;
+    if (priceHistory.length > 100) {
+      const step = Math.ceil(priceHistory.length / 100);
+      sampledHistory = priceHistory.filter((_, index) => index % step === 0);
+    }
 
     // OPTIMIZED: Only get last 50 transactions instead of all
     // OPTIMIZED: Use compound index for efficient time-ordered queries
@@ -888,25 +895,26 @@ export const getStockDetails = query({
       .take(50);
 
     const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
-    const priceOneDayAgo = priceHistory.find(p => p.timestamp >= oneDayAgo)?.price ?? company.sharePrice;
+    const priceOneDayAgo = sampledHistory.find(p => p.timestamp >= oneDayAgo)?.price ?? company.sharePrice;
     const priceChange24h = company.sharePrice - priceOneDayAgo;
     const priceChangePercent24h = priceOneDayAgo !== 0 ? (priceChange24h / priceOneDayAgo) * 100 : 0;
 
-    const highPrice = priceHistory.length > 0
-      ? Math.max(...priceHistory.map(p => p.price))
+    const highPrice = sampledHistory.length > 0
+      ? Math.max(...sampledHistory.map(p => p.price))
       : company.sharePrice;
-    const lowPrice = priceHistory.length > 0
-      ? Math.min(...priceHistory.map(p => p.price))
+    const lowPrice = sampledHistory.length > 0
+      ? Math.min(...sampledHistory.map(p => p.price))
       : company.sharePrice;
 
-    const totalVolume = priceHistory
+    const totalVolume = sampledHistory
       .filter(p => p.timestamp >= oneDayAgo)
       .reduce((sum, p) => sum + (p.volume || 0), 0);
     
+    // BANDWIDTH OPTIMIZATION: Limit holdings to 100
     const holdings = await ctx.db
       .query("stocks")
       .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
-      .collect();
+      .take(100);
     
     const totalHeldShares = holdings.reduce((sum, h) => sum + h.shares, 0);
     const marketCap = company.sharePrice * company.totalShares;
@@ -930,7 +938,7 @@ export const getStockDetails = query({
         sharesOutstanding: totalHeldShares,
         volume24h: totalVolume,
       },
-      priceHistory,
+      priceHistory: sampledHistory,
       recentTransactions,
     };
   },
@@ -939,66 +947,73 @@ export const getStockDetails = query({
 export const getAllPublicStocks = query({
   args: {},
   handler: async (ctx) => {
-    // BANDWIDTH OPTIMIZATION: Limit to top 100 public companies instead of all
+    // BANDWIDTH OPTIMIZATION: Limit to top 50 public companies by market cap
     const publicCompanies = await ctx.db
       .query("companies")
       .withIndex("by_public_sharePrice", (q) => q.eq("isPublic", true))
       .order("desc")
-      .take(100);
+      .take(50);
 
-    // OPTIMIZED: Batch fetch price history for all companies
+    // OPTIMIZED: Only fetch last 2 hours of history for chart (reduced from 24h)
+    const twoHoursAgo = Date.now() - (2 * 60 * 60 * 1000);
     const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
-    const oneHourAgo = Date.now() - (60 * 60 * 1000);
     
-    // Get all recent price history in fewer queries
-    const allDayHistory = await ctx.db
+    // Get recent price history for chart display (last 2 hours)
+    const allRecentHistory = await ctx.db
+      .query("stockPriceHistory")
+      .withIndex("by_timestamp", (q) => q.gt("timestamp", twoHoursAgo))
+      .order("asc")
+      .collect();
+    
+    // Get single price point from 24h ago for price change calculation
+    const allDayAgoHistory = await ctx.db
       .query("stockPriceHistory")
       .withIndex("by_timestamp", (q) => q.gt("timestamp", oneDayAgo))
       .order("asc")
-      .collect();
-    
-    const allHourHistory = await ctx.db
-      .query("stockPriceHistory")
-      .withIndex("by_timestamp", (q) => q.gt("timestamp", oneHourAgo))
-      .order("asc")
-      .collect();
+      .take(100); // Just need first entry per company
 
     // Group by company
-    const dayHistoryByCompany = new Map<string, any[]>();
-    const hourHistoryByCompany = new Map<string, any[]>();
+    const recentHistoryByCompany = new Map<string, any[]>();
+    const dayAgoHistoryByCompany = new Map<string, any>();
     
-    allDayHistory.forEach(entry => {
-      const arr = dayHistoryByCompany.get(entry.companyId) || [];
+    allRecentHistory.forEach(entry => {
+      const arr = recentHistoryByCompany.get(entry.companyId) || [];
       arr.push(entry);
-      dayHistoryByCompany.set(entry.companyId, arr);
+      recentHistoryByCompany.set(entry.companyId, arr);
     });
 
-    allHourHistory.forEach(entry => {
-      const arr = hourHistoryByCompany.get(entry.companyId) || [];
-      arr.push(entry);
-      hourHistoryByCompany.set(entry.companyId, arr);
+    allDayAgoHistory.forEach(entry => {
+      if (!dayAgoHistoryByCompany.has(entry.companyId)) {
+        dayAgoHistoryByCompany.set(entry.companyId, entry);
+      }
     });
 
-    for (const [, entries] of dayHistoryByCompany) {
+    // Sort recent history
+    for (const [, entries] of recentHistoryByCompany) {
       entries.sort((a, b) => a.timestamp - b.timestamp);
-    }
-
-    for (const [, entries] of hourHistoryByCompany) {
-      entries.sort((a, b) => a.timestamp - b.timestamp);
+      // BANDWIDTH OPTIMIZATION: Sample down to max 20 points per chart
+      if (entries.length > 20) {
+        const step = Math.floor(entries.length / 20);
+        const sampled = [];
+        for (let i = 0; i < entries.length; i += step) {
+          sampled.push(entries[i]);
+        }
+        entries.length = 0;
+        entries.push(...sampled);
+      }
     }
 
     const stocks = publicCompanies.map(company => {
-      const dayHistory = dayHistoryByCompany.get(company._id) || [];
-      const hourHistory = hourHistoryByCompany.get(company._id) || [];
-      const historySource = hourHistory.length > 0 ? hourHistory : dayHistory;
-      const chartHistory = historySource.length > 0
-        ? historySource.map(entry => ({
+      const recentHistory = recentHistoryByCompany.get(company._id) || [];
+      const chartHistory = recentHistory.length > 0
+        ? recentHistory.map(entry => ({
             price: entry.price,
             timestamp: entry.timestamp,
           }))
         : [{ price: company.sharePrice, timestamp: Date.now() }];
       
-      const oldPrice = dayHistory[0]?.price || company.sharePrice;
+      const dayAgoEntry = dayAgoHistoryByCompany.get(company._id);
+      const oldPrice = dayAgoEntry?.price || company.sharePrice;
       const priceChange24h = company.sharePrice - oldPrice;
       const priceChangePercent24h = oldPrice !== 0 ? (priceChange24h / oldPrice) * 100 : 0;
 

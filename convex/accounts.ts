@@ -92,11 +92,11 @@ export const getUserAccounts = query({
       .first();
     
     // Get company accounts where user has access
-    // BANDWIDTH OPTIMIZATION: Reduced from 50 to 25 company access records
+    // BANDWIDTH OPTIMIZATION: Reduced from 50 to 15 company access records
     const companyAccess = await ctx.db
       .query("companyAccess")
       .withIndex("by_user", (q) => q.eq("userId", userId))
-      .take(25);
+      .take(15);
 
     // Batch fetch companies
     const companyIds = companyAccess.map(a => a.companyId);
@@ -400,25 +400,51 @@ export const getTransactions = query({
 });
 
 // Search for users by username or email
-// OPTIMIZED: Limit results and use take() to avoid loading all users
+// OPTIMIZED: Use index-based search when possible, fallback to limited scan
 export const searchUsers = query({
   args: { searchTerm: v.string() },
   handler: async (ctx, args) => {
     if (!args.searchTerm || args.searchTerm.length < 2) return [];
 
-    // OPTIMIZED: Only fetch first 50 users instead of all
-    const users = await ctx.db.query("users").take(500);
-    
     const searchLower = args.searchTerm.toLowerCase();
-    const matchedUsers = users
-      .filter(user => 
-        user.username?.toLowerCase().includes(searchLower) ||
-        user.email?.toLowerCase().includes(searchLower) ||
-        user.name?.toLowerCase().includes(searchLower)
-      )
-      .slice(0, 20); // Limit to 20 results
+    let matchedUsers: any[] = [];
 
-    // OPTIMIZED: Use compound index for efficient querying
+    // Try username index first (exact or prefix match)
+    const usernameMatches = await ctx.db
+      .query("users")
+      .withIndex("by_username")
+      .filter((q) => {
+        const username = q.field("username");
+        return q.or(
+          q.eq(username, args.searchTerm),
+          q.eq(username, args.searchTerm.toLowerCase()),
+          q.eq(username, args.searchTerm.toUpperCase())
+        );
+      })
+      .take(10);
+
+    matchedUsers.push(...usernameMatches);
+
+    // If we need more results, do a limited scan
+    if (matchedUsers.length < 10) {
+      const additionalUsers = await ctx.db.query("users").take(100);
+      const filtered = additionalUsers
+        .filter(user => 
+          !matchedUsers.some(m => m._id === user._id) && (
+            user.username?.toLowerCase().includes(searchLower) ||
+            user.email?.toLowerCase().includes(searchLower) ||
+            user.name?.toLowerCase().includes(searchLower)
+          )
+        )
+        .slice(0, 20 - matchedUsers.length);
+      
+      matchedUsers.push(...filtered);
+    }
+
+    // Limit to 20 results
+    matchedUsers = matchedUsers.slice(0, 20);
+
+    // OPTIMIZED: Batch fetch personal accounts
     const userIds = matchedUsers.map(u => u._id);
     const accounts = await Promise.all(
       userIds.map(userId => 
@@ -449,22 +475,43 @@ export const searchUsers = query({
 });
 
 // Search for companies by name or ticker
-// OPTIMIZED: Limit results instead of loading all companies
+// OPTIMIZED: Use ticker index for exact matches, limited scan for partial
 export const searchCompanies = query({
   args: { searchTerm: v.string() },
   handler: async (ctx, args) => {
     if (!args.searchTerm || args.searchTerm.length < 1) return [];
 
-    // OPTIMIZED: Only fetch first 200 companies instead of all
-    const companies = await ctx.db.query("companies").take(200);
-    
     const searchLower = args.searchTerm.toLowerCase();
-    const matchedCompanies = companies
-      .filter(company => 
-        company.ticker.toLowerCase().includes(searchLower) ||
-        company.name.toLowerCase().includes(searchLower)
-      )
-      .slice(0, 20); // Limit to 20 results
+    const searchUpper = args.searchTerm.toUpperCase();
+    let matchedCompanies: any[] = [];
+
+    // Try exact ticker match first (most common search pattern)
+    const tickerMatch = await ctx.db
+      .query("companies")
+      .withIndex("by_ticker", (q) => q.eq("ticker", searchUpper))
+      .first();
+
+    if (tickerMatch) {
+      matchedCompanies.push(tickerMatch);
+    }
+
+    // If we need more results, do a limited scan
+    if (matchedCompanies.length < 10) {
+      const additionalCompanies = await ctx.db.query("companies").take(100);
+      const filtered = additionalCompanies
+        .filter(company => 
+          !matchedCompanies.some(m => m._id === company._id) && (
+            company.ticker.toLowerCase().includes(searchLower) ||
+            company.name.toLowerCase().includes(searchLower)
+          )
+        )
+        .slice(0, 20 - matchedCompanies.length);
+      
+      matchedCompanies.push(...filtered);
+    }
+
+    // Limit to 20 results total
+    matchedCompanies = matchedCompanies.slice(0, 20);
 
     return matchedCompanies.map(company => ({
       _id: company._id,

@@ -190,13 +190,13 @@ export const getUserCompanies = query({
     });
 
     const ownedCompanies = validCompanies.filter((company) => company.ownerId === userId);
-    // BANDWIDTH OPTIMIZATION: Reduced from 500 to 100 stocks per company
+    // BANDWIDTH OPTIMIZATION: Reduced from 500 to 50 stocks per company for ownership calculation
     const ownedHoldings = await Promise.all(
       ownedCompanies.map((company) =>
         ctx.db
           .query("stocks")
           .withIndex("by_company", (q) => q.eq("companyId", company._id))
-          .take(100)
+          .take(50)
       )
     );
 
@@ -526,40 +526,45 @@ export const getCompanyDashboard = query({
     const account = await ctx.db.get(company.accountId);
     const balance = account?.balance ?? 0;
 
-    // OPTIMIZED: Use indexed queries to get only this company's transactions
+    // OPTIMIZED: Use indexed queries with type filters to reduce data transfer
     const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
     
-    // OPTIMIZED: Use compound index for efficient time-range queries
-    // Query only transactions TO this account
-    const incoming = await ctx.db
-      .query("ledger")
-      .withIndex("by_to_account_created", (q) => 
-        q.eq("toAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
+    // OPTIMIZED: Use triple compound index for efficient type+time filtered queries
+    // Query only revenue transactions TO this account
+    const revenueTypes = ["product_purchase", "marketplace_batch"];
+    const revenueTransactions = (await Promise.all(
+      revenueTypes.map(type =>
+        ctx.db
+          .query("ledger")
+          .withIndex("by_to_account_type_created", (q) => 
+            q.eq("toAccountId", company.accountId).eq("type", type as any).gt("createdAt", thirtyDaysAgo)
+          )
+          .collect()
       )
-      .collect();
-
-    // Query only transactions FROM this account
-    const outgoing = await ctx.db
-      .query("ledger")
-      .withIndex("by_from_account_created", (q) => 
-        q.eq("fromAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
-      )
-      .collect();
-
-    // Calculate revenue (product purchases + batch marketplace)
-    const revenueTransactions = incoming.filter(tx => 
-      tx.type === "product_purchase" || tx.type === "marketplace_batch"
-    );
+    )).flat();
     const totalRevenue = revenueTransactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
 
-    // Calculate costs (product costs + batch marketplace from company)
-    const costTransactions = outgoing.filter(tx => 
-      tx.type === "product_cost" || tx.type === "marketplace_batch"
-    );
+    // Query only cost transactions FROM this account
+    const costTypes = ["product_cost", "marketplace_batch"];
+    const costTransactions = (await Promise.all(
+      costTypes.map(type =>
+        ctx.db
+          .query("ledger")
+          .withIndex("by_from_account_type_created", (q) => 
+            q.eq("fromAccountId", company.accountId).eq("type", type as any).gt("createdAt", thirtyDaysAgo)
+          )
+          .collect()
+      )
+    )).flat();
     const totalCosts = costTransactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
 
-    // Calculate expenses (operating costs, taxes, licenses, maintenance)
-    const expenseTransactions = outgoing.filter(tx => tx.type === "expense");
+    // Query only expense transactions FROM this account
+    const expenseTransactions = await ctx.db
+      .query("ledger")
+      .withIndex("by_from_account_type_created", (q) => 
+        q.eq("fromAccountId", company.accountId).eq("type", "expense").gt("createdAt", thirtyDaysAgo)
+      )
+      .collect();
     const totalExpenses = expenseTransactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
 
     // Calculate profit (revenue - costs - expenses)
@@ -590,22 +595,36 @@ export const getCompanyDashboard = query({
     // Group by day for charts (OPTIMIZED: combine in one pass)
     const dailyData: Record<string, { revenue: number; costs: number; expenses: number; profit: number }> = {};
     
-    // Process all transactions in one pass
-    [...revenueTransactions, ...costTransactions, ...expenseTransactions].forEach(tx => {
+    // Process revenue transactions
+    revenueTransactions.forEach(tx => {
       const date = new Date(tx.createdAt).toISOString().split('T')[0];
       if (!dailyData[date]) {
         dailyData[date] = { revenue: 0, costs: 0, expenses: 0, profit: 0 };
       }
-      
-      if (tx.type === "product_purchase" || (tx.type === "marketplace_batch" && tx.toAccountId === company.accountId)) {
-        dailyData[date].revenue += tx.amount || 0;
-      } else if (tx.type === "product_cost" || (tx.type === "marketplace_batch" && tx.fromAccountId === company.accountId)) {
-        dailyData[date].costs += tx.amount || 0;
-      } else if (tx.type === "expense") {
-        dailyData[date].expenses += tx.amount || 0;
+      dailyData[date].revenue += tx.amount || 0;
+    });
+    
+    // Process cost transactions
+    costTransactions.forEach(tx => {
+      const date = new Date(tx.createdAt).toISOString().split('T')[0];
+      if (!dailyData[date]) {
+        dailyData[date] = { revenue: 0, costs: 0, expenses: 0, profit: 0 };
       }
-      
-      dailyData[date].profit = dailyData[date].revenue - dailyData[date].costs - dailyData[date].expenses;
+      dailyData[date].costs += tx.amount || 0;
+    });
+    
+    // Process expense transactions
+    expenseTransactions.forEach(tx => {
+      const date = new Date(tx.createdAt).toISOString().split('T')[0];
+      if (!dailyData[date]) {
+        dailyData[date] = { revenue: 0, costs: 0, expenses: 0, profit: 0 };
+      }
+      dailyData[date].expenses += tx.amount || 0;
+    });
+    
+    // Calculate daily profit
+    Object.values(dailyData).forEach(data => {
+      data.profit = data.revenue - data.costs - data.expenses;
     });
 
     // Convert to array and sort by date (limit to 30 most recent days)

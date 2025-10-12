@@ -42,7 +42,9 @@ export default defineSchema({
     .index("by_from_account_created", ["fromAccountId", "createdAt"])
     .index("by_to_account_created", ["toAccountId", "createdAt"])
     .index("by_to_account_type", ["toAccountId", "type"])
-    .index("by_from_account_type", ["fromAccountId", "type"]),
+    .index("by_from_account_type", ["fromAccountId", "type"])
+    .index("by_to_account_type_created", ["toAccountId", "type", "createdAt"])
+    .index("by_from_account_type_created", ["fromAccountId", "type", "createdAt"]),
 
   accounts: defineTable({
     name: v.string(),
@@ -81,7 +83,9 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_user", ["userId"])
-    .index("by_user_created", ["userId", "createdAt"]),
+    .index("by_user_created", ["userId", "createdAt"])
+    .index("by_user_game", ["userId", "game"])
+    .index("by_game_created", ["game", "createdAt"]),
 
   blackjackStates: defineTable({
     gameId: v.id("gambles"),
@@ -229,7 +233,8 @@ export default defineSchema({
     .index("by_product", ["productId"])
     .index("by_user_product", ["userId", "productId"])
     .index("by_user_purchased", ["userId", "purchasedAt"])
-    .index("by_product_purchased", ["productId", "purchasedAt"]),
+    .index("by_product_purchased", ["productId", "purchasedAt"])
+    .index("by_purchased_at", ["purchasedAt"]),
 
   licenses: defineTable({
     companyId: v.id("companies"),
@@ -241,7 +246,8 @@ export default defineSchema({
   })
     .index("by_company", ["companyId"])
     .index("by_company_active", ["companyId", "isActive"])
-    .index("by_expiration", ["expiresAt"]),
+    .index("by_expiration", ["expiresAt"])
+    .index("by_active_expiration", ["isActive", "expiresAt"]),
 
   expenses: defineTable({
     companyId: v.id("companies"),

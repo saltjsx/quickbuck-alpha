@@ -43,8 +43,8 @@ export const getAllCompanies = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    // BANDWIDTH OPTIMIZATION: Reduced from 500 to 200 by default, max 300
-    const limit = Math.min(args.limit || 200, 300);
+    // BANDWIDTH OPTIMIZATION: Reduced from 500 to 200 by default, max 250
+    const limit = Math.min(args.limit || 200, 250);
     const companies = await ctx.db.query("companies").take(limit);
     
     // Batch fetch all accounts
@@ -134,8 +134,8 @@ export const getAllPlayers = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    // BANDWIDTH OPTIMIZATION: Reduced from 500 to 200 by default, max 300
-    const limit = Math.min(args.limit || 200, 300);
+    // BANDWIDTH OPTIMIZATION: Reduced from 500 to 200 by default, max 250
+    const limit = Math.min(args.limit || 200, 250);
     const users = await ctx.db.query("users").take(limit);
     
     // Batch fetch personal accounts
@@ -256,8 +256,8 @@ export const getAllProducts = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    // BANDWIDTH OPTIMIZATION: Reduced from 1000 to 500 by default, max 750
-    const limit = Math.min(args.limit || 500, 750);
+    // BANDWIDTH OPTIMIZATION: Reduced from 1000 to 400 by default, max 500
+    const limit = Math.min(args.limit || 400, 500);
     const products = await ctx.db.query("products").take(limit);
 
     // Batch fetch all companies
@@ -344,12 +344,12 @@ export const getLeaderboard = query({
     // OPTIMIZED: Limit candidate set to avoid excessive processing
     const candidateUserIds = new Set<Id<"users">>(userIds);
 
-    // Only consider top stockholders (limit to 100 to avoid excessive queries)
+    // Only consider top stockholders (limit to 50 to avoid excessive queries)
     const topHoldings = await ctx.db
       .query("stocks")
       .withIndex("by_holderType_shares", (q) => q.eq("holderType", "user"))
       .order("desc")
-      .take(Math.min(sampleSize, 100)); // Cap at 100 top holdings
+      .take(Math.min(sampleSize, 50)); // Cap at 50 top holdings
 
     for (const holding of topHoldings) {
       if (holding.holderType === "user") {
@@ -358,12 +358,12 @@ export const getLeaderboard = query({
     }
     
     // OPTIMIZED: Stop processing if we have too many candidates
-    if (candidateUserIds.size > 200) {
+    if (candidateUserIds.size > 150) {
       // Keep only the top cash holders
       const sortedByBalance = Array.from(candidateUserIds)
         .map(id => ({ id, balance: personalAccountMap.get(id)?.balance ?? 0 }))
         .sort((a, b) => b.balance - a.balance)
-        .slice(0, 100);
+        .slice(0, 75);
       
       candidateUserIds.clear();
       sortedByBalance.forEach(item => candidateUserIds.add(item.id));
@@ -426,7 +426,7 @@ export const getLeaderboard = query({
         ctx.db
           .query("stocks")
           .withIndex("by_company", (q) => q.eq("companyId", ref.company._id))
-          .take(100) // BANDWIDTH OPTIMIZATION: Reduced from 500 to 100
+          .take(50) // BANDWIDTH OPTIMIZATION: Reduced from 500 to 50
       )
     );
 

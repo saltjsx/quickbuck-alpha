@@ -384,16 +384,20 @@ export const processCompanyExpenses = internalMutation({
           const account = await ctx.db.get(company.accountId);
           const balance = account?.balance ?? 0;
 
-          // Calculate 30-day revenue
-          const incoming = await ctx.db
-            .query("ledger")
-            .withIndex("by_to_account", (q) => q.eq("toAccountId", company.accountId))
-            .filter((q) => q.gt(q.field("createdAt"), thirtyDaysAgo))
-            .collect();
+          // Calculate 30-day revenue - use indexed query with type filter
+          const revenueTypes = ["product_purchase", "marketplace_batch"];
+          const revenueTransactions = (await Promise.all(
+            revenueTypes.map(type =>
+              ctx.db
+                .query("ledger")
+                .withIndex("by_to_account_type_created", (q) => 
+                  q.eq("toAccountId", company.accountId).eq("type", type as any).gt("createdAt", thirtyDaysAgo)
+                )
+                .collect()
+            )
+          )).flat();
 
-          const revenue = incoming
-            .filter(tx => tx.type === "product_purchase" || tx.type === "marketplace_batch")
-            .reduce((sum, tx) => sum + tx.amount, 0);
+          const revenue = revenueTransactions.reduce((sum, tx) => sum + tx.amount, 0);
 
           // 1. OPERATING COSTS (3.5% of monthly revenue, minimum $100)
           // Use company ID for deterministic variation
@@ -402,15 +406,19 @@ export const processCompanyExpenses = internalMutation({
           const operatingCosts = Math.max(100, revenue * operatingCostRate);
 
           // 2. CORPORATE TAXES (21% of profits, paid monthly)
-          const outgoing = await ctx.db
-            .query("ledger")
-            .withIndex("by_from_account", (q) => q.eq("fromAccountId", company.accountId))
-            .filter((q) => q.gt(q.field("createdAt"), thirtyDaysAgo))
-            .collect();
+          const costTypes = ["product_cost", "marketplace_batch", "expense"];
+          const costTransactions = (await Promise.all(
+            costTypes.map(type =>
+              ctx.db
+                .query("ledger")
+                .withIndex("by_from_account_type_created", (q) => 
+                  q.eq("fromAccountId", company.accountId).eq("type", type as any).gt("createdAt", thirtyDaysAgo)
+                )
+                .collect()
+            )
+          )).flat();
 
-          const costs = outgoing
-            .filter(tx => tx.type === "product_cost" || tx.type === "marketplace_batch" || tx.type === "expense")
-            .reduce((sum, tx) => sum + tx.amount, 0);
+          const costs = costTransactions.reduce((sum, tx) => sum + tx.amount, 0);
 
           const profit = revenue - costs;
           const taxRate = company.taxRate ?? 0.21; // Default 21% corporate tax

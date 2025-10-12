@@ -65,11 +65,11 @@ export const createProduct = mutation({
 export const getActiveProducts = query({
   args: {},
   handler: async (ctx) => {
-    // BANDWIDTH OPTIMIZATION: Reduced from 500 to 200
+    // BANDWIDTH OPTIMIZATION: Reduced from 500 to 150
     const products = await ctx.db
       .query("products")
       .withIndex("by_active", (q) => q.eq("isActive", true))
-      .take(200);
+      .take(150);
 
     // OPTIMIZED: Batch fetch all companies at once
     const companyIds = [...new Set(products.map(p => p.companyId))];
@@ -162,11 +162,11 @@ export const automaticPurchase = internalMutation({
   args: {},
   handler: async (ctx) => {
     // Get all active products
-    // BANDWIDTH OPTIMIZATION: Limit to 300 products instead of collecting all
+    // BANDWIDTH OPTIMIZATION: Limit to 200 products instead of collecting all
     const products = await ctx.db
       .query("products")
       .withIndex("by_active", (q) => q.eq("isActive", true))
-      .take(300);
+      .take(200);
 
     if (products.length === 0) return { message: "No products available" };
 
