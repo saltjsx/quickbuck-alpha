@@ -429,13 +429,15 @@ export const searchUsers = query({
     if (matchedUsers.length < 10) {
       const additionalUsers = await ctx.db.query("users").take(100);
       const filtered = additionalUsers
-        .filter(user => 
-          !matchedUsers.some(m => m._id === user._id) && (
-            user.username?.toLowerCase().includes(searchLower) ||
-            user.email?.toLowerCase().includes(searchLower) ||
-            user.name?.toLowerCase().includes(searchLower)
-          )
-        )
+        .filter((user) => {
+          if (matchedUsers.some((m) => m._id === user._id)) return false;
+          const uname = (user.username ?? "").toLowerCase();
+          const email = (user.email ?? "").toLowerCase();
+          const name  = (user.name ?? "").toLowerCase();
+          return uname.includes(searchLower)
+              || email.includes(searchLower)
+              || name.includes(searchLower);
+        })
         .slice(0, 20 - matchedUsers.length);
       
       matchedUsers.push(...filtered);
