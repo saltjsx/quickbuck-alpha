@@ -6,10 +6,17 @@ import {
   CardTitle,
 } from "~/components/ui/card";
 import { CreateCompanyDialog } from "./create-company-dialog";
-import { CreateProductDialog } from "./create-product-dialog";
-import { DistributeDividendDialog } from "./distribute-dividend-dialog";
+import { CompanyView } from "./company-view";
 import type { FunctionReturnType } from "convex/server";
-import type { api } from "../../../convex/_generated/api";
+import { api } from "../../../convex/_generated/api";
+import { useNavigate } from "react-router";
+import { useMutation } from "convex/react";
+import { toast } from "sonner";
+import { CreateProductDialog } from "./create-product-dialog";
+import { EditCompanyDialog } from "./edit-company-dialog";
+import { DeleteCompanyDialog } from "./delete-company-dialog";
+import { DistributeDividendDialog } from "./distribute-dividend-dialog";
+import { useRef } from "react";
 
 type Companies = FunctionReturnType<typeof api.companies.getUserCompanies>;
 
@@ -18,6 +25,31 @@ interface CompaniesTabProps {
 }
 
 export function CompaniesTab({ companies }: CompaniesTabProps) {
+  const navigate = useNavigate();
+  const checkPublicStatus = useMutation(
+    api.companies.checkAndUpdatePublicStatus
+  );
+  const triggerRefs = useRef<Record<string, any>>({});
+
+  const handleGoPublic = async (companyId: string, companyName: string) => {
+    try {
+      const result = await checkPublicStatus({ companyId: companyId as any });
+      if (result.madePublic) {
+        toast.success(
+          `🎉 ${companyName} is now public with IPO price of $${result.ipoPrice?.toFixed(
+            2
+          )}!`
+        );
+      } else {
+        toast.info(
+          `${companyName} has $${result.balance.toLocaleString()} balance. Need $50,000+ to go public.`
+        );
+      }
+    } catch (error: any) {
+      toast.error(`Failed to update status: ${error.message}`);
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -38,59 +70,77 @@ export function CompaniesTab({ companies }: CompaniesTabProps) {
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2">
             {companies?.map((company: any) => (
-              <div key={company._id} className="p-4 border rounded-lg">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h3 className="font-semibold text-lg">{company.name}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {company.description}
-                    </p>
-                    <div className="mt-2 flex gap-2">
-                      <span
-                        className={`text-xs px-2 py-1 rounded ${
-                          company.isPublic
-                            ? "bg-green-100 text-green-800"
-                            : "bg-gray-100 text-gray-800"
-                        }`}
+              <div key={company._id}>
+                <CompanyView
+                  company={company}
+                  onAddProduct={() =>
+                    triggerRefs.current[`product-${company._id}`]?.click()
+                  }
+                  onEditCompany={() =>
+                    triggerRefs.current[`edit-${company._id}`]?.click()
+                  }
+                  onDeleteCompany={() =>
+                    triggerRefs.current[`delete-${company._id}`]?.click()
+                  }
+                  onDashboard={() =>
+                    navigate(`/dashboard/companies/${company._id}`)
+                  }
+                  onDividends={() =>
+                    triggerRefs.current[`dividend-${company._id}`]?.click()
+                  }
+                  onGoPublic={() => handleGoPublic(company._id, company.name)}
+                />
+
+                {/* Hidden dialog components with their own triggers */}
+                <div className="sr-only">
+                  <div
+                    ref={(el) => {
+                      if (el)
+                        triggerRefs.current[`product-${company._id}`] = el;
+                    }}
+                  >
+                    <CreateProductDialog companyId={company._id} />
+                  </div>
+                  {company.role === "owner" && (
+                    <>
+                      <div
+                        ref={(el) => {
+                          if (el)
+                            triggerRefs.current[`edit-${company._id}`] = el;
+                        }}
                       >
-                        {company.isPublic ? "Public" : "Private"}
-                      </span>
-                      <span className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-800 capitalize">
-                        {company.role}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xl font-bold">
-                      $
-                      {company.balance?.toLocaleString("en-US", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </p>
-                    {company.isPublic && (
-                      <p className="text-sm text-muted-foreground">
-                        ${company.sharePrice?.toFixed(2)}/share
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CreateProductDialog companyId={company._id} />
-                  {company.role === "owner" && company.isPublic && (
-                    <DistributeDividendDialog
-                      companyId={company._id}
-                      companyName={company.name}
-                      companyBalance={company.balance}
-                      companyOwnerId={company.ownerId}
-                    />
+                        <EditCompanyDialog company={company} />
+                      </div>
+                      <div
+                        ref={(el) => {
+                          if (el)
+                            triggerRefs.current[`delete-${company._id}`] = el;
+                        }}
+                      >
+                        <DeleteCompanyDialog
+                          companyId={company._id}
+                          companyName={company.name}
+                          balance={company.balance}
+                        />
+                      </div>
+                    </>
                   )}
-                  {company.balance > 50000 && !company.isPublic && (
-                    <p className="text-sm text-green-600">
-                      ✨ Eligible for stock market listing!
-                    </p>
+                  {company.isPublic && company.role === "owner" && (
+                    <div
+                      ref={(el) => {
+                        if (el)
+                          triggerRefs.current[`dividend-${company._id}`] = el;
+                      }}
+                    >
+                      <DistributeDividendDialog
+                        companyId={company._id}
+                        companyName={company.name}
+                        companyBalance={company.balance}
+                        companyOwnerId={company.ownerId}
+                      />
+                    </div>
                   )}
                 </div>
               </div>

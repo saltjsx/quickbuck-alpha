@@ -9,3 +9,4 @@ export { CompanyDashboard } from "./company-dashboard";
 export { CollectionsTab } from "./collections-tab";
 export { GambleTab } from "./gamble-tab";
 export { DistributeDividendDialog } from "./distribute-dividend-dialog";
+export { CompanyView } from "./company-view";
