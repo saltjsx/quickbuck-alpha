@@ -9,7 +9,7 @@ import {
   ShoppingCart,
   User,
   Package,
-  TrendingUp,
+  ArrowUpDown,
 } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import {
@@ -33,6 +33,7 @@ import {
   TableRow,
 } from "~/components/ui/table";
 import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
 
 type LeaderboardPlayer = {
   accountId: string;
@@ -219,6 +220,20 @@ export const meta: MetaFunction = () => [
 export default function LeaderboardPage() {
   const [activeTab, setActiveTab] = useState("overview");
 
+  // Sorting state per table
+  const [companySort, setCompanySort] = useState<{ key: CompanySortKey; dir: SortDir }>({
+    key: "netWorth",
+    dir: "desc",
+  });
+  const [playerSort, setPlayerSort] = useState<{ key: PlayerSortKey; dir: SortDir }>({
+    key: "netWorth",
+    dir: "desc",
+  });
+  const [productSort, setProductSort] = useState<{ key: ProductSortKey; dir: SortDir }>({
+    key: "totalSales",
+    dir: "desc",
+  });
+
   const leaderboard = useQuery(api.leaderboard.getLeaderboard, { limit: 5 }) as
     | LeaderboardData
     | undefined;
@@ -376,6 +391,100 @@ export default function LeaderboardPage() {
     ];
   }, [leaderboard]);
 
+  // Types and helpers for sorting
+  type SortDir = "asc" | "desc";
+  type CompanySortKey =
+    | "name"
+    | "ownerName"
+    | "balance"
+    | "netWorth"
+    | "marketCap"
+    | "ticker"
+    | "isPublic";
+  type PlayerSortKey =
+    | "name"
+    | "username"
+    | "cashBalance"
+    | "portfolioValue"
+    | "netWorth";
+  type ProductSortKey =
+    | "name"
+    | "companyName"
+    | "price"
+    | "totalSales"
+    | "totalRevenue"
+    | "profit";
+
+  function toggleSort<T extends string>(
+    current: { key: T; dir: SortDir },
+    set: (s: { key: T; dir: SortDir }) => void,
+    key: T
+  ) {
+    if (current.key === key) {
+      set({ key, dir: current.dir === "asc" ? "desc" : "asc" });
+    } else {
+      set({ key, dir: key === ("name" as T) || key === ("ownerName" as T) || key === ("companyName" as T) ? "asc" : "desc" });
+    }
+  }
+
+  function compareValues(a: any, b: any, dir: SortDir) {
+    const mul = dir === "asc" ? 1 : -1;
+    if (typeof a === "string" && typeof b === "string") {
+      return mul * a.localeCompare(b);
+    }
+    const an = Number(a) || 0;
+    const bn = Number(b) || 0;
+    return mul * (an - bn);
+  }
+
+  const sortedCompanies = useMemo(() => {
+    if (!allCompanies) return undefined;
+    const data = [...allCompanies];
+    data.sort((a: any, b: any) => compareValues(a[companySort.key], b[companySort.key], companySort.dir));
+    return data;
+  }, [allCompanies, companySort]);
+
+  const sortedPlayers = useMemo(() => {
+    if (!allPlayers) return undefined;
+    const data = [...allPlayers];
+    data.sort((a: any, b: any) => compareValues(a[playerSort.key], b[playerSort.key], playerSort.dir));
+    return data;
+  }, [allPlayers, playerSort]);
+
+  const sortedProducts = useMemo(() => {
+    if (!allProducts) return undefined;
+    const data = [...allProducts];
+    data.sort((a: any, b: any) => compareValues(a[productSort.key], b[productSort.key], productSort.dir));
+    return data;
+  }, [allProducts, productSort]);
+
+  function SortableHeader<T extends string>({
+    label,
+    active,
+    onClick,
+    numeric,
+  }: {
+    label: string;
+    active?: boolean;
+    onClick: () => void;
+    numeric?: boolean;
+  }) {
+    return (
+      <Button
+        variant="ghost"
+        onClick={onClick}
+        className={cn(
+          "h-8 px-2 -ml-3 text-sm font-medium",
+          numeric ? "ml-auto" : "",
+          active && "text-primary"
+        )}
+      >
+        <span className={cn("mr-2", numeric && "order-2 ml-2 mr-0")}>{label}</span>
+        <ArrowUpDown className={cn("h-4 w-4", numeric && "order-1")} />
+      </Button>
+    );
+  }
+
   return (
     <div className="flex flex-1 flex-col">
       <div className="flex flex-1 flex-col gap-6 px-4 py-6 lg:px-6">
@@ -424,75 +533,108 @@ export default function LeaderboardPage() {
                     </CardHeader>
                     <CardContent>
                       {section.items.length > 0 ? (
-                        <div className="space-y-4">
-                          {section.items.map((item) => (
-                            <div
-                              key={item.key}
-                              className={cn(
-                                "flex flex-col gap-4 rounded-2xl border p-4 transition-colors md:flex-row md:items-center md:justify-between",
-                                getItemAccent(item.rank)
-                              )}
-                            >
-                              <div className="flex min-w-0 flex-1 items-center gap-4">
-                                <div
-                                  className={cn(
-                                    "flex h-10 w-10 flex-none items-center justify-center rounded-full text-sm font-semibold",
-                                    getRankBadgeClasses(item.rank)
-                                  )}
-                                >
-                                  {item.rank}
-                                </div>
-                                <Avatar className="h-12 w-12">
-                                  {item.avatarUrl ? (
-                                    <AvatarImage
-                                      src={item.avatarUrl}
-                                      alt={item.title}
-                                    />
-                                  ) : null}
-                                  <AvatarFallback>
-                                    {item.fallback}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div className="min-w-0">
-                                  <p className="truncate font-semibold leading-tight">
-                                    {item.title}
-                                  </p>
-                                  {item.subtitle && (
-                                    <p className="truncate text-sm text-muted-foreground">
-                                      {item.subtitle}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex flex-wrap items-end justify-end gap-4 md:flex-row">
-                                {item.metrics.map((metric) => (
-                                  <div
-                                    key={`${item.key}-${metric.label}`}
-                                    className="min-w-[6rem] text-right"
-                                  >
-                                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                      {metric.label}
-                                    </p>
-                                    <p
+                        <div className="space-y-5">
+                          {(() => {
+                            const top3 = section.items.slice(0, 3);
+                            const rest = section.items.slice(3, 5);
+                            return (
+                              <>
+                                {/* Podium: Top 3 */}
+                                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                  {top3.map((item) => (
+                                    <div
+                                      key={item.key}
                                       className={cn(
-                                        "font-semibold",
-                                        metric.highlight
-                                          ? "text-lg md:text-xl"
-                                          : "text-sm md:text-base"
+                                        "relative rounded-2xl border p-4 sm:p-5",
+                                        getItemAccent(item.rank)
                                       )}
                                     >
-                                      {metric.value}
-                                    </p>
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div className="flex items-center gap-3">
+                                          <div
+                                            className={cn(
+                                              "flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold",
+                                              getRankBadgeClasses(item.rank)
+                                            )}
+                                          >
+                                            {item.rank}
+                                          </div>
+                                          <Avatar className="h-14 w-14">
+                                            {item.avatarUrl ? (
+                                              <AvatarImage src={item.avatarUrl} alt={item.title} />
+                                            ) : null}
+                                            <AvatarFallback>{item.fallback}</AvatarFallback>
+                                          </Avatar>
+                                        </div>
+                                        {item.metrics[0] && (
+                                          <div className="text-right">
+                                            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                                              {item.metrics[0].label}
+                                            </p>
+                                            <p className="text-xl font-bold leading-tight">
+                                              {item.metrics[0].value}
+                                            </p>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="mt-3">
+                                        <p className="truncate font-semibold leading-tight">{item.title}</p>
+                                        {item.subtitle && (
+                                          <p className="truncate text-sm text-muted-foreground">{item.subtitle}</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {/* Ranks 4-5 */}
+                                {rest.length > 0 && (
+                                  <div className="space-y-3">
+                                    {rest.map((item) => (
+                                      <div
+                                        key={item.key}
+                                        className="flex items-center justify-between gap-3 rounded-xl border bg-background/60 p-3"
+                                      >
+                                        <div className="flex min-w-0 items-center gap-3">
+                                          <div
+                                            className={cn(
+                                              "flex h-7 w-7 flex-none items-center justify-center rounded-full text-[11px] font-semibold",
+                                              getRankBadgeClasses(item.rank)
+                                            )}
+                                          >
+                                            {item.rank}
+                                          </div>
+                                          <Avatar className="h-9 w-9">
+                                            {item.avatarUrl ? (
+                                              <AvatarImage src={item.avatarUrl} alt={item.title} />
+                                            ) : null}
+                                            <AvatarFallback>{item.fallback}</AvatarFallback>
+                                          </Avatar>
+                                          <div className="min-w-0">
+                                            <p className="truncate text-sm font-medium leading-tight">{item.title}</p>
+                                            {item.subtitle && (
+                                              <p className="truncate text-xs text-muted-foreground">{item.subtitle}</p>
+                                            )}
+                                          </div>
+                                        </div>
+                                        {item.metrics[0] && (
+                                          <div className="min-w-[7.5rem] text-right">
+                                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                              {item.metrics[0].label}
+                                            </p>
+                                            <p className="text-sm font-semibold">{item.metrics[0].value}</p>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
                                   </div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                       ) : (
-                        <div className="text-sm text-muted-foreground">
-                          {section.emptyMessage}
-                        </div>
+                        <div className="text-sm text-muted-foreground">{section.emptyMessage}</div>
                       )}
                     </CardContent>
                   </Card>
@@ -513,13 +655,13 @@ export default function LeaderboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {!allCompanies ? (
+                {!sortedCompanies ? (
                   <div className="space-y-2">
                     {[...Array(10)].map((_, i) => (
                       <Skeleton key={i} className="h-12 w-full" />
                     ))}
                   </div>
-                ) : allCompanies.length === 0 ? (
+                ) : sortedCompanies.length === 0 ? (
                   <p className="text-muted-foreground text-center py-8">
                     No companies have been created yet.
                   </p>
@@ -529,32 +671,56 @@ export default function LeaderboardPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-[50px]">#</TableHead>
-                          <TableHead>Company</TableHead>
-                          <TableHead>Owner</TableHead>
-                          <TableHead className="text-right">Cash</TableHead>
-                          <TableHead className="text-right">
-                            Stock Holdings
+                          <TableHead className="min-w-[220px]">
+                            <SortableHeader
+                              label="Company"
+                              active={companySort.key === "name"}
+                              onClick={() => toggleSort(companySort, setCompanySort, "name")}
+                            />
+                          </TableHead>
+                          <TableHead className="min-w-[160px]">
+                            <SortableHeader
+                              label="Owner"
+                              active={companySort.key === "ownerName"}
+                              onClick={() => toggleSort(companySort, setCompanySort, "ownerName")}
+                            />
                           </TableHead>
                           <TableHead className="text-right">
-                            Net Worth
+                            <SortableHeader
+                              label="Cash"
+                              numeric
+                              active={companySort.key === "balance"}
+                              onClick={() => toggleSort(companySort, setCompanySort, "balance")}
+                            />
                           </TableHead>
                           <TableHead className="text-right">
-                            Share Price
+                            <SortableHeader
+                              label="Net Worth"
+                              numeric
+                              active={companySort.key === "netWorth"}
+                              onClick={() => toggleSort(companySort, setCompanySort, "netWorth")}
+                            />
                           </TableHead>
                           <TableHead className="text-right">
-                            Market Cap
+                            <SortableHeader
+                              label="Market Cap"
+                              numeric
+                              active={companySort.key === "marketCap"}
+                              onClick={() => toggleSort(companySort, setCompanySort, "marketCap")}
+                            />
                           </TableHead>
-                          <TableHead className="text-right">
-                            Monthly Rev
+                          <TableHead>
+                            <SortableHeader
+                              label="Status"
+                              active={companySort.key === "isPublic"}
+                              onClick={() => toggleSort(companySort, setCompanySort, "isPublic")}
+                            />
                           </TableHead>
-                          <TableHead>Status</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {allCompanies
-                          .sort((a, b) => b.netWorth - a.netWorth)
-                          .map((company, index) => (
-                            <TableRow key={company._id}>
+                        {sortedCompanies.map((company: any, index: number) => (
+                            <TableRow key={company._id} className="hover:bg-muted/40">
                               <TableCell className="font-medium">
                                 {index + 1}
                               </TableCell>
@@ -585,20 +751,11 @@ export default function LeaderboardPage() {
                               <TableCell className="text-right">
                                 {formatCurrency(company.balance)}
                               </TableCell>
-                              <TableCell className="text-right">
-                                {formatCurrency(company.portfolioValue)}
-                              </TableCell>
                               <TableCell className="text-right font-semibold">
                                 {formatCurrency(company.netWorth)}
                               </TableCell>
                               <TableCell className="text-right">
-                                {formatCurrency(company.sharePrice)}
-                              </TableCell>
-                              <TableCell className="text-right">
                                 {formatCurrency(company.marketCap)}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {formatCurrency(company.monthlyRevenue)}
                               </TableCell>
                               <TableCell>
                                 {company.isPublic ? (
@@ -629,13 +786,13 @@ export default function LeaderboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {!allPlayers ? (
+                {!sortedPlayers ? (
                   <div className="space-y-2">
                     {[...Array(10)].map((_, i) => (
                       <Skeleton key={i} className="h-12 w-full" />
                     ))}
                   </div>
-                ) : allPlayers.length === 0 ? (
+                ) : sortedPlayers.length === 0 ? (
                   <p className="text-muted-foreground text-center py-8">
                     No players have joined yet.
                   </p>
@@ -645,22 +802,42 @@ export default function LeaderboardPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-[50px]">#</TableHead>
-                          <TableHead>Player</TableHead>
-                          <TableHead className="text-right">Cash</TableHead>
-                          <TableHead className="text-right">
-                            Portfolio
+                          <TableHead className="min-w-[220px]">
+                            <SortableHeader
+                              label="Player"
+                              active={playerSort.key === "name"}
+                              onClick={() => toggleSort(playerSort, setPlayerSort, "name")}
+                            />
                           </TableHead>
                           <TableHead className="text-right">
-                            Net Worth
+                            <SortableHeader
+                              label="Cash"
+                              numeric
+                              active={playerSort.key === "cashBalance"}
+                              onClick={() => toggleSort(playerSort, setPlayerSort, "cashBalance")}
+                            />
                           </TableHead>
-                          <TableHead className="text-right">Holdings</TableHead>
+                          <TableHead className="text-right">
+                            <SortableHeader
+                              label="Portfolio"
+                              numeric
+                              active={playerSort.key === "portfolioValue"}
+                              onClick={() => toggleSort(playerSort, setPlayerSort, "portfolioValue")}
+                            />
+                          </TableHead>
+                          <TableHead className="text-right">
+                            <SortableHeader
+                              label="Net Worth"
+                              numeric
+                              active={playerSort.key === "netWorth"}
+                              onClick={() => toggleSort(playerSort, setPlayerSort, "netWorth")}
+                            />
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {allPlayers
-                          .sort((a, b) => b.netWorth - a.netWorth)
-                          .map((player, index) => (
-                            <TableRow key={player._id}>
+                        {sortedPlayers.map((player: any, index: number) => (
+                            <TableRow key={player._id} className="hover:bg-muted/40">
                               <TableCell className="font-medium">
                                 {index + 1}
                               </TableCell>
@@ -698,9 +875,6 @@ export default function LeaderboardPage() {
                               <TableCell className="text-right font-semibold">
                                 {formatCurrency(player.netWorth)}
                               </TableCell>
-                              <TableCell className="text-right">
-                                {player.totalHoldings}
-                              </TableCell>
                             </TableRow>
                           ))}
                       </TableBody>
@@ -723,37 +897,74 @@ export default function LeaderboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {!allProducts ? (
+                {!sortedProducts ? (
                   <div className="space-y-2">
                     {[...Array(10)].map((_, i) => (
                       <Skeleton key={i} className="h-12 w-full" />
                     ))}
                   </div>
-                ) : allProducts.length === 0 ? (
+                ) : sortedProducts.length === 0 ? (
                   <p className="text-muted-foreground text-center py-8">
                     No products have been created yet.
                   </p>
                 ) : (
-                  <div className="rounded-md border">
-                    <Table>
+                  <div className="overflow-x-auto">
+                    <div className="rounded-md border overflow-hidden">
+                      <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-[50px]">#</TableHead>
-                          <TableHead>Product</TableHead>
-                          <TableHead>Company</TableHead>
-                          <TableHead className="text-right">Price</TableHead>
-                          <TableHead className="text-right">Sales</TableHead>
-                          <TableHead className="text-right">Revenue</TableHead>
-                          <TableHead className="text-right">Profit</TableHead>
-                          <TableHead className="text-right">Quality</TableHead>
-                          <TableHead>Status</TableHead>
+                            <TableHead className="min-w-[220px]">
+                            <SortableHeader
+                              label="Product"
+                              active={productSort.key === "name"}
+                              onClick={() => toggleSort(productSort, setProductSort, "name")}
+                            />
+                          </TableHead>
+                            <TableHead className="min-w-[200px] hidden md:table-cell">
+                            <SortableHeader
+                              label="Company"
+                              active={productSort.key === "companyName"}
+                              onClick={() => toggleSort(productSort, setProductSort, "companyName")}
+                            />
+                          </TableHead>
+                            <TableHead className="text-right">
+                            <SortableHeader
+                              label="Price"
+                              numeric
+                              active={productSort.key === "price"}
+                              onClick={() => toggleSort(productSort, setProductSort, "price")}
+                            />
+                          </TableHead>
+                            <TableHead className="text-right">
+                            <SortableHeader
+                              label="Sales"
+                              numeric
+                              active={productSort.key === "totalSales"}
+                              onClick={() => toggleSort(productSort, setProductSort, "totalSales")}
+                            />
+                          </TableHead>
+                            <TableHead className="text-right hidden lg:table-cell">
+                            <SortableHeader
+                              label="Revenue"
+                              numeric
+                              active={productSort.key === "totalRevenue"}
+                              onClick={() => toggleSort(productSort, setProductSort, "totalRevenue")}
+                            />
+                          </TableHead>
+                            <TableHead className="text-right hidden lg:table-cell">
+                            <SortableHeader
+                              label="Profit"
+                              numeric
+                              active={productSort.key === "profit"}
+                              onClick={() => toggleSort(productSort, setProductSort, "profit")}
+                            />
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {allProducts
-                          .sort((a, b) => b.totalSales - a.totalSales)
-                          .map((product, index) => (
-                            <TableRow key={product._id}>
+                        {sortedProducts.map((product: any, index: number) => (
+                            <TableRow key={product._id} className="hover:bg-muted/40">
                               <TableCell className="font-medium">
                                 {index + 1}
                               </TableCell>
@@ -770,12 +981,10 @@ export default function LeaderboardPage() {
                                       <Package className="h-4 w-4 text-primary" />
                                     </div>
                                   )}
-                                  <p className="font-semibold">
-                                    {product.name}
-                                  </p>
+                                  <p className="font-semibold truncate max-w-[12rem]">{product.name}</p>
                                 </div>
                               </TableCell>
-                              <TableCell>
+                              <TableCell className="hidden md:table-cell">
                                 <div className="flex items-center gap-2">
                                   {product.companyLogoUrl && (
                                     <img
@@ -785,9 +994,7 @@ export default function LeaderboardPage() {
                                     />
                                   )}
                                   <div>
-                                    <p className="text-sm">
-                                      {product.companyName}
-                                    </p>
+                                    <p className="text-sm truncate max-w-[10rem]">{product.companyName}</p>
                                     {product.companyTicker && (
                                       <p className="text-xs text-muted-foreground">
                                         {product.companyTicker}
@@ -796,16 +1003,16 @@ export default function LeaderboardPage() {
                                   </div>
                                 </div>
                               </TableCell>
-                              <TableCell className="text-right">
+                              <TableCell className="text-right whitespace-nowrap">
                                 {formatCurrency(product.price)}
                               </TableCell>
-                              <TableCell className="text-right">
+                              <TableCell className="text-right whitespace-nowrap">
                                 {formatNumber(product.totalSales)}
                               </TableCell>
-                              <TableCell className="text-right">
+                              <TableCell className="text-right hidden lg:table-cell whitespace-nowrap">
                                 {formatCurrency(product.totalRevenue)}
                               </TableCell>
-                              <TableCell className="text-right">
+                              <TableCell className="text-right hidden lg:table-cell whitespace-nowrap">
                                 <span
                                   className={
                                     product.profit >= 0
@@ -816,20 +1023,11 @@ export default function LeaderboardPage() {
                                   {formatCurrency(product.profit)}
                                 </span>
                               </TableCell>
-                              <TableCell className="text-right">
-                                {product.quality.toFixed(0)}%
-                              </TableCell>
-                              <TableCell>
-                                {product.isActive ? (
-                                  <Badge variant="default">Active</Badge>
-                                ) : (
-                                  <Badge variant="secondary">Inactive</Badge>
-                                )}
-                              </TableCell>
                             </TableRow>
                           ))}
                       </TableBody>
-                    </Table>
+                      </Table>
+                    </div>
                   </div>
                 )}
               </CardContent>
