@@ -54,7 +54,7 @@ export function CompanyCard({
   }, [company.balance, company.sharePrice]);
 
   return (
-    <Card className="p-4 space-y-4 max-w-2xl">
+    <Card className="p-4 space-y-4 w-96 h-80">
       <div className="flex items-start gap-4">
         <div className="flex-shrink-0">
           {company.logoUrl ? (

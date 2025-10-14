@@ -258,30 +258,29 @@ export default function CompaniesPage() {
                         ) : undefined;
 
                       return (
-                        <div key={company._id} className="flex justify-center">
-                          <CompanyCard
-                            company={{
-                              logoUrl: company.logoUrl,
-                              name: company.name,
-                              ticker: company.ticker,
-                              tags: company.tags ?? [],
-                              description: company.description,
-                              balance: company.balance ?? 0,
-                              sharePrice: company.sharePrice ?? 0,
-                              isPublic: company.isPublic,
-                              role: company.role,
-                            }}
-                            goPublicAction={goPublicAction}
-                            actions={{
-                              addProduct: addProductAction,
-                              dashboard: dashboardAction,
-                              dividends: dividendsAction,
-                              edit: editAction,
-                              delete: deleteAction,
-                            }}
-                            footerContent={footerContent}
-                          />
-                        </div>
+                        <CompanyCard
+                          key={company._id}
+                          company={{
+                            logoUrl: company.logoUrl,
+                            name: company.name,
+                            ticker: company.ticker,
+                            tags: company.tags ?? [],
+                            description: company.description,
+                            balance: company.balance ?? 0,
+                            sharePrice: company.sharePrice ?? 0,
+                            isPublic: company.isPublic,
+                            role: company.role,
+                          }}
+                          goPublicAction={goPublicAction}
+                          actions={{
+                            addProduct: addProductAction,
+                            dashboard: dashboardAction,
+                            dividends: dividendsAction,
+                            edit: editAction,
+                            delete: deleteAction,
+                          }}
+                          footerContent={footerContent}
+                        />
                       );
                     })}
                   </div>
