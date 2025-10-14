@@ -221,15 +221,24 @@ export default function LeaderboardPage() {
   const [activeTab, setActiveTab] = useState("overview");
 
   // Sorting state per table
-  const [companySort, setCompanySort] = useState<{ key: CompanySortKey; dir: SortDir }>({
+  const [companySort, setCompanySort] = useState<{
+    key: CompanySortKey;
+    dir: SortDir;
+  }>({
     key: "netWorth",
     dir: "desc",
   });
-  const [playerSort, setPlayerSort] = useState<{ key: PlayerSortKey; dir: SortDir }>({
+  const [playerSort, setPlayerSort] = useState<{
+    key: PlayerSortKey;
+    dir: SortDir;
+  }>({
     key: "netWorth",
     dir: "desc",
   });
-  const [productSort, setProductSort] = useState<{ key: ProductSortKey; dir: SortDir }>({
+  const [productSort, setProductSort] = useState<{
+    key: ProductSortKey;
+    dir: SortDir;
+  }>({
     key: "totalSales",
     dir: "desc",
   });
@@ -423,7 +432,15 @@ export default function LeaderboardPage() {
     if (current.key === key) {
       set({ key, dir: current.dir === "asc" ? "desc" : "asc" });
     } else {
-      set({ key, dir: key === ("name" as T) || key === ("ownerName" as T) || key === ("companyName" as T) ? "asc" : "desc" });
+      set({
+        key,
+        dir:
+          key === ("name" as T) ||
+          key === ("ownerName" as T) ||
+          key === ("companyName" as T)
+            ? "asc"
+            : "desc",
+      });
     }
   }
 
@@ -440,21 +457,27 @@ export default function LeaderboardPage() {
   const sortedCompanies = useMemo(() => {
     if (!allCompanies) return undefined;
     const data = [...allCompanies];
-    data.sort((a: any, b: any) => compareValues(a[companySort.key], b[companySort.key], companySort.dir));
+    data.sort((a: any, b: any) =>
+      compareValues(a[companySort.key], b[companySort.key], companySort.dir)
+    );
     return data;
   }, [allCompanies, companySort]);
 
   const sortedPlayers = useMemo(() => {
     if (!allPlayers) return undefined;
     const data = [...allPlayers];
-    data.sort((a: any, b: any) => compareValues(a[playerSort.key], b[playerSort.key], playerSort.dir));
+    data.sort((a: any, b: any) =>
+      compareValues(a[playerSort.key], b[playerSort.key], playerSort.dir)
+    );
     return data;
   }, [allPlayers, playerSort]);
 
   const sortedProducts = useMemo(() => {
     if (!allProducts) return undefined;
     const data = [...allProducts];
-    data.sort((a: any, b: any) => compareValues(a[productSort.key], b[productSort.key], productSort.dir));
+    data.sort((a: any, b: any) =>
+      compareValues(a[productSort.key], b[productSort.key], productSort.dir)
+    );
     return data;
   }, [allProducts, productSort]);
 
@@ -479,7 +502,9 @@ export default function LeaderboardPage() {
           active && "text-primary"
         )}
       >
-        <span className={cn("mr-2", numeric && "order-2 ml-2 mr-0")}>{label}</span>
+        <span className={cn("mr-2", numeric && "order-2 ml-2 mr-0")}>
+          {label}
+        </span>
         <ArrowUpDown className={cn("h-4 w-4", numeric && "order-1")} />
       </Button>
     );
@@ -561,9 +586,14 @@ export default function LeaderboardPage() {
                                           </div>
                                           <Avatar className="h-14 w-14">
                                             {item.avatarUrl ? (
-                                              <AvatarImage src={item.avatarUrl} alt={item.title} />
+                                              <AvatarImage
+                                                src={item.avatarUrl}
+                                                alt={item.title}
+                                              />
                                             ) : null}
-                                            <AvatarFallback>{item.fallback}</AvatarFallback>
+                                            <AvatarFallback>
+                                              {item.fallback}
+                                            </AvatarFallback>
                                           </Avatar>
                                         </div>
                                         {item.metrics[0] && (
@@ -578,9 +608,13 @@ export default function LeaderboardPage() {
                                         )}
                                       </div>
                                       <div className="mt-3">
-                                        <p className="truncate font-semibold leading-tight">{item.title}</p>
+                                        <p className="truncate font-semibold leading-tight">
+                                          {item.title}
+                                        </p>
                                         {item.subtitle && (
-                                          <p className="truncate text-sm text-muted-foreground">{item.subtitle}</p>
+                                          <p className="truncate text-sm text-muted-foreground">
+                                            {item.subtitle}
+                                          </p>
                                         )}
                                       </div>
                                     </div>
@@ -606,14 +640,23 @@ export default function LeaderboardPage() {
                                           </div>
                                           <Avatar className="h-9 w-9">
                                             {item.avatarUrl ? (
-                                              <AvatarImage src={item.avatarUrl} alt={item.title} />
+                                              <AvatarImage
+                                                src={item.avatarUrl}
+                                                alt={item.title}
+                                              />
                                             ) : null}
-                                            <AvatarFallback>{item.fallback}</AvatarFallback>
+                                            <AvatarFallback>
+                                              {item.fallback}
+                                            </AvatarFallback>
                                           </Avatar>
                                           <div className="min-w-0">
-                                            <p className="truncate text-sm font-medium leading-tight">{item.title}</p>
+                                            <p className="truncate text-sm font-medium leading-tight">
+                                              {item.title}
+                                            </p>
                                             {item.subtitle && (
-                                              <p className="truncate text-xs text-muted-foreground">{item.subtitle}</p>
+                                              <p className="truncate text-xs text-muted-foreground">
+                                                {item.subtitle}
+                                              </p>
                                             )}
                                           </div>
                                         </div>
@@ -622,7 +665,9 @@ export default function LeaderboardPage() {
                                             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
                                               {item.metrics[0].label}
                                             </p>
-                                            <p className="text-sm font-semibold">{item.metrics[0].value}</p>
+                                            <p className="text-sm font-semibold">
+                                              {item.metrics[0].value}
+                                            </p>
                                           </div>
                                         )}
                                       </div>
@@ -634,7 +679,9 @@ export default function LeaderboardPage() {
                           })()}
                         </div>
                       ) : (
-                        <div className="text-sm text-muted-foreground">{section.emptyMessage}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {section.emptyMessage}
+                        </div>
                       )}
                     </CardContent>
                   </Card>
@@ -675,14 +722,22 @@ export default function LeaderboardPage() {
                             <SortableHeader
                               label="Company"
                               active={companySort.key === "name"}
-                              onClick={() => toggleSort(companySort, setCompanySort, "name")}
+                              onClick={() =>
+                                toggleSort(companySort, setCompanySort, "name")
+                              }
                             />
                           </TableHead>
                           <TableHead className="min-w-[160px]">
                             <SortableHeader
                               label="Owner"
                               active={companySort.key === "ownerName"}
-                              onClick={() => toggleSort(companySort, setCompanySort, "ownerName")}
+                              onClick={() =>
+                                toggleSort(
+                                  companySort,
+                                  setCompanySort,
+                                  "ownerName"
+                                )
+                              }
                             />
                           </TableHead>
                           <TableHead className="text-right">
@@ -690,7 +745,13 @@ export default function LeaderboardPage() {
                               label="Cash"
                               numeric
                               active={companySort.key === "balance"}
-                              onClick={() => toggleSort(companySort, setCompanySort, "balance")}
+                              onClick={() =>
+                                toggleSort(
+                                  companySort,
+                                  setCompanySort,
+                                  "balance"
+                                )
+                              }
                             />
                           </TableHead>
                           <TableHead className="text-right">
@@ -698,7 +759,13 @@ export default function LeaderboardPage() {
                               label="Net Worth"
                               numeric
                               active={companySort.key === "netWorth"}
-                              onClick={() => toggleSort(companySort, setCompanySort, "netWorth")}
+                              onClick={() =>
+                                toggleSort(
+                                  companySort,
+                                  setCompanySort,
+                                  "netWorth"
+                                )
+                              }
                             />
                           </TableHead>
                           <TableHead className="text-right">
@@ -706,66 +773,81 @@ export default function LeaderboardPage() {
                               label="Market Cap"
                               numeric
                               active={companySort.key === "marketCap"}
-                              onClick={() => toggleSort(companySort, setCompanySort, "marketCap")}
+                              onClick={() =>
+                                toggleSort(
+                                  companySort,
+                                  setCompanySort,
+                                  "marketCap"
+                                )
+                              }
                             />
                           </TableHead>
                           <TableHead>
                             <SortableHeader
                               label="Status"
                               active={companySort.key === "isPublic"}
-                              onClick={() => toggleSort(companySort, setCompanySort, "isPublic")}
+                              onClick={() =>
+                                toggleSort(
+                                  companySort,
+                                  setCompanySort,
+                                  "isPublic"
+                                )
+                              }
                             />
                           </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {sortedCompanies.map((company: any, index: number) => (
-                            <TableRow key={company._id} className="hover:bg-muted/40">
-                              <TableCell className="font-medium">
-                                {index + 1}
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center gap-2">
-                                  {company.logoUrl ? (
-                                    <img
-                                      src={company.logoUrl}
-                                      alt={company.name}
-                                      className="w-8 h-8 rounded"
-                                    />
-                                  ) : (
-                                    <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center">
-                                      <Building2 className="h-4 w-4 text-primary" />
-                                    </div>
-                                  )}
-                                  <div>
-                                    <p className="font-semibold">
-                                      {company.name}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {company.ticker}
-                                    </p>
-                                  </div>
-                                </div>
-                              </TableCell>
-                              <TableCell>{company.ownerName}</TableCell>
-                              <TableCell className="text-right">
-                                {formatCurrency(company.balance)}
-                              </TableCell>
-                              <TableCell className="text-right font-semibold">
-                                {formatCurrency(company.netWorth)}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {formatCurrency(company.marketCap)}
-                              </TableCell>
-                              <TableCell>
-                                {company.isPublic ? (
-                                  <Badge variant="default">Public</Badge>
+                          <TableRow
+                            key={company._id}
+                            className="hover:bg-muted/40"
+                          >
+                            <TableCell className="font-medium">
+                              {index + 1}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                {company.logoUrl ? (
+                                  <img
+                                    src={company.logoUrl}
+                                    alt={company.name}
+                                    className="w-8 h-8 rounded"
+                                  />
                                 ) : (
-                                  <Badge variant="secondary">Private</Badge>
+                                  <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center">
+                                    <Building2 className="h-4 w-4 text-primary" />
+                                  </div>
                                 )}
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                                <div>
+                                  <p className="font-semibold">
+                                    {company.name}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {company.ticker}
+                                  </p>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>{company.ownerName}</TableCell>
+                            <TableCell className="text-right">
+                              {formatCurrency(company.balance)}
+                            </TableCell>
+                            <TableCell className="text-right font-semibold">
+                              {formatCurrency(company.netWorth)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {formatCurrency(company.marketCap)}
+                            </TableCell>
+                            <TableCell>
+                              {company.isPublic ? (
+                                <Badge variant="default">Public</Badge>
+                              ) : (
+                                <Badge variant="secondary">Private</Badge>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
                       </TableBody>
                     </Table>
                   </div>
@@ -806,7 +888,9 @@ export default function LeaderboardPage() {
                             <SortableHeader
                               label="Player"
                               active={playerSort.key === "name"}
-                              onClick={() => toggleSort(playerSort, setPlayerSort, "name")}
+                              onClick={() =>
+                                toggleSort(playerSort, setPlayerSort, "name")
+                              }
                             />
                           </TableHead>
                           <TableHead className="text-right">
@@ -814,7 +898,13 @@ export default function LeaderboardPage() {
                               label="Cash"
                               numeric
                               active={playerSort.key === "cashBalance"}
-                              onClick={() => toggleSort(playerSort, setPlayerSort, "cashBalance")}
+                              onClick={() =>
+                                toggleSort(
+                                  playerSort,
+                                  setPlayerSort,
+                                  "cashBalance"
+                                )
+                              }
                             />
                           </TableHead>
                           <TableHead className="text-right">
@@ -822,7 +912,13 @@ export default function LeaderboardPage() {
                               label="Portfolio"
                               numeric
                               active={playerSort.key === "portfolioValue"}
-                              onClick={() => toggleSort(playerSort, setPlayerSort, "portfolioValue")}
+                              onClick={() =>
+                                toggleSort(
+                                  playerSort,
+                                  setPlayerSort,
+                                  "portfolioValue"
+                                )
+                              }
                             />
                           </TableHead>
                           <TableHead className="text-right">
@@ -830,53 +926,60 @@ export default function LeaderboardPage() {
                               label="Net Worth"
                               numeric
                               active={playerSort.key === "netWorth"}
-                              onClick={() => toggleSort(playerSort, setPlayerSort, "netWorth")}
+                              onClick={() =>
+                                toggleSort(
+                                  playerSort,
+                                  setPlayerSort,
+                                  "netWorth"
+                                )
+                              }
                             />
                           </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {sortedPlayers.map((player: any, index: number) => (
-                            <TableRow key={player._id} className="hover:bg-muted/40">
-                              <TableCell className="font-medium">
-                                {index + 1}
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center gap-2">
-                                  <Avatar className="h-8 w-8">
-                                    {player.avatarUrl ? (
-                                      <AvatarImage
-                                        src={player.avatarUrl}
-                                        alt={player.name}
-                                      />
-                                    ) : null}
-                                    <AvatarFallback>
-                                      {getInitials(player.name)}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <div>
-                                    <p className="font-semibold">
-                                      {player.name}
+                          <TableRow
+                            key={player._id}
+                            className="hover:bg-muted/40"
+                          >
+                            <TableCell className="font-medium">
+                              {index + 1}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Avatar className="h-8 w-8">
+                                  {player.avatarUrl ? (
+                                    <AvatarImage
+                                      src={player.avatarUrl}
+                                      alt={player.name}
+                                    />
+                                  ) : null}
+                                  <AvatarFallback>
+                                    {getInitials(player.name)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="font-semibold">{player.name}</p>
+                                  {player.username && (
+                                    <p className="text-xs text-muted-foreground">
+                                      @{player.username}
                                     </p>
-                                    {player.username && (
-                                      <p className="text-xs text-muted-foreground">
-                                        @{player.username}
-                                      </p>
-                                    )}
-                                  </div>
+                                  )}
                                 </div>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {formatCurrency(player.cashBalance)}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {formatCurrency(player.portfolioValue)}
-                              </TableCell>
-                              <TableCell className="text-right font-semibold">
-                                {formatCurrency(player.netWorth)}
-                              </TableCell>
-                            </TableRow>
-                          ))}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {formatCurrency(player.cashBalance)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {formatCurrency(player.portfolioValue)}
+                            </TableCell>
+                            <TableCell className="text-right font-semibold">
+                              {formatCurrency(player.netWorth)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
                       </TableBody>
                     </Table>
                   </div>
@@ -911,60 +1014,99 @@ export default function LeaderboardPage() {
                   <div className="overflow-x-auto">
                     <div className="rounded-md border overflow-hidden">
                       <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-[50px]">#</TableHead>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-[50px]">#</TableHead>
                             <TableHead className="min-w-[220px]">
-                            <SortableHeader
-                              label="Product"
-                              active={productSort.key === "name"}
-                              onClick={() => toggleSort(productSort, setProductSort, "name")}
-                            />
-                          </TableHead>
+                              <SortableHeader
+                                label="Product"
+                                active={productSort.key === "name"}
+                                onClick={() =>
+                                  toggleSort(
+                                    productSort,
+                                    setProductSort,
+                                    "name"
+                                  )
+                                }
+                              />
+                            </TableHead>
                             <TableHead className="min-w-[200px] hidden md:table-cell">
-                            <SortableHeader
-                              label="Company"
-                              active={productSort.key === "companyName"}
-                              onClick={() => toggleSort(productSort, setProductSort, "companyName")}
-                            />
-                          </TableHead>
+                              <SortableHeader
+                                label="Company"
+                                active={productSort.key === "companyName"}
+                                onClick={() =>
+                                  toggleSort(
+                                    productSort,
+                                    setProductSort,
+                                    "companyName"
+                                  )
+                                }
+                              />
+                            </TableHead>
                             <TableHead className="text-right">
-                            <SortableHeader
-                              label="Price"
-                              numeric
-                              active={productSort.key === "price"}
-                              onClick={() => toggleSort(productSort, setProductSort, "price")}
-                            />
-                          </TableHead>
+                              <SortableHeader
+                                label="Price"
+                                numeric
+                                active={productSort.key === "price"}
+                                onClick={() =>
+                                  toggleSort(
+                                    productSort,
+                                    setProductSort,
+                                    "price"
+                                  )
+                                }
+                              />
+                            </TableHead>
                             <TableHead className="text-right">
-                            <SortableHeader
-                              label="Sales"
-                              numeric
-                              active={productSort.key === "totalSales"}
-                              onClick={() => toggleSort(productSort, setProductSort, "totalSales")}
-                            />
-                          </TableHead>
+                              <SortableHeader
+                                label="Sales"
+                                numeric
+                                active={productSort.key === "totalSales"}
+                                onClick={() =>
+                                  toggleSort(
+                                    productSort,
+                                    setProductSort,
+                                    "totalSales"
+                                  )
+                                }
+                              />
+                            </TableHead>
                             <TableHead className="text-right hidden lg:table-cell">
-                            <SortableHeader
-                              label="Revenue"
-                              numeric
-                              active={productSort.key === "totalRevenue"}
-                              onClick={() => toggleSort(productSort, setProductSort, "totalRevenue")}
-                            />
-                          </TableHead>
+                              <SortableHeader
+                                label="Revenue"
+                                numeric
+                                active={productSort.key === "totalRevenue"}
+                                onClick={() =>
+                                  toggleSort(
+                                    productSort,
+                                    setProductSort,
+                                    "totalRevenue"
+                                  )
+                                }
+                              />
+                            </TableHead>
                             <TableHead className="text-right hidden lg:table-cell">
-                            <SortableHeader
-                              label="Profit"
-                              numeric
-                              active={productSort.key === "profit"}
-                              onClick={() => toggleSort(productSort, setProductSort, "profit")}
-                            />
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {sortedProducts.map((product: any, index: number) => (
-                            <TableRow key={product._id} className="hover:bg-muted/40">
+                              <SortableHeader
+                                label="Profit"
+                                numeric
+                                active={productSort.key === "profit"}
+                                onClick={() =>
+                                  toggleSort(
+                                    productSort,
+                                    setProductSort,
+                                    "profit"
+                                  )
+                                }
+                              />
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {sortedProducts.map((product: any, index: number) => (
+                            <TableRow
+                              key={product._id}
+                              className="hover:bg-muted/40"
+                            >
                               <TableCell className="font-medium">
                                 {index + 1}
                               </TableCell>
@@ -981,7 +1123,9 @@ export default function LeaderboardPage() {
                                       <Package className="h-4 w-4 text-primary" />
                                     </div>
                                   )}
-                                  <p className="font-semibold truncate max-w-[12rem]">{product.name}</p>
+                                  <p className="font-semibold truncate max-w-[12rem]">
+                                    {product.name}
+                                  </p>
                                 </div>
                               </TableCell>
                               <TableCell className="hidden md:table-cell">
@@ -994,7 +1138,9 @@ export default function LeaderboardPage() {
                                     />
                                   )}
                                   <div>
-                                    <p className="text-sm truncate max-w-[10rem]">{product.companyName}</p>
+                                    <p className="text-sm truncate max-w-[10rem]">
+                                      {product.companyName}
+                                    </p>
                                     {product.companyTicker && (
                                       <p className="text-xs text-muted-foreground">
                                         {product.companyTicker}
@@ -1025,7 +1171,7 @@ export default function LeaderboardPage() {
                               </TableCell>
                             </TableRow>
                           ))}
-                      </TableBody>
+                        </TableBody>
                       </Table>
                     </div>
                   </div>
