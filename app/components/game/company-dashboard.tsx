@@ -1,6 +1,33 @@
-import { useQuery, useMutation } from "convex/react";
+"use client";
+
+import { useMemo } from "react";
+import { Link } from "react-router";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import {
+  ArrowLeft,
+  DollarSign,
+  Edit,
+  LayoutDashboard,
+  Package,
+  Plus,
+  ShoppingCart,
+  TrendingUp,
+} from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
+import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
 import {
   Card,
   CardContent,
@@ -8,8 +35,19 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
-import { Badge } from "~/components/ui/badge";
-import { Button } from "~/components/ui/button";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "~/components/ui/chart";
+import type { ChartConfig } from "~/components/ui/chart";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "~/components/ui/dropdown-menu";
+import { Spinner } from "~/components/ui/spinner";
 import {
   Table,
   TableBody,
@@ -18,61 +56,60 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "~/components/ui/chart";
-import type { ChartConfig } from "~/components/ui/chart";
-import {
-  ArrowDownIcon,
-  ArrowUpIcon,
-  DollarSign,
-  Package,
-  TrendingUp,
-  Wallet,
-  ShoppingCart,
-  XCircle,
-} from "lucide-react";
-import { EditProductDialog } from "./edit-product-dialog";
-import { EditCompanyDialog } from "./edit-company-dialog";
-import { DeleteCompanyDialog } from "./delete-company-dialog";
 import { useToast } from "~/hooks/use-toast";
-import { Spinner } from "~/components/ui/spinner";
-// import { ProductDebugPanel } from "./product-debug-panel";
+import { CreateProductDialog } from "./create-product-dialog";
+import { DeleteCompanyDialog } from "./delete-company-dialog";
+import { DistributeDividendDialog } from "./distribute-dividend-dialog";
+import { EditCompanyDialog } from "./edit-company-dialog";
+import { EditProductDialog } from "./edit-product-dialog";
 
 interface CompanyDashboardProps {
   companyId: Id<"companies">;
 }
 
-const chartConfig = {
+const revenueProfitChartConfig: ChartConfig = {
   revenue: {
     label: "Revenue",
     color: "hsl(var(--chart-1))",
   },
-  costs: {
-    label: "Costs",
+  profit: {
+    label: "Profit",
     color: "hsl(var(--chart-2))",
+  },
+};
+
+const topProductsChartConfig: ChartConfig = {
+  revenue: {
+    label: "Revenue",
+    color: "hsl(var(--chart-1))",
   },
   profit: {
     label: "Profit",
-    color: "hsl(var(--chart-3))",
+    color: "hsl(var(--chart-2))",
   },
-} satisfies ChartConfig;
+};
+
+const formatCurrency = (value: number, options?: Intl.NumberFormatOptions) => {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+    ...options,
+  }).format(Number.isFinite(value) ? value : 0);
+};
+
+const formatTickerInitials = (ticker?: string, fallback?: string) => {
+  if (ticker && ticker.length > 0) {
+    return ticker.slice(0, 2).toUpperCase();
+  }
+  if (fallback && fallback.length > 0) {
+    const parts = fallback.split(" ");
+    const initials = parts.slice(0, 2).map((part) => part[0] ?? "");
+    return initials.join("").toUpperCase() || "QB";
+  }
+  return "QB";
+};
 
 export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
   const dashboardData = useQuery(api.companies.getCompanyDashboard, {
@@ -93,8 +130,8 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
     } catch (error) {
       console.error("Failed to toggle product status:", error);
       toast({
-        title: "Error",
-        description: "Failed to update product status. Please try again.",
+        title: "Update failed",
+        description: "Could not change product status. Try again.",
         variant: "destructive",
       });
     }
@@ -103,118 +140,224 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
   if (dashboardData === undefined) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="text-center">
-          <Spinner size="xl" className="text-gray-900 mx-auto" />
-          <p className="mt-4 text-gray-600">Loading dashboard...</p>
+        <div className="text-center space-y-4">
+          <Spinner size="xl" className="mx-auto text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">
+            Loading company dashboard…
+          </p>
         </div>
       </div>
     );
   }
 
-  const { company, totals, products, chartData } = dashboardData;
+  if (!dashboardData) {
+    return (
+      <div className="rounded-lg border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+        Unable to load this company dashboard.
+      </div>
+    );
+  }
 
-  // Calculate profit margin
+  const { company, totals, products, chartData } = dashboardData;
+  const tags = Array.isArray(company.tags) ? company.tags : [];
+
+  const activeProductCount = products.filter(
+    (product) => product.isActive
+  ).length;
+  const activeUnitsSold = products.reduce(
+    (sum, product) => sum + (product.unitsSold ?? 0),
+    0
+  );
+
   const profitMargin =
     totals.revenue > 0 ? (totals.profit / totals.revenue) * 100 : 0;
 
+  const trendData = chartData.map((entry) => ({
+    day: new Date(entry.date).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    }),
+    revenue: entry.revenue,
+    profit: entry.profit,
+  }));
+
+  const topProducts = useMemo(() => {
+    return products
+      .filter((product) => product.revenue > 0)
+      .slice()
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10)
+      .map((product) => ({
+        name:
+          product.name.length > 15
+            ? `${product.name.substring(0, 15)}…`
+            : product.name,
+        revenue: product.revenue,
+        profit: product.profit,
+      }));
+  }, [products]);
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">{company.name} Dashboard</h2>
-          <p className="text-muted-foreground">
-            Track your company's performance and growth
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Badge variant={company.isPublic ? "default" : "outline"}>
-            {company.isPublic ? "Public Company" : "Private Company"}
-          </Badge>
-          <EditCompanyDialog
-            company={{
-              _id: company._id,
-              name: company.name,
-              description: company.description,
-              tags: company.tags,
-              ticker: company.ticker,
-              logoUrl: company.logoUrl,
-            }}
-          />
-          <DeleteCompanyDialog
-            companyId={company._id}
-            companyName={company.name}
-            balance={company.balance}
-          />
-        </div>
+      <div className="flex items-center gap-4">
+        <Button variant="outline" size="sm" asChild className="bg-transparent">
+          <Link to="/dashboard/companies" className="gap-2 inline-flex">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Companies
+          </Link>
+        </Button>
       </div>
 
-      {/* Key Metrics */}
+      <Card>
+        <CardContent className="p-6">
+          <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+            <div className="flex gap-4">
+              <Avatar className="h-20 w-20 rounded-lg">
+                <AvatarImage
+                  src={company.logoUrl || undefined}
+                  alt={company.name}
+                />
+                <AvatarFallback className="rounded-lg text-xl">
+                  {formatTickerInitials(company.ticker, company.name)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-2xl font-semibold text-balance">
+                    {company.name}
+                  </h1>
+                  {company.ticker && (
+                    <Badge variant="secondary" className="font-mono">
+                      {company.ticker}
+                    </Badge>
+                  )}
+                  <Badge variant={company.isPublic ? "default" : "outline"}>
+                    {company.isPublic ? "Public" : "Private"}
+                  </Badge>
+                </div>
+                {company.description && (
+                  <p className="max-w-2xl text-sm text-muted-foreground text-pretty">
+                    {company.description}
+                  </p>
+                )}
+                {tags.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {tags.map((tag) => (
+                      <Badge key={tag} variant="outline">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <CreateProductDialog
+                companyId={company._id}
+                trigger={
+                  <Button size="sm" className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Add Product
+                  </Button>
+                }
+              />
+              <EditCompanyDialog
+                company={{
+                  _id: company._id,
+                  name: company.name,
+                  description: company.description,
+                  tags,
+                  ticker: company.ticker,
+                  logoUrl: company.logoUrl,
+                }}
+              />
+              <Button
+                asChild
+                size="sm"
+                variant="outline"
+                className="bg-transparent gap-2"
+              >
+                <Link to={`/dashboard/companies/${company._id}`}>
+                  <LayoutDashboard className="h-4 w-4" />
+                  Dashboard
+                </Link>
+              </Button>
+              {company.isPublic && (
+                <DistributeDividendDialog
+                  companyId={company._id}
+                  companyName={company.name}
+                  companyBalance={company.balance}
+                  companyOwnerId={company.ownerId}
+                  trigger={
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="bg-transparent gap-2"
+                    >
+                      <TrendingUp className="h-4 w-4" />
+                      Dividends
+                    </Button>
+                  }
+                />
+              )}
+              <DeleteCompanyDialog
+                companyId={company._id}
+                companyName={company.name}
+                balance={company.balance}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Current Balance
+              Company Balance
             </CardTitle>
-            <Wallet className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              $
-              {company.balance.toLocaleString("en-US", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Company account balance
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              $
-              {totals.revenue.toLocaleString("en-US", {
+              {formatCurrency(company.balance, {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              All-time product sales
+            <p className="text-xs text-muted-foreground">
+              Current available funds
             </p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Profit</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold flex items-center gap-1">
-              $
-              {totals.profit.toLocaleString("en-US", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-              {profitMargin > 0 ? (
-                <ArrowUpIcon className="h-4 w-4 text-green-600" />
-              ) : (
-                <ArrowDownIcon className="h-4 w-4 text-red-600" />
-              )}
+            <div className="text-2xl font-bold">
+              {formatCurrency(totals.revenue)}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {profitMargin.toFixed(1)}% profit margin
+            <p className="text-xs text-muted-foreground">
+              All-time revenue generated
             </p>
           </CardContent>
         </Card>
-
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Profit</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {formatCurrency(totals.profit)}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {profitMargin.toFixed(1)}% lifetime margin
+            </p>
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -223,90 +366,78 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {products.filter((p) => p.isActive).length}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {products.reduce((sum, p) => sum + p.unitsSold, 0)} total units
-              sold
+            <div className="text-2xl font-bold">{activeProductCount}</div>
+            <p className="text-xs text-muted-foreground">
+              {activeUnitsSold.toLocaleString()} total units sold
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Revenue & Profit Chart */}
-      {chartData.length > 0 && (
+      {trendData.length > 0 ? (
         <Card>
           <CardHeader>
             <CardTitle>Revenue & Profit Trends</CardTitle>
             <CardDescription>
-              Daily revenue, costs, and profit over the last 30 days
+              Daily performance over the last 30 days
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={chartConfig} className="h-[300px] w-full">
-              <AreaChart data={chartData}>
+            <ChartContainer
+              config={revenueProfitChartConfig}
+              className="h-[300px]"
+            >
+              <AreaChart
+                data={trendData}
+                margin={{ top: 10, right: 16, left: 0, bottom: 0 }}
+              >
                 <defs>
-                  <linearGradient id="fillRevenue" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
                     <stop
                       offset="5%"
                       stopColor="var(--color-revenue)"
-                      stopOpacity={0.8}
+                      stopOpacity={0.3}
                     />
                     <stop
                       offset="95%"
                       stopColor="var(--color-revenue)"
-                      stopOpacity={0.1}
+                      stopOpacity={0}
                     />
                   </linearGradient>
-                  <linearGradient id="fillProfit" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
                     <stop
                       offset="5%"
                       stopColor="var(--color-profit)"
-                      stopOpacity={0.8}
+                      stopOpacity={0.3}
                     />
                     <stop
                       offset="95%"
                       stopColor="var(--color-profit)"
-                      stopOpacity={0.1}
+                      stopOpacity={0}
                     />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis
-                  dataKey="date"
+                  dataKey="day"
                   tickLine={false}
                   axisLine={false}
-                  tickMargin={8}
-                  tickFormatter={(value) => {
-                    const date = new Date(value);
-                    return date.toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                    });
-                  }}
+                  tick={{ fontSize: 12 }}
                 />
                 <YAxis
                   tickLine={false}
                   axisLine={false}
-                  tickMargin={8}
-                  tickFormatter={(value) => `$${value}`}
+                  tick={{ fontSize: 12 }}
+                  tickFormatter={(value) => `$${Math.round(value / 1000)}k`}
                 />
                 <ChartTooltip
                   content={
                     <ChartTooltipContent
-                      labelFormatter={(value) => {
-                        return new Date(value).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        });
-                      }}
                       formatter={(value) =>
-                        `$${Number(value).toLocaleString("en-US", {
+                        formatCurrency(Number(value), {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
-                        })}`
+                        })
                       }
                     />
                   }
@@ -315,228 +446,230 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
                   type="monotone"
                   dataKey="revenue"
                   stroke="var(--color-revenue)"
-                  fill="url(#fillRevenue)"
+                  fillOpacity={1}
+                  fill="url(#colorRevenue)"
                   strokeWidth={2}
                 />
                 <Area
                   type="monotone"
                   dataKey="profit"
                   stroke="var(--color-profit)"
-                  fill="url(#fillProfit)"
+                  fillOpacity={1}
+                  fill="url(#colorProfit)"
                   strokeWidth={2}
                 />
               </AreaChart>
             </ChartContainer>
           </CardContent>
         </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Revenue & Profit Trends</CardTitle>
+            <CardDescription>
+              No revenue activity recorded in the last 30 days.
+            </CardDescription>
+          </CardHeader>
+        </Card>
       )}
 
-      {/* Products Performance */}
       <Card>
         <CardHeader>
-          <CardTitle>Product Performance</CardTitle>
+          <CardTitle>Products</CardTitle>
           <CardDescription>
-            Detailed breakdown of each product's sales and profitability
+            Manage your product catalog and performance
           </CardDescription>
         </CardHeader>
         <CardContent>
           {products.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No products yet. Create your first product to start selling!
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              You have not launched any products yet.
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Product</TableHead>
-                  <TableHead className="text-right">Current Price</TableHead>
-                  <TableHead className="text-right">Avg Sale Price</TableHead>
-                  <TableHead className="text-right">Units Sold</TableHead>
-                  <TableHead className="text-right">Revenue</TableHead>
-                  <TableHead className="text-right">Costs</TableHead>
-                  <TableHead className="text-right">Profit</TableHead>
-                  <TableHead className="text-right">Margin</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {products.map((product) => {
-                  const margin =
-                    product.revenue > 0
-                      ? (product.profit / product.revenue) * 100
-                      : 0;
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[300px]">Product</TableHead>
+                    <TableHead className="text-right">Price</TableHead>
+                    <TableHead className="text-right">Units Sold</TableHead>
+                    <TableHead className="text-right">Revenue</TableHead>
+                    <TableHead className="text-right">Costs</TableHead>
+                    <TableHead className="text-right">Profit</TableHead>
+                    <TableHead className="text-right">Margin</TableHead>
+                    <TableHead className="text-center">Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {products.map((product) => {
+                    const margin =
+                      product.revenue > 0
+                        ? (product.profit / product.revenue) * 100
+                        : 0;
 
-                  return (
-                    <TableRow key={product._id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          {product.imageUrl && (
-                            <img
-                              src={product.imageUrl}
-                              alt={product.name}
-                              className="h-8 w-8 rounded object-cover"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).style.display =
-                                  "none";
-                              }}
-                            />
-                          )}
-                          <div>
-                            <div>{product.name}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {product.description.slice(0, 40)}
-                              {product.description.length > 40 ? "..." : ""}
+                    return (
+                      <TableRow key={product._id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-12 w-12 rounded-md">
+                              <AvatarImage
+                                src={product.imageUrl || undefined}
+                                alt={product.name}
+                              />
+                              <AvatarFallback className="rounded-md">
+                                {product.name.substring(0, 2).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="space-y-1">
+                              <div className="text-sm font-medium">
+                                {product.name}
+                              </div>
+                              <div className="text-xs text-muted-foreground line-clamp-1">
+                                {product.description}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        ${product.price.toFixed(2)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span className="text-xs text-muted-foreground">
-                          ${product.avgSalePrice.toFixed(2)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {product.unitsSold}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        ${product.revenue.toFixed(2)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        ${product.costs.toFixed(2)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span
-                          className={
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatCurrency(product.price, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {product.unitsSold.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatCurrency(product.revenue)}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {formatCurrency(product.costs)}
+                        </TableCell>
+                        <TableCell
+                          className={`text-right font-medium ${
                             product.profit >= 0
-                              ? "text-green-600"
+                              ? "text-emerald-600"
                               : "text-red-600"
-                          }
+                          }`}
                         >
-                          ${product.profit.toFixed(2)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span
-                          className={
-                            margin >= 30
-                              ? "text-green-600"
-                              : margin >= 15
-                              ? "text-yellow-600"
-                              : "text-red-600"
-                          }
-                        >
+                          {formatCurrency(product.profit)}
+                        </TableCell>
+                        <TableCell className="text-right">
                           {margin.toFixed(1)}%
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={product.isActive ? "default" : "secondary"}
-                        >
-                          {product.isActive ? "Active" : "Inactive"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <EditProductDialog
-                            product={{
-                              _id: product._id,
-                              name: product.name,
-                              description: product.description,
-                              price: product.price,
-                              imageUrl: product.imageUrl,
-                              tags: product.tags,
-                              isActive: product.isActive,
-                            }}
-                          />
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              toggleProductStatus(product._id, product.isActive)
-                            }
-                            title={
-                              product.isActive
-                                ? "Remove from market"
-                                : "Put on market"
-                            }
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge
+                            variant={product.isActive ? "default" : "secondary"}
                           >
-                            {product.isActive ? (
-                              <XCircle className="h-4 w-4 text-red-500" />
-                            ) : (
-                              <ShoppingCart className="h-4 w-4 text-green-500" />
-                            )}
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                            {product.isActive ? "Active" : "Inactive"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                Actions
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <EditProductDialog
+                                product={{
+                                  _id: product._id,
+                                  name: product.name,
+                                  description: product.description,
+                                  price: product.price,
+                                  imageUrl: product.imageUrl,
+                                  tags: product.tags,
+                                  isActive: product.isActive,
+                                }}
+                                trigger={
+                                  <DropdownMenuItem
+                                    onSelect={(event) => event.preventDefault()}
+                                  >
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    Edit
+                                  </DropdownMenuItem>
+                                }
+                              />
+                              <DropdownMenuItem
+                                onSelect={() =>
+                                  void toggleProductStatus(
+                                    product._id,
+                                    product.isActive
+                                  )
+                                }
+                              >
+                                {product.isActive ? (
+                                  <>
+                                    <Package className="mr-2 h-4 w-4" />
+                                    Deactivate
+                                  </>
+                                ) : (
+                                  <>
+                                    <ShoppingCart className="mr-2 h-4 w-4" />
+                                    Activate
+                                  </>
+                                )}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Product Comparison Chart */}
-      {products.length > 0 && products.some((p) => p.revenue > 0) && (
+      {topProducts.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Product Revenue Comparison</CardTitle>
+            <CardTitle>Top 10 Products by Revenue</CardTitle>
             <CardDescription>
-              Compare revenue and profit across all products
+              Comparison of revenue and profit for best-performing products
             </CardDescription>
           </CardHeader>
           <CardContent>
             <ChartContainer
-              config={{
-                revenue: {
-                  label: "Revenue",
-                  color: "hsl(var(--chart-1))",
-                },
-                profit: {
-                  label: "Profit",
-                  color: "hsl(var(--chart-3))",
-                },
-              }}
-              className="h-[300px] w-full"
+              config={topProductsChartConfig}
+              className="h-[360px]"
             >
               <BarChart
-                data={products
-                  .filter((p) => p.revenue > 0)
-                  .sort((a, b) => b.revenue - a.revenue)}
+                data={topProducts}
+                margin={{ top: 16, right: 16, left: 0, bottom: 32 }}
               >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis
                   dataKey="name"
                   tickLine={false}
                   axisLine={false}
-                  tickMargin={8}
-                  tickFormatter={(value) =>
-                    value.length > 15 ? value.slice(0, 15) + "..." : value
-                  }
+                  angle={-40}
+                  textAnchor="end"
+                  tick={{ fontSize: 11 }}
                 />
                 <YAxis
                   tickLine={false}
                   axisLine={false}
-                  tickMargin={8}
-                  tickFormatter={(value) => `$${value}`}
+                  tick={{ fontSize: 12 }}
+                  tickFormatter={(value) => `$${Math.round(value / 1000)}k`}
                 />
                 <ChartTooltip
                   content={
                     <ChartTooltipContent
                       formatter={(value) =>
-                        `$${Number(value).toLocaleString("en-US", {
+                        formatCurrency(Number(value), {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
-                        })}`
+                        })
                       }
                     />
                   }
                 />
+                <Legend wrapperStyle={{ paddingTop: 12 }} />
                 <Bar
                   dataKey="revenue"
                   fill="var(--color-revenue)"

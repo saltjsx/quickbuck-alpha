@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -28,9 +28,13 @@ interface EditProductDialogProps {
     tags: string[];
     isActive: boolean;
   };
+  trigger?: ReactNode;
 }
 
-export function EditProductDialog({ product }: EditProductDialogProps) {
+export function EditProductDialog({
+  product,
+  trigger,
+}: EditProductDialogProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(product.name);
   const [description, setDescription] = useState(product.description);
@@ -111,9 +115,11 @@ export function EditProductDialog({ product }: EditProductDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="sm">
-          <Edit className="h-4 w-4" />
-        </Button>
+        {trigger ?? (
+          <Button variant="ghost" size="sm">
+            <Edit className="h-4 w-4" />
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>

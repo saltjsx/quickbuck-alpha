@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -21,9 +21,13 @@ import { Filter } from "bad-words";
 
 interface CreateProductDialogProps {
   companyId: Id<"companies">;
+  trigger?: ReactNode;
 }
 
-export function CreateProductDialog({ companyId }: CreateProductDialogProps) {
+export function CreateProductDialog({
+  companyId,
+  trigger,
+}: CreateProductDialogProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -162,10 +166,12 @@ export function CreateProductDialog({ companyId }: CreateProductDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Product
-        </Button>
+        {trigger ?? (
+          <Button size="sm">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Product
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
