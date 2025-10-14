@@ -54,7 +54,7 @@ export function CompanyCard({
   }, [company.balance, company.sharePrice]);
 
   return (
-    <Card className="flex h-[26rem] w-[36rem] flex-col p-4">
+    <Card className="flex h-[26rem] w-[40rem] flex-col p-4">
       <div className="flex-1 space-y-3">
         <div className="flex items-start gap-4">
           <div className="flex-shrink-0">
@@ -116,7 +116,7 @@ export function CompanyCard({
           </p>
         )}
 
-        <div className="grid grid-cols-2 gap-3 border-y border-border py-3">
+        <div className="grid grid-cols-2 gap-3 border-y border-border py-2">
           <div>
             <p className="mb-1 text-xs text-muted-foreground">Balance</p>
             <p className="text-lg font-semibold text-foreground">
@@ -132,7 +132,7 @@ export function CompanyCard({
         </div>
       </div>
 
-      <div className="mt-3 space-y-2">
+      <div className="mt-2 space-y-2">
         <div className="flex flex-wrap gap-2">
           <div className="flex-1 min-w-[120px]">{actions.addProduct}</div>
           <div className="flex-1 min-w-[120px]">{actions.dashboard}</div>
