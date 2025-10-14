@@ -54,93 +54,97 @@ export function CompanyCard({
   }, [company.balance, company.sharePrice]);
 
   return (
-    <Card className="p-4 space-y-4 w-96 h-80">
-      <div className="flex items-start gap-4">
-        <div className="flex-shrink-0">
-          {company.logoUrl ? (
-            <img
-              src={company.logoUrl}
-              alt={`${company.name} logo`}
-              className="w-16 h-16 rounded-lg object-cover border border-border"
-              onError={(event) => {
-                (event.target as HTMLImageElement).style.display = "none";
-              }}
-            />
-          ) : (
-            <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center border border-border">
-              <Building2 className="w-8 h-8 text-muted-foreground" />
-            </div>
-          )}
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1 min-w-0 space-y-1">
-              <h3 className="text-lg font-semibold text-foreground truncate">
-                {company.name}
-              </h3>
-              <div className="flex items-center gap-2 flex-wrap text-sm text-muted-foreground font-mono">
-                <span>{company.ticker}</span>
-                <Badge variant={company.isPublic ? "default" : "outline"}>
-                  {company.isPublic ? "Public" : "Private"}
-                </Badge>
-                {company.role && (
-                  <Badge
-                    variant="secondary"
-                    className="capitalize text-xs font-normal"
-                  >
-                    {company.role}
-                  </Badge>
-                )}
+    <Card className="flex h-[26rem] w-[32rem] flex-col p-4">
+      <div className="flex-1 space-y-4">
+        <div className="flex items-start gap-4">
+          <div className="flex-shrink-0">
+            {company.logoUrl ? (
+              <img
+                src={company.logoUrl}
+                alt={`${company.name} logo`}
+                className="h-16 w-16 rounded-lg object-cover border border-border"
+                onError={(event) => {
+                  (event.target as HTMLImageElement).style.display = "none";
+                }}
+              />
+            ) : (
+              <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-border bg-muted">
+                <Building2 className="h-8 w-8 text-muted-foreground" />
               </div>
-            </div>
-            {goPublicAction}
+            )}
           </div>
 
-          {tags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mt-2">
-              {tags.map((tag) => (
-                <Badge key={tag} variant="secondary" className="text-xs">
-                  {tag}
-                </Badge>
-              ))}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1 space-y-1">
+                <h3 className="truncate text-lg font-semibold text-foreground">
+                  {company.name}
+                </h3>
+                <div className="flex flex-wrap items-center gap-2 text-sm font-mono text-muted-foreground">
+                  <span>{company.ticker}</span>
+                  <Badge variant={company.isPublic ? "default" : "outline"}>
+                    {company.isPublic ? "Public" : "Private"}
+                  </Badge>
+                  {company.role && (
+                    <Badge
+                      variant="secondary"
+                      className="capitalize text-xs font-normal"
+                    >
+                      {company.role}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              {goPublicAction}
             </div>
-          )}
+
+            {tags.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {tags.map((tag) => (
+                  <Badge key={tag} variant="secondary" className="text-xs">
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
-      {company.description && (
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          {company.description}
-        </p>
-      )}
-
-      <div className="grid grid-cols-2 gap-3 py-3 border-y border-border">
-        <div>
-          <p className="text-xs text-muted-foreground mb-1">Balance</p>
-          <p className="text-lg font-semibold text-foreground">
-            {formattedBalance}
+        {company.description && (
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            {company.description}
           </p>
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground mb-1">Stock Price</p>
-          <p className="text-lg font-semibold text-foreground">
-            {formattedSharePrice}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        <div className="flex-1 min-w-[120px]">{actions.addProduct}</div>
-        <div className="flex-1 min-w-[120px]">{actions.dashboard}</div>
-        {actions.dividends && (
-          <div className="flex-1 min-w-[120px]">{actions.dividends}</div>
         )}
-        <div>{actions.edit}</div>
-        <div>{actions.delete}</div>
+
+        <div className="grid grid-cols-2 gap-3 border-y border-border py-3">
+          <div>
+            <p className="mb-1 text-xs text-muted-foreground">Balance</p>
+            <p className="text-lg font-semibold text-foreground">
+              {formattedBalance}
+            </p>
+          </div>
+          <div>
+            <p className="mb-1 text-xs text-muted-foreground">Stock Price</p>
+            <p className="text-lg font-semibold text-foreground">
+              {formattedSharePrice}
+            </p>
+          </div>
+        </div>
       </div>
 
-      {footerContent}
+      <div className="mt-4 space-y-3">
+        <div className="flex flex-wrap gap-2">
+          <div className="flex-1 min-w-[120px]">{actions.addProduct}</div>
+          <div className="flex-1 min-w-[120px]">{actions.dashboard}</div>
+          {actions.dividends && (
+            <div className="flex-1 min-w-[120px]">{actions.dividends}</div>
+          )}
+          <div>{actions.edit}</div>
+          <div>{actions.delete}</div>
+        </div>
+
+        {footerContent}
+      </div>
     </Card>
   );
 }
