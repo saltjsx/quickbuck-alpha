@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { computeOwnerMetricsFromHoldings } from "./utils/stocks";
 
 // Helper to get current user ID
@@ -14,6 +15,100 @@ async function getCurrentUserId(ctx: any) {
   
   return user?._id || null;
 }
+
+// ULTRA-OPTIMIZATION: Update cached company metrics
+export const updateCompanyMetrics = internalMutation({
+  args: { companyId: v.id("companies") },
+  handler: async (ctx, args) => {
+    const company = await ctx.db.get(args.companyId);
+    if (!company) return;
+
+    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+
+    // Calculate metrics for 30 days
+    const [incoming30d, outgoing30d] = await Promise.all([
+      ctx.db
+        .query("ledger")
+        .withIndex("by_to_account_created", (q) => 
+          q.eq("toAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
+        )
+        .take(500),
+      ctx.db
+        .query("ledger")
+        .withIndex("by_from_account_created", (q) => 
+          q.eq("fromAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
+        )
+        .take(500),
+    ]);
+
+    const revenueTypes = new Set(["product_purchase", "marketplace_batch"]);
+    const costTypes = new Set(["product_cost", "marketplace_batch"]);
+
+    let revenue30d = 0;
+    let costs30d = 0;
+    let expenses30d = 0;
+
+    for (const tx of incoming30d) {
+      if (revenueTypes.has(tx.type)) revenue30d += tx.amount || 0;
+    }
+
+    for (const tx of outgoing30d) {
+      if (costTypes.has(tx.type)) costs30d += tx.amount || 0;
+      else if (tx.type === "expense") expenses30d += tx.amount || 0;
+    }
+
+    // Upsert 30d metrics
+    const existing30d = await ctx.db
+      .query("companyMetrics")
+      .withIndex("by_company_period", (q) => 
+        q.eq("companyId", args.companyId).eq("period", "30d")
+      )
+      .first();
+
+    const metrics30d = {
+      companyId: args.companyId,
+      period: "30d" as const,
+      totalRevenue: revenue30d,
+      totalCosts: costs30d,
+      totalExpenses: expenses30d,
+      totalProfit: revenue30d - costs30d - expenses30d,
+      transactionCount: incoming30d.length + outgoing30d.length,
+      lastUpdated: Date.now(),
+    };
+
+    if (existing30d) {
+      await ctx.db.patch(existing30d._id, metrics30d);
+    } else {
+      await ctx.db.insert("companyMetrics", metrics30d);
+    }
+
+    return metrics30d;
+  },
+});
+
+// ULTRA-OPTIMIZATION: Batch update all company metrics (called by cron)
+export const updateAllCompanyMetrics = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    // Get all companies (limit to 100 per batch to avoid timeout)
+    const companies = await ctx.db.query("companies").take(100);
+    
+    let updated = 0;
+    for (const company of companies) {
+      try {
+        await ctx.scheduler.runAfter(0, internal.companies.updateCompanyMetrics, {
+          companyId: company._id,
+        });
+        updated++;
+      } catch (error) {
+        console.error(`Failed to schedule metrics update for company ${company._id}:`, error);
+      }
+    }
+    
+    return { scheduled: updated, total: companies.length };
+  },
+});
 
 // Create a new company
 export const createCompany = mutation({
@@ -510,76 +605,178 @@ export const getCompanyDashboard = query({
     const company = await ctx.db.get(args.companyId);
     if (!company) throw new Error("Company not found");
 
-    // Get all products for this company
-    const products = await ctx.db
-      .query("products")
-      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
-      .collect();
-
-    const companyHoldings = await ctx.db
-      .query("stocks")
-      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
-      .take(100); // BANDWIDTH OPTIMIZATION: Reduced from 500 to 100
-    const ownershipSnapshot = computeOwnerMetricsFromHoldings(company, companyHoldings ?? [], company.ownerId);
-
     // Get cached balance directly from account
     const account = await ctx.db.get(company.accountId);
     const balance = account?.balance ?? 0;
 
-    // OPTIMIZED: Use indexed queries with type filters to reduce data transfer
-    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-    
-    // OPTIMIZED: Use triple compound index for efficient type+time filtered queries
-    // Query only revenue transactions TO this account
-    const revenueTypes = ["product_purchase", "marketplace_batch"];
-    const revenueTransactions = (await Promise.all(
-      revenueTypes.map(type =>
+    // ULTRA-OPTIMIZED: Query only active products (most companies have <10 products)
+    const products = await ctx.db
+      .query("products")
+      .withIndex("by_company_active", (q) => q.eq("companyId", args.companyId).eq("isActive", true))
+      .take(50); // Limit to 50 active products max
+
+    // ULTRA-OPTIMIZED: Use smaller holding sample for ownership calculation
+    const companyHoldings = await ctx.db
+      .query("stocks")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .take(20); // Reduced from 100 to 20 - enough for ownership calc
+    const ownershipSnapshot = computeOwnerMetricsFromHoldings(company, companyHoldings ?? [], company.ownerId);
+
+    // ULTRA-OPTIMIZED: Try to use cached metrics first
+    const cachedMetrics = await ctx.db
+      .query("companyMetrics")
+      .withIndex("by_company_period", (q) => 
+        q.eq("companyId", args.companyId).eq("period", "30d")
+      )
+      .first();
+
+    // Check if cache is fresh (less than 5 minutes old)
+    const cacheAge = cachedMetrics ? Date.now() - cachedMetrics.lastUpdated : Infinity;
+    const useCachedData = cachedMetrics && cacheAge < 5 * 60 * 1000;
+
+    let totalRevenue = 0;
+    let totalCosts = 0;
+    let totalExpenses = 0;
+    let totalProfit = 0;
+    let chartData: Array<{ date: string; revenue: number; costs: number; expenses: number; profit: number }> = [];
+
+    if (useCachedData) {
+      // CACHED PATH: Use pre-calculated metrics
+      totalRevenue = cachedMetrics.totalRevenue;
+      totalCosts = cachedMetrics.totalCosts;
+      totalExpenses = cachedMetrics.totalExpenses;
+      totalProfit = cachedMetrics.totalProfit;
+      
+      // For chart data, still need to fetch (but limit to last 7 days for chart)
+      const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+      
+      const [incomingTx, outgoingTx] = await Promise.all([
         ctx.db
           .query("ledger")
-          .withIndex("by_to_account_type_created", (q) => 
-            q.eq("toAccountId", company.accountId).eq("type", type as any).gt("createdAt", thirtyDaysAgo)
+          .withIndex("by_to_account_created", (q) => 
+            q.eq("toAccountId", company.accountId).gt("createdAt", sevenDaysAgo)
           )
-          .collect()
-      )
-    )).flat();
-    const totalRevenue = revenueTransactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
-
-    // Query only cost transactions FROM this account
-    const costTypes = ["product_cost", "marketplace_batch"];
-    const costTransactions = (await Promise.all(
-      costTypes.map(type =>
+          .take(200), // Smaller limit for chart
         ctx.db
           .query("ledger")
-          .withIndex("by_from_account_type_created", (q) => 
-            q.eq("fromAccountId", company.accountId).eq("type", type as any).gt("createdAt", thirtyDaysAgo)
+          .withIndex("by_from_account_created", (q) => 
+            q.eq("fromAccountId", company.accountId).gt("createdAt", sevenDaysAgo)
           )
-          .collect()
-      )
-    )).flat();
-    const totalCosts = costTransactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
+          .take(200),
+      ]);
 
-    // Query only expense transactions FROM this account
-    const expenseTransactions = await ctx.db
-      .query("ledger")
-      .withIndex("by_from_account_type_created", (q) => 
-        q.eq("fromAccountId", company.accountId).eq("type", "expense").gt("createdAt", thirtyDaysAgo)
-      )
-      .collect();
-    const totalExpenses = expenseTransactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
+      const revenueTypes = new Set(["product_purchase", "marketplace_batch"]);
+      const costTypes = new Set(["product_cost", "marketplace_batch"]);
+      
+      const dailyRevenue: Record<string, number> = {};
+      const dailyCosts: Record<string, number> = {};
+      const dailyExpenses: Record<string, number> = {};
 
-    // Calculate profit (revenue - costs - expenses)
-    const totalProfit = totalRevenue - totalCosts - totalExpenses;
+      for (const tx of incomingTx) {
+        if (revenueTypes.has(tx.type)) {
+          const date = new Date(tx.createdAt).toISOString().split('T')[0];
+          dailyRevenue[date] = (dailyRevenue[date] || 0) + (tx.amount || 0);
+        }
+      }
 
-    // OPTIMIZED: Use stored totalRevenue and totalCosts from products table
+      for (const tx of outgoingTx) {
+        const date = new Date(tx.createdAt).toISOString().split('T')[0];
+        if (costTypes.has(tx.type)) {
+          dailyCosts[date] = (dailyCosts[date] || 0) + (tx.amount || 0);
+        } else if (tx.type === "expense") {
+          dailyExpenses[date] = (dailyExpenses[date] || 0) + (tx.amount || 0);
+        }
+      }
+
+      const allDates = new Set([
+        ...Object.keys(dailyRevenue),
+        ...Object.keys(dailyCosts),
+        ...Object.keys(dailyExpenses),
+      ]);
+
+      chartData = Array.from(allDates)
+        .map(date => ({
+          date,
+          revenue: dailyRevenue[date] || 0,
+          costs: dailyCosts[date] || 0,
+          expenses: dailyExpenses[date] || 0,
+          profit: (dailyRevenue[date] || 0) - (dailyCosts[date] || 0) - (dailyExpenses[date] || 0),
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(-7); // Only last 7 days for chart when using cache
+
+    } else {
+      // FALLBACK PATH: Calculate from ledger (with hard limits)
+      const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+      
+      const [incomingTx, outgoingTx] = await Promise.all([
+        ctx.db
+          .query("ledger")
+          .withIndex("by_to_account_created", (q) => 
+            q.eq("toAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
+          )
+          .take(500),
+        ctx.db
+          .query("ledger")
+          .withIndex("by_from_account_created", (q) => 
+            q.eq("fromAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
+          )
+          .take(500),
+      ]);
+
+      const revenueTypes = new Set(["product_purchase", "marketplace_batch"]);
+      const costTypes = new Set(["product_cost", "marketplace_batch"]);
+      
+      const dailyRevenue: Record<string, number> = {};
+      const dailyCosts: Record<string, number> = {};
+      const dailyExpenses: Record<string, number> = {};
+
+      for (const tx of incomingTx) {
+        if (revenueTypes.has(tx.type)) {
+          totalRevenue += tx.amount || 0;
+          const date = new Date(tx.createdAt).toISOString().split('T')[0];
+          dailyRevenue[date] = (dailyRevenue[date] || 0) + (tx.amount || 0);
+        }
+      }
+
+      for (const tx of outgoingTx) {
+        if (costTypes.has(tx.type)) {
+          totalCosts += tx.amount || 0;
+          const date = new Date(tx.createdAt).toISOString().split('T')[0];
+          dailyCosts[date] = (dailyCosts[date] || 0) + (tx.amount || 0);
+        } else if (tx.type === "expense") {
+          totalExpenses += tx.amount || 0;
+          const date = new Date(tx.createdAt).toISOString().split('T')[0];
+          dailyExpenses[date] = (dailyExpenses[date] || 0) + (tx.amount || 0);
+        }
+      }
+
+      totalProfit = totalRevenue - totalCosts - totalExpenses;
+
+      const allDates = new Set([
+        ...Object.keys(dailyRevenue),
+        ...Object.keys(dailyCosts),
+        ...Object.keys(dailyExpenses),
+      ]);
+
+      chartData = Array.from(allDates)
+        .map(date => ({
+          date,
+          revenue: dailyRevenue[date] || 0,
+          costs: dailyCosts[date] || 0,
+          expenses: dailyExpenses[date] || 0,
+          profit: (dailyRevenue[date] || 0) - (dailyCosts[date] || 0) - (dailyExpenses[date] || 0),
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(-30);
+    }
+
+    // ULTRA-OPTIMIZED: Use stored totals from products table (no additional queries needed)
     const productStats = products.map((product) => {
       const productRevenue = product.totalRevenue || 0;
       const productCosts = product.totalCosts || 0;
       const productProfit = productRevenue - productCosts;
-      
-      // Use totalSales field for lifetime units sold
       const unitsSold = product.totalSales || 0;
-      
-      // Calculate avg sale price
       const avgSalePrice = unitsSold > 0 ? productRevenue / unitsSold : product.price;
 
       return {
@@ -591,53 +788,6 @@ export const getCompanyDashboard = query({
         avgSalePrice: avgSalePrice,
       };
     });
-
-    // Group by day for charts (OPTIMIZED: combine in one pass)
-    const dailyData: Record<string, { revenue: number; costs: number; expenses: number; profit: number }> = {};
-    
-    // Process revenue transactions
-    revenueTransactions.forEach(tx => {
-      const date = new Date(tx.createdAt).toISOString().split('T')[0];
-      if (!dailyData[date]) {
-        dailyData[date] = { revenue: 0, costs: 0, expenses: 0, profit: 0 };
-      }
-      dailyData[date].revenue += tx.amount || 0;
-    });
-    
-    // Process cost transactions
-    costTransactions.forEach(tx => {
-      const date = new Date(tx.createdAt).toISOString().split('T')[0];
-      if (!dailyData[date]) {
-        dailyData[date] = { revenue: 0, costs: 0, expenses: 0, profit: 0 };
-      }
-      dailyData[date].costs += tx.amount || 0;
-    });
-    
-    // Process expense transactions
-    expenseTransactions.forEach(tx => {
-      const date = new Date(tx.createdAt).toISOString().split('T')[0];
-      if (!dailyData[date]) {
-        dailyData[date] = { revenue: 0, costs: 0, expenses: 0, profit: 0 };
-      }
-      dailyData[date].expenses += tx.amount || 0;
-    });
-    
-    // Calculate daily profit
-    Object.values(dailyData).forEach(data => {
-      data.profit = data.revenue - data.costs - data.expenses;
-    });
-
-    // Convert to array and sort by date (limit to 30 most recent days)
-    const chartData = Object.entries(dailyData)
-      .map(([date, data]) => ({
-        date,
-        revenue: data.revenue,
-        costs: data.costs,
-        expenses: data.expenses,
-        profit: data.profit,
-      }))
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .slice(-30); // Keep only last 30 days for chart
 
     return {
       company: {
@@ -657,6 +807,7 @@ export const getCompanyDashboard = query({
       },
       products: productStats,
       chartData,
+      cachedData: useCachedData, // Indicate if using cached data
     };
   },
 });

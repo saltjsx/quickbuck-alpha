@@ -168,7 +168,8 @@ export default defineSchema({
     .index("by_company_holder", ["companyId", "holderId"])
     .index("by_holderType_shares", ["holderType", "shares"])
     .index("by_holder_holderType", ["holderId", "holderType"])
-    .index("by_company_holder_holderType", ["companyId", "holderId", "holderType"]),
+    .index("by_company_holder_holderType", ["companyId", "holderId", "holderType"])
+    .index("by_company_shares", ["companyId", "shares"]),
 
   stockPriceHistory: defineTable({
     companyId: v.id("companies"),
@@ -221,7 +222,8 @@ export default defineSchema({
     .index("by_created_by", ["createdBy"])
     .index("by_company_active", ["companyId", "isActive"])
     .index("by_active_totalRevenue", ["isActive", "totalRevenue"])
-    .index("by_active_price", ["isActive", "price"]),
+    .index("by_active_price", ["isActive", "price"])
+    .index("by_company_active_revenue", ["companyId", "isActive", "totalRevenue"]),
 
   collections: defineTable({
     userId: v.id("users"),
@@ -268,5 +270,20 @@ export default defineSchema({
     .index("by_company_created", ["companyId", "createdAt"])
     .index("by_company_type", ["companyId", "type"])
     .index("by_company_type_created", ["companyId", "type", "createdAt"]),
+
+  // ULTRA-OPTIMIZATION: Cached company metrics to avoid repeated ledger scans
+  companyMetrics: defineTable({
+    companyId: v.id("companies"),
+    period: v.union(v.literal("30d"), v.literal("7d"), v.literal("all_time")),
+    totalRevenue: v.number(),
+    totalCosts: v.number(),
+    totalExpenses: v.number(),
+    totalProfit: v.number(),
+    transactionCount: v.number(),
+    lastUpdated: v.number(),
+  })
+    .index("by_company", ["companyId"])
+    .index("by_company_period", ["companyId", "period"])
+    .index("by_lastUpdated", ["lastUpdated"]),
 });
 

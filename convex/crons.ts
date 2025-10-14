@@ -17,6 +17,13 @@ crons.interval(
   internal.stocks.updateStockPrices
 );
 
+// ULTRA-OPTIMIZATION: Update company metrics cache every 5 minutes
+crons.interval(
+  "update company metrics cache",
+  { minutes: 5 },
+  internal.companies.updateAllCompanyMetrics
+);
+
 // Clean up old price history daily at 3 AM
 crons.daily(
   "cleanup old price history",
