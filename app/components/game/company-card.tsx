@@ -54,8 +54,8 @@ export function CompanyCard({
   }, [company.balance, company.sharePrice]);
 
   return (
-    <Card className="flex h-[26rem] w-[40rem] flex-col p-4">
-      <div className="flex-1 space-y-3">
+    <Card className="flex w-full sm:w-[40rem] flex-col p-4">
+      <div className="space-y-3">
         <div className="flex items-start gap-4">
           <div className="flex-shrink-0">
             {company.logoUrl ? (
@@ -133,14 +133,20 @@ export function CompanyCard({
       </div>
 
       <div className="mt-2 space-y-2">
-        <div className="flex flex-wrap gap-2">
-          <div className="flex-1 min-w-[120px]">{actions.addProduct}</div>
-          <div className="flex-1 min-w-[120px]">{actions.dashboard}</div>
+        <div className="flex flex-wrap gap-2 w-full">
+          <div className="flex-1 min-w-[120px] w-full sm:w-auto">
+            {actions.addProduct}
+          </div>
+          <div className="flex-1 min-w-[120px] w-full sm:w-auto">
+            {actions.dashboard}
+          </div>
           {actions.dividends && (
-            <div className="flex-1 min-w-[120px]">{actions.dividends}</div>
+            <div className="flex-1 min-w-[120px] w-full sm:w-auto">
+              {actions.dividends}
+            </div>
           )}
-          <div>{actions.edit}</div>
-          <div>{actions.delete}</div>
+          <div className="w-full sm:w-auto">{actions.edit}</div>
+          <div className="w-full sm:w-auto">{actions.delete}</div>
         </div>
 
         {footerContent}
