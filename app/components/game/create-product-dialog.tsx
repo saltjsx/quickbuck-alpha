@@ -1,4 +1,10 @@
-import { useState, type ReactNode } from "react";
+import {
+  useState,
+  useRef,
+  useImperativeHandle,
+  forwardRef,
+  type ReactNode,
+} from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -22,12 +28,17 @@ import { Filter } from "bad-words";
 interface CreateProductDialogProps {
   companyId: Id<"companies">;
   trigger?: ReactNode;
+  hiddenTrigger?: boolean;
 }
 
-export function CreateProductDialog({
-  companyId,
-  trigger,
-}: CreateProductDialogProps) {
+export interface CreateProductDialogRef {
+  triggerRef: HTMLButtonElement | null;
+}
+
+export const CreateProductDialog = forwardRef<
+  CreateProductDialogRef,
+  CreateProductDialogProps
+>(({ companyId, trigger, hiddenTrigger = false }, ref) => {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -37,6 +48,11 @@ export function CreateProductDialog({
   const createProduct = useMutation(api.products.createProduct);
   const { toast } = useToast();
   const filter = new Filter();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useImperativeHandle(ref, () => ({
+    triggerRef: triggerRef.current,
+  }));
 
   // Helper function to extract filename from URL
   const getFilenameFromUrl = (url: string): string => {
@@ -166,11 +182,20 @@ export function CreateProductDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        {trigger ?? (
-          <Button size="sm">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Product
-          </Button>
+        {hiddenTrigger ? (
+          <button
+            ref={triggerRef}
+            type="button"
+            className="sr-only"
+            aria-label="Open create product dialog"
+          />
+        ) : (
+          trigger ?? (
+            <Button size="sm">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Product
+            </Button>
+          )
         )}
       </DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
@@ -248,4 +273,6 @@ export function CreateProductDialog({
       </DialogContent>
     </Dialog>
   );
-}
+});
+
+CreateProductDialog.displayName = "CreateProductDialog";

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
@@ -44,6 +45,8 @@ export function CompanyView({
   onDividends,
   onGoPublic,
 }: CompanyViewProps) {
+  const [imgError, setImgError] = useState(false);
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -58,24 +61,12 @@ export function CompanyView({
       <div className="flex items-start gap-4">
         {/* Logo */}
         <div className="flex-shrink-0">
-          {company.logoUrl ? (
+          {company.logoUrl && !imgError ? (
             <img
               src={company.logoUrl}
               alt={`${company.name} logo`}
               className="w-16 h-16 rounded-lg object-cover border border-border"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
-                const parent = (e.target as HTMLImageElement).parentElement;
-                if (parent) {
-                  parent.innerHTML = `
-                    <div class="w-16 h-16 rounded-lg bg-muted flex items-center justify-center border border-border">
-                      <svg class="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                      </svg>
-                    </div>
-                  `;
-                }
-              }}
+              onError={() => setImgError(true)}
             />
           ) : (
             <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center border border-border">

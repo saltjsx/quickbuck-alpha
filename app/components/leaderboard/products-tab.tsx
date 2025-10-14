@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Card, CardContent } from "~/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import {
   Table,
   TableBody,
@@ -10,9 +10,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "~/components/ui/table";
 import { ArrowUpDown } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "~/components/ui/button";
 
 const products = [
   {
@@ -161,8 +161,34 @@ export function ProductsTab() {
         aValue = a.sales;
         bValue = b.sales;
       } else {
-        aValue = Number.parseFloat(aValue.toString().replace(/[$M,/mo]/g, ""));
-        bValue = Number.parseFloat(bValue.toString().replace(/[$M,/mo]/g, ""));
+        // Convert string values like "$40.7M" or "$19/mo" to numbers
+        const parseValue = (val: string | number): number => {
+          if (typeof val === "number") return val;
+
+          let str = val.toString();
+
+          // Remove "/mo" suffix first (exact match)
+          str = str.replace(/\/mo$/i, "");
+
+          // Check for "M" multiplier at the end
+          const hasMillions = /M$/i.test(str);
+
+          // Remove "$", commas, and "M"
+          str = str.replace(/[$,M]/gi, "");
+
+          // Parse the numeric value
+          let numValue = Number.parseFloat(str);
+
+          // Apply million multiplier if present
+          if (hasMillions) {
+            numValue *= 1e6;
+          }
+
+          return Number.isNaN(numValue) ? 0 : numValue;
+        };
+
+        aValue = parseValue(aValue);
+        bValue = parseValue(bValue);
       }
     }
 

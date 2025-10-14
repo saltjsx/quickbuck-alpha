@@ -118,6 +118,25 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
   const updateProduct = useMutation(api.products.updateProduct);
   const { toast } = useToast();
 
+  // Move useMemo before any early returns to comply with Rules of Hooks
+  const topProducts = useMemo(() => {
+    if (!dashboardData?.products) return [];
+
+    return dashboardData.products
+      .filter((product) => product.revenue > 0)
+      .slice()
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10)
+      .map((product) => ({
+        name:
+          product.name.length > 15
+            ? `${product.name.substring(0, 15)}…`
+            : product.name,
+        revenue: product.revenue,
+        profit: product.profit,
+      }));
+  }, [dashboardData?.products]);
+
   const toggleProductStatus = async (
     productId: Id<"products">,
     currentStatus: boolean
@@ -180,22 +199,6 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
     revenue: entry.revenue,
     profit: entry.profit,
   }));
-
-  const topProducts = useMemo(() => {
-    return products
-      .filter((product) => product.revenue > 0)
-      .slice()
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 10)
-      .map((product) => ({
-        name:
-          product.name.length > 15
-            ? `${product.name.substring(0, 15)}…`
-            : product.name,
-        revenue: product.revenue,
-        profit: product.profit,
-      }));
-  }, [products]);
 
   return (
     <div className="space-y-6">
@@ -538,7 +541,7 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
                           })}
                         </TableCell>
                         <TableCell className="text-right">
-                          {product.unitsSold.toLocaleString()}
+                          {(product.unitsSold ?? 0).toLocaleString()}
                         </TableCell>
                         <TableCell className="text-right font-medium">
                           {formatCurrency(product.revenue)}
