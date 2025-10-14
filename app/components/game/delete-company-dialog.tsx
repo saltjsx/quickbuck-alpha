@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -20,12 +20,14 @@ interface DeleteCompanyDialogProps {
   companyId: Id<"companies">;
   companyName: string;
   balance: number;
+  trigger?: ReactNode;
 }
 
 export function DeleteCompanyDialog({
   companyId,
   companyName,
   balance,
+  trigger,
 }: DeleteCompanyDialogProps) {
   const [open, setOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -67,10 +69,12 @@ export function DeleteCompanyDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="destructive" size="sm">
-          <Trash2 className="h-4 w-4 mr-2" />
-          Delete Company
-        </Button>
+        {trigger || (
+          <Button variant="destructive" size="sm">
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete Company
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

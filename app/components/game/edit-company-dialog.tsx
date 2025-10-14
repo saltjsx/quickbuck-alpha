@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -28,9 +28,13 @@ interface EditCompanyDialogProps {
     ticker: string;
     logoUrl?: string;
   };
+  trigger?: ReactNode;
 }
 
-export function EditCompanyDialog({ company }: EditCompanyDialogProps) {
+export function EditCompanyDialog({
+  company,
+  trigger,
+}: EditCompanyDialogProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(company.name);
   const [description, setDescription] = useState(company.description || "");
@@ -194,10 +198,12 @@ export function EditCompanyDialog({ company }: EditCompanyDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Pencil className="h-4 w-4 mr-2" />
-          Edit Company
-        </Button>
+        {trigger || (
+          <Button variant="outline" size="sm">
+            <Pencil className="h-4 w-4 mr-2" />
+            Edit Company
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
