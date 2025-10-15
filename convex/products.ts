@@ -66,16 +66,15 @@ export const createProduct = mutation({
 export const getActiveProducts = query({
   args: {},
   handler: async (ctx) => {
-    // Fetch active products in pages so we avoid dropping newer listings when the count grows
-    const MAX_PRODUCTS = 1000; // Hard cap to prevent runaway responses
-    const PAGE_SIZE = 100; // Fetch in batches to stay within query limits
-
-    // Simply collect ALL active products - no pagination needed for now
-    const products = await ctx.db
+    // Convex limits: single pagination per query, max 1000 items per page
+    // Fetch as many as possible in one paginated query
+    const paginationResult = await ctx.db
       .query("products")
       .withIndex("by_active", (q) => q.eq("isActive", true))
       .order("desc")
-      .collect();    // OPTIMIZED: Batch fetch all companies at once (minimal fields)
+      .paginate({ numItems: 1000, cursor: null });
+    
+    const products = paginationResult.page;    // OPTIMIZED: Batch fetch all companies at once (minimal fields)
     const companyIds = [...new Set(products.map(p => p.companyId))];
     const companies = await Promise.all(companyIds.map(id => ctx.db.get(id)));
     
