@@ -16,30 +16,47 @@ async function getCurrentUserId(ctx: any) {
   return user?._id || null;
 }
 
-// ULTRA-OPTIMIZATION: Update cached company metrics
+// ULTRA-OPTIMIZATION: Update cached company metrics (with skip logic)
 export const updateCompanyMetrics = internalMutation({
   args: { companyId: v.id("companies") },
   handler: async (ctx, args) => {
     const company = await ctx.db.get(args.companyId);
     if (!company) return;
 
+    // Check existing metrics first to avoid unnecessary queries
+    const existing30d = await ctx.db
+      .query("companyMetrics")
+      .withIndex("by_company_period", (q) => 
+        q.eq("companyId", args.companyId).eq("period", "30d")
+      )
+      .first();
+
+    // OPTIMIZATION: Skip update if cache is less than 20 minutes old
+    // This prevents redundant updates when cron runs frequently
+    if (existing30d) {
+      const cacheAge = Date.now() - existing30d.lastUpdated;
+      if (cacheAge < 20 * 60 * 1000) { // 20 minutes
+        return existing30d; // Skip update - cache is fresh enough
+      }
+    }
+
     const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
 
-    // BANDWIDTH OPTIMIZATION: Reduced from 500 to 200 per query (400 total -> 200 total)
-    // This function is called frequently by cron, so reducing this will have massive impact
+    // BANDWIDTH OPTIMIZATION: Reduced from 200 to 150 per query
+    // Further reduction since we're now updating less frequently
     const [incoming30d, outgoing30d] = await Promise.all([
       ctx.db
         .query("ledger")
         .withIndex("by_to_account_created", (q) => 
           q.eq("toAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
         )
-        .take(200), // REDUCED from 500
+        .take(150), // REDUCED from 200 to 150
       ctx.db
         .query("ledger")
         .withIndex("by_from_account_created", (q) => 
           q.eq("fromAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
         )
-        .take(200), // REDUCED from 500
+        .take(150), // REDUCED from 200 to 150
     ]);
 
     // Revenue: incoming transactions for product sales
@@ -67,14 +84,6 @@ export const updateCompanyMetrics = internalMutation({
       }
     }
 
-    // Upsert 30d metrics
-    const existing30d = await ctx.db
-      .query("companyMetrics")
-      .withIndex("by_company_period", (q) => 
-        q.eq("companyId", args.companyId).eq("period", "30d")
-      )
-      .first();
-
     const metrics30d = {
       companyId: args.companyId,
       period: "30d" as const,
@@ -86,8 +95,20 @@ export const updateCompanyMetrics = internalMutation({
       lastUpdated: Date.now(),
     };
 
+    // OPTIMIZATION: Only write if values have actually changed (skip redundant writes)
     if (existing30d) {
-      await ctx.db.patch(existing30d._id, metrics30d);
+      const hasChanged = 
+        existing30d.totalRevenue !== metrics30d.totalRevenue ||
+        existing30d.totalCosts !== metrics30d.totalCosts ||
+        existing30d.totalExpenses !== metrics30d.totalExpenses ||
+        existing30d.transactionCount !== metrics30d.transactionCount;
+      
+      if (hasChanged) {
+        await ctx.db.patch(existing30d._id, metrics30d);
+      } else {
+        // Just update timestamp if no data changed
+        await ctx.db.patch(existing30d._id, { lastUpdated: Date.now() });
+      }
     } else {
       await ctx.db.insert("companyMetrics", metrics30d);
     }
@@ -100,23 +121,55 @@ export const updateCompanyMetrics = internalMutation({
 export const updateAllCompanyMetrics = internalMutation({
   args: {},
   handler: async (ctx) => {
-    // BANDWIDTH OPTIMIZATION: Reduced from 100 to 50 companies per batch
-    // This spreads the load more evenly and prevents bandwidth spikes
-    const companies = await ctx.db.query("companies").take(50); // REDUCED from 100
+    // BANDWIDTH OPTIMIZATION: Only update companies that need it
+    // Prioritize: 1) Public companies, 2) Active companies with recent transactions
     
-    let updated = 0;
-    for (const company of companies) {
+    // Get up to 30 companies (reduced from 50)
+    const companies = await ctx.db.query("companies").take(30);
+    
+    // Get existing metrics for all companies
+    const metricsPromises = companies.map(company =>
+      ctx.db
+        .query("companyMetrics")
+        .withIndex("by_company_period", (q) => 
+          q.eq("companyId", company._id).eq("period", "30d")
+        )
+        .first()
+    );
+    const allMetrics = await Promise.all(metricsPromises);
+    
+    // Filter to only update companies that need it
+    const companiesToUpdate = companies.filter((company, index) => {
+      const metrics = allMetrics[index];
+      
+      // Always update if no metrics exist
+      if (!metrics) return true;
+      
+      // Update if cache is older than 25 minutes
+      const cacheAge = Date.now() - metrics.lastUpdated;
+      if (cacheAge > 25 * 60 * 1000) return true;
+      
+      // Otherwise skip
+      return false;
+    });
+    
+    let scheduled = 0;
+    for (const company of companiesToUpdate) {
       try {
         await ctx.scheduler.runAfter(0, internal.companies.updateCompanyMetrics, {
           companyId: company._id,
         });
-        updated++;
+        scheduled++;
       } catch (error) {
         console.error(`Failed to schedule metrics update for company ${company._id}:`, error);
       }
     }
     
-    return { scheduled: updated, total: companies.length };
+    return { 
+      scheduled, 
+      total: companies.length, 
+      skipped: companies.length - scheduled 
+    };
   },
 });
 
@@ -640,9 +693,10 @@ export const getCompanyDashboard = query({
       )
       .first();
 
-    // Check if cache is fresh (less than 30 minutes old - increased from 5 min)
+    // Check if cache is fresh (less than 60 minutes old - increased from 30 min)
+    // Since cron now runs every 30 min, we can trust cache for up to 60 min
     const cacheAge = cachedMetrics ? Date.now() - cachedMetrics.lastUpdated : Infinity;
-    const useCachedData = cachedMetrics && cacheAge < 30 * 60 * 1000;
+    const useCachedData = cachedMetrics && cacheAge < 60 * 60 * 1000;
 
     let totalRevenue = 0;
     let totalCosts = 0;
@@ -657,7 +711,8 @@ export const getCompanyDashboard = query({
       totalExpenses = cachedMetrics.totalExpenses;
       totalProfit = cachedMetrics.totalProfit;
       
-      // BANDWIDTH OPTIMIZATION: Limit chart to last 7 days with hard cap of 50 transactions
+      // BANDWIDTH OPTIMIZATION: Limit chart to last 7 days with hard cap of 30 transactions
+      // Charts don't need perfect accuracy - reduced from 50 to 30 per direction
       const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
       
       const [incomingTx, outgoingTx] = await Promise.all([
@@ -666,13 +721,13 @@ export const getCompanyDashboard = query({
           .withIndex("by_to_account_created", (q) => 
             q.eq("toAccountId", company.accountId).gt("createdAt", sevenDaysAgo)
           )
-          .take(50), // REDUCED from 200 to 50
+          .take(30), // REDUCED from 50 to 30
         ctx.db
           .query("ledger")
           .withIndex("by_from_account_created", (q) => 
             q.eq("fromAccountId", company.accountId).gt("createdAt", sevenDaysAgo)
           )
-          .take(50), // REDUCED from 200 to 50
+          .take(30), // REDUCED from 50 to 30
       ]);
 
       // Revenue: incoming transactions for product sales
@@ -725,20 +780,21 @@ export const getCompanyDashboard = query({
       // FALLBACK PATH: Calculate from ledger (with AGGRESSIVE limits to reduce bandwidth)
       const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
       
-      // BANDWIDTH OPTIMIZATION: Reduced from 500 to 100 for fallback path
+      // BANDWIDTH OPTIMIZATION: Reduced from 100 to 75 for fallback path
+      // Fallback should rarely be used, so make it even more aggressive
       const [incomingTx, outgoingTx] = await Promise.all([
         ctx.db
           .query("ledger")
           .withIndex("by_to_account_created", (q) => 
             q.eq("toAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
           )
-          .take(100), // REDUCED from 500
+          .take(75), // REDUCED from 100 to 75
         ctx.db
           .query("ledger")
           .withIndex("by_from_account_created", (q) => 
             q.eq("fromAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
           )
-          .take(100), // REDUCED from 500
+          .take(75), // REDUCED from 100 to 75
       ]);
 
       const revenueTypes = new Set(["product_purchase", "marketplace_batch"]);

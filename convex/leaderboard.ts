@@ -4,7 +4,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { computeOwnerMetricsFromHoldings } from "./utils/stocks";
 
 const DEFAULT_LIMIT = 5;
-const SAMPLE_MULTIPLIER = 4;
+const SAMPLE_MULTIPLIER = 3; // Reduced from 4 to 3 to fetch fewer candidates
 
 type AccountDoc = Doc<"accounts">;
 type UserDoc = Doc<"users">;
@@ -43,8 +43,9 @@ export const getAllCompanies = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    // BANDWIDTH OPTIMIZATION: Reduced from 500 to 200 by default, max 250
-    const limit = Math.min(args.limit || 200, 250);
+    // BANDWIDTH OPTIMIZATION: Reduced from 200 to 100 by default, max 150
+    // Most users only view top 10-20 companies on leaderboards
+    const limit = Math.min(args.limit || 100, 150);
     const companies = await ctx.db.query("companies").take(limit);
     
     // Batch fetch all accounts
@@ -134,8 +135,9 @@ export const getAllPlayers = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    // BANDWIDTH OPTIMIZATION: Reduced from 500 to 200 by default, max 250
-    const limit = Math.min(args.limit || 200, 250);
+    // BANDWIDTH OPTIMIZATION: Reduced from 200 to 100 by default, max 150
+    // Most users only view top 10-20 players on leaderboards
+    const limit = Math.min(args.limit || 100, 150);
     const users = await ctx.db.query("users").take(limit);
     
     // Batch fetch personal accounts
@@ -256,8 +258,9 @@ export const getAllProducts = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    // BANDWIDTH OPTIMIZATION: Reduced from 1000 to 400 by default, max 500
-    const limit = Math.min(args.limit || 400, 500);
+    // BANDWIDTH OPTIMIZATION: Reduced from 400 to 200 by default, max 300
+    // Most users only view top 10-20 products on leaderboards
+    const limit = Math.min(args.limit || 200, 300);
     const products = await ctx.db.query("products").take(limit);
 
     // Batch fetch all companies

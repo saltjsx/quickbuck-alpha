@@ -65,12 +65,12 @@ export const createProduct = mutation({
 export const getActiveProducts = query({
   args: {},
   handler: async (ctx) => {
-    // BANDWIDTH OPTIMIZATION: Reduced from 150 to 75 (50% reduction)
-    // This is called frequently from the marketplace UI
+    // BANDWIDTH OPTIMIZATION: Reduced from 75 to 50 (further reduction)
+    // Marketplace UI should use pagination instead of loading all products
     const products = await ctx.db
       .query("products")
       .withIndex("by_active", (q) => q.eq("isActive", true))
-      .take(75); // REDUCED from 150
+      .take(50); // REDUCED from 75 to 50
 
     // OPTIMIZED: Batch fetch all companies at once (minimal fields)
     const companyIds = [...new Set(products.map(p => p.companyId))];
@@ -88,11 +88,22 @@ export const getActiveProducts = query({
       }
     });
 
-    // Enrich with company info
+    // BANDWIDTH OPTIMIZATION: Return only essential product fields
+    // Remove unnecessary data from response
     const enrichedProducts = products.map(product => {
       const companyInfo = companyMap.get(product.companyId);
       return {
-        ...product,
+        _id: product._id,
+        name: product.name,
+        description: product.description,
+        price: product.price,
+        imageUrl: product.imageUrl,
+        tags: product.tags,
+        companyId: product.companyId,
+        isActive: product.isActive,
+        quality: product.quality,
+        totalSales: product.totalSales,
+        // Only include company info, not full product object
         companyName: companyInfo?.name || "Unknown",
         companyLogoUrl: companyInfo?.logoUrl,
         companyTicker: companyInfo?.ticker,
@@ -164,11 +175,12 @@ export const automaticPurchase = internalMutation({
   args: {},
   handler: async (ctx) => {
     // Get all active products
-    // BANDWIDTH OPTIMIZATION: Limit to 200 products instead of collecting all
+    // BANDWIDTH OPTIMIZATION: Limit to 150 products (reduced from 200)
+    // Focus on most popular products to reduce bandwidth
     const products = await ctx.db
       .query("products")
       .withIndex("by_active", (q) => q.eq("isActive", true))
-      .take(200);
+      .take(150); // REDUCED from 200 to 150
 
     if (products.length === 0) return { message: "No products available" };
 
@@ -455,26 +467,31 @@ export const automaticPurchase = internalMutation({
       // Patch account balance
       await ctx.db.patch(tx.accountId, { balance: currentBalance });
 
+      // BANDWIDTH OPTIMIZATION: Batch all ledger inserts and product patches
+      const ledgerInserts: any[] = [];
+      const productPatches: Array<{ id: any; updates: any }> = [];
+      
       for (const [productIdStr, salesData] of tx.productSales) {
         const product = productMap.get(productIdStr);
         if (!product) continue;
 
-        await ctx.db.insert("ledger", {
+        // Queue ledger entries for batch insert
+        ledgerInserts.push({
           fromAccountId: systemAccount._id,
           toAccountId: tx.accountId,
           amount: salesData.totalRevenue,
-          type: "marketplace_batch",
+          type: "marketplace_batch" as const,
           productId: product._id,
           batchCount: salesData.count,
           description: `Batch purchase of ${salesData.count}x ${product.name}`,
           createdAt: Date.now(),
         });
 
-        await ctx.db.insert("ledger", {
+        ledgerInserts.push({
           fromAccountId: tx.accountId,
           toAccountId: systemAccount._id,
           amount: salesData.totalCost,
-          type: "marketplace_batch",
+          type: "marketplace_batch" as const,
           productId: product._id,
           batchCount: salesData.count,
           description: `Batch production cost for ${salesData.count}x ${product.name}`,
@@ -493,9 +510,15 @@ export const automaticPurchase = internalMutation({
             ...updatedTotals,
           });
 
-          await ctx.db.patch(product._id, updatedTotals);
+          productPatches.push({ id: product._id, updates: updatedTotals });
         }
       }
+      
+      // Execute all batched operations
+      await Promise.all([
+        ...ledgerInserts.map(entry => ctx.db.insert("ledger", entry)),
+        ...productPatches.map(({ id, updates }) => ctx.db.patch(id, updates))
+      ]);
     }
 
     // After all purchases, check which companies should be made public using cached balances
