@@ -30,7 +30,8 @@ export default defineSchema({
       v.literal("dividend"),
       v.literal("loan_disbursement"),
       v.literal("loan_repayment"),
-      v.literal("loan_default")
+      v.literal("loan_default"),
+      v.literal("company_sale")
     ),
     description: v.optional(v.string()),
     productId: v.optional(v.id("products")),
@@ -312,5 +313,25 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_status_dueDate", ["status", "dueDate"])
     .index("by_lastInterestApplied", ["lastInterestApplied"]),
+
+  companySaleOffers: defineTable({
+    companyId: v.id("companies"),
+    sellerId: v.id("users"), // The current owner selling the company
+    buyerId: v.optional(v.id("users")), // The buyer (null if open offer, specific if targeted)
+    price: v.number(), // The asking price
+    status: v.union(
+      v.literal("active"), // Available for purchase
+      v.literal("completed"), // Sale completed
+      v.literal("cancelled") // Offer cancelled
+    ),
+    createdAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_company", ["companyId"])
+    .index("by_seller", ["sellerId"])
+    .index("by_buyer", ["buyerId"])
+    .index("by_status", ["status"])
+    .index("by_status_created", ["status", "createdAt"])
+    .index("by_company_status", ["companyId", "status"]),
 });
 

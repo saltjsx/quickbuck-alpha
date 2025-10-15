@@ -58,6 +58,11 @@ const data = {
       icon: IconBuilding,
     },
     {
+      title: "Company Sales",
+      url: "/dashboard/company-sales",
+      icon: IconBuilding,
+    },
+    {
       title: "Marketplace",
       url: "/dashboard/marketplace",
       icon: IconShoppingBag,

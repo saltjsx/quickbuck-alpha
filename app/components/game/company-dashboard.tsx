@@ -51,6 +51,7 @@ import {
 import { EditProductDialog } from "./edit-product-dialog";
 import { EditCompanyDialog } from "./edit-company-dialog";
 import { DeleteCompanyDialog } from "./delete-company-dialog";
+import { SellCompanyDialog } from "./sell-company-dialog";
 import { useToast } from "~/hooks/use-toast";
 import { Spinner } from "~/components/ui/spinner";
 // import { ProductDebugPanel } from "./product-debug-panel";
@@ -140,6 +141,11 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
               ticker: company.ticker,
               logoUrl: company.logoUrl,
             }}
+          />
+          <SellCompanyDialog
+            companyId={company._id}
+            companyName={company.name}
+            companyBalance={company.balance}
           />
           <DeleteCompanyDialog
             companyId={company._id}

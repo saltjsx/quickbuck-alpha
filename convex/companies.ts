@@ -1183,3 +1183,427 @@ export const adminDeleteCompanies = mutation({
     return results;
   },
 });
+
+// ============= COMPANY SALE SYSTEM =============
+
+// Create a sale offer for a company
+export const createSaleOffer = mutation({
+  args: {
+    companyId: v.id("companies"),
+    price: v.number(),
+    buyerId: v.optional(v.id("users")), // Optional: specific buyer, or null for open market
+  },
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const company = await ctx.db.get(args.companyId);
+    if (!company) throw new Error("Company not found");
+
+    // Check if user is the owner
+    if (company.ownerId !== userId) {
+      throw new Error("Only the company owner can create a sale offer");
+    }
+
+    // Validate price
+    if (args.price <= 0) {
+      throw new Error("Sale price must be positive");
+    }
+
+    // Check if there's already an active sale offer
+    const existingOffer = await ctx.db
+      .query("companySaleOffers")
+      .withIndex("by_company_status", (q) =>
+        q.eq("companyId", args.companyId).eq("status", "active")
+      )
+      .first();
+
+    if (existingOffer) {
+      throw new Error("Company already has an active sale offer. Cancel it first.");
+    }
+
+    // Create the sale offer
+    const offerId = await ctx.db.insert("companySaleOffers", {
+      companyId: args.companyId,
+      sellerId: userId,
+      buyerId: args.buyerId,
+      price: args.price,
+      status: "active",
+      createdAt: Date.now(),
+    });
+
+    return { offerId, success: true };
+  },
+});
+
+// Cancel a sale offer
+export const cancelSaleOffer = mutation({
+  args: {
+    offerId: v.id("companySaleOffers"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const offer = await ctx.db.get(args.offerId);
+    if (!offer) throw new Error("Sale offer not found");
+
+    // Check if user is the seller
+    if (offer.sellerId !== userId) {
+      throw new Error("Only the seller can cancel this offer");
+    }
+
+    // Check if offer is still active
+    if (offer.status !== "active") {
+      throw new Error("This offer is no longer active");
+    }
+
+    // Cancel the offer
+    await ctx.db.patch(args.offerId, {
+      status: "cancelled",
+      completedAt: Date.now(),
+    });
+
+    return { success: true };
+  },
+});
+
+// Accept a sale offer and transfer ownership
+export const acceptSaleOffer = mutation({
+  args: {
+    offerId: v.id("companySaleOffers"),
+    fromAccountId: v.id("accounts"), // The buyer's account to pay from
+  },
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const offer = await ctx.db.get(args.offerId);
+    if (!offer) throw new Error("Sale offer not found");
+
+    // Check if offer is still active
+    if (offer.status !== "active") {
+      throw new Error("This offer is no longer active");
+    }
+
+    // Check if this is a targeted offer and if so, verify the buyer
+    if (offer.buyerId && offer.buyerId !== userId) {
+      throw new Error("This offer is for a specific buyer only");
+    }
+
+    // Buyer cannot be the seller
+    if (offer.sellerId === userId) {
+      throw new Error("You cannot buy your own company");
+    }
+
+    const company = await ctx.db.get(offer.companyId);
+    if (!company) throw new Error("Company not found");
+
+    // Verify buyer's account
+    const buyerAccount = await ctx.db.get(args.fromAccountId);
+    if (!buyerAccount) throw new Error("Buyer account not found");
+
+    // Check if buyer owns this account or has access
+    let hasAccess = buyerAccount.ownerId === userId;
+    if (!hasAccess && buyerAccount.type === "company" && buyerAccount.companyId) {
+      const access = await ctx.db
+        .query("companyAccess")
+        .withIndex("by_company_user", (q) =>
+          q.eq("companyId", buyerAccount.companyId!).eq("userId", userId)
+        )
+        .first();
+      hasAccess = !!access;
+    }
+
+    if (!hasAccess) {
+      throw new Error("No access to the specified payment account");
+    }
+
+    // Check buyer has sufficient funds
+    const buyerBalance = buyerAccount.balance ?? 0;
+    if (buyerBalance < offer.price) {
+      throw new Error(`Insufficient funds. You need $${offer.price.toFixed(2)} but only have $${buyerBalance.toFixed(2)}`);
+    }
+
+    // Get seller's personal account
+    const sellerAccount = await ctx.db
+      .query("accounts")
+      .withIndex("by_owner_type", (q) =>
+        q.eq("ownerId", offer.sellerId).eq("type", "personal")
+      )
+      .first();
+
+    if (!sellerAccount) throw new Error("Seller account not found");
+
+    // Process payment
+    const sellerBalance = sellerAccount.balance ?? 0;
+
+    // Transfer funds from buyer to seller
+    await ctx.db.patch(args.fromAccountId, {
+      balance: buyerBalance - offer.price,
+    });
+
+    await ctx.db.patch(sellerAccount._id, {
+      balance: sellerBalance + offer.price,
+    });
+
+    // Record transaction in ledger
+    await ctx.db.insert("ledger", {
+      fromAccountId: args.fromAccountId,
+      toAccountId: sellerAccount._id,
+      amount: offer.price,
+      type: "company_sale",
+      description: `Purchase of company: ${company.name}`,
+      createdAt: Date.now(),
+    });
+
+    // Transfer company ownership
+    await ctx.db.patch(offer.companyId, {
+      ownerId: userId,
+    });
+
+    // Update company account ownership
+    await ctx.db.patch(company.accountId, {
+      ownerId: userId,
+    });
+
+    // Update company access records
+    // Remove old owner's access
+    const oldOwnerAccess = await ctx.db
+      .query("companyAccess")
+      .withIndex("by_company_user", (q) =>
+        q.eq("companyId", offer.companyId).eq("userId", offer.sellerId)
+      )
+      .first();
+
+    if (oldOwnerAccess) {
+      await ctx.db.delete(oldOwnerAccess._id);
+    }
+
+    // Grant new owner access
+    const newOwnerAccess = await ctx.db
+      .query("companyAccess")
+      .withIndex("by_company_user", (q) =>
+        q.eq("companyId", offer.companyId).eq("userId", userId)
+      )
+      .first();
+
+    if (newOwnerAccess) {
+      // Update existing access to owner role
+      await ctx.db.patch(newOwnerAccess._id, {
+        role: "owner",
+        grantedAt: Date.now(),
+      });
+    } else {
+      // Create new access record
+      await ctx.db.insert("companyAccess", {
+        companyId: offer.companyId,
+        userId: userId,
+        role: "owner",
+        grantedAt: Date.now(),
+      });
+    }
+
+    // Transfer all stock holdings from seller to buyer
+    const sellerStocks = await ctx.db
+      .query("stocks")
+      .withIndex("by_holder_holderType", (q) =>
+        q.eq("holderId", offer.sellerId).eq("holderType", "user")
+      )
+      .filter((q) => q.eq(q.field("companyId"), offer.companyId))
+      .collect();
+
+    for (const stock of sellerStocks) {
+      // Check if buyer already has holdings
+      const buyerStock = await ctx.db
+        .query("stocks")
+        .withIndex("by_company_holder_holderType", (q) =>
+          q.eq("companyId", offer.companyId).eq("holderId", userId).eq("holderType", "user")
+        )
+        .first();
+
+      if (buyerStock) {
+        // Merge with existing holdings
+        const newShares = buyerStock.shares + stock.shares;
+        const newAvgPrice = 
+          (buyerStock.shares * buyerStock.averagePurchasePrice + 
+           stock.shares * stock.averagePurchasePrice) / newShares;
+
+        await ctx.db.patch(buyerStock._id, {
+          shares: newShares,
+          averagePurchasePrice: newAvgPrice,
+          updatedAt: Date.now(),
+        });
+
+        await ctx.db.delete(stock._id);
+      } else {
+        // Transfer the holding
+        await ctx.db.patch(stock._id, {
+          holderId: userId,
+          updatedAt: Date.now(),
+        });
+      }
+    }
+
+    // Mark offer as completed
+    await ctx.db.patch(args.offerId, {
+      status: "completed",
+      completedAt: Date.now(),
+    });
+
+    // Cancel any other active offers for this company
+    const otherOffers = await ctx.db
+      .query("companySaleOffers")
+      .withIndex("by_company_status", (q) =>
+        q.eq("companyId", offer.companyId).eq("status", "active")
+      )
+      .collect();
+
+    for (const otherOffer of otherOffers) {
+      if (otherOffer._id !== args.offerId) {
+        await ctx.db.patch(otherOffer._id, {
+          status: "cancelled",
+          completedAt: Date.now(),
+        });
+      }
+    }
+
+    return {
+      success: true,
+      newOwner: userId,
+      companyName: company.name,
+    };
+  },
+});
+
+// Get active sale offers (for marketplace)
+export const getActiveSaleOffers = query({
+  args: {
+    forBuyer: v.optional(v.boolean()), // If true, only show offers buyer can purchase
+  },
+  handler: async (ctx, args) => {
+    const userId = args.forBuyer ? await getCurrentUserId(ctx) : null;
+
+    const offers = await ctx.db
+      .query("companySaleOffers")
+      .withIndex("by_status_created", (q) => q.eq("status", "active"))
+      .order("desc")
+      .take(50);
+
+    // Filter offers based on buyer context
+    let filteredOffers = offers;
+    if (args.forBuyer && userId) {
+      filteredOffers = offers.filter(offer => {
+        // Exclude seller's own offers
+        if (offer.sellerId === userId) return false;
+        // If offer has specific buyer, only show to that buyer
+        if (offer.buyerId && offer.buyerId !== userId) return false;
+        return true;
+      });
+    }
+
+    // Batch fetch companies
+    const companyIds = filteredOffers.map(o => o.companyId);
+    const companies = await Promise.all(companyIds.map(id => ctx.db.get(id)));
+
+    // Batch fetch sellers
+    const sellerIds = filteredOffers.map(o => o.sellerId);
+    const sellers = await Promise.all(sellerIds.map(id => ctx.db.get(id)));
+
+    // Batch fetch company accounts for balances
+    const validCompanies = companies.filter(Boolean) as any[];
+    const accountIds = validCompanies.map((c: any) => c.accountId);
+    const accounts = await Promise.all(accountIds.map(id => ctx.db.get(id)));
+
+    const companyMap = new Map();
+    validCompanies.forEach((company: any, index) => {
+      if (company) {
+        const account = accounts[index] as any;
+        companyMap.set(company._id, {
+          ...company,
+          balance: account?.balance ?? 0,
+        });
+      }
+    });
+
+    const sellerMap = new Map();
+    sellers.forEach((seller: any, index) => {
+      if (seller) {
+        sellerMap.set(sellerIds[index], {
+          name: seller.name || seller.username || "Unknown",
+          username: seller.username,
+        });
+      }
+    });
+
+    const enrichedOffers = filteredOffers.map(offer => {
+      const company = companyMap.get(offer.companyId);
+      const seller = sellerMap.get(offer.sellerId);
+
+      return {
+        ...offer,
+        company,
+        seller,
+      };
+    }).filter(o => o.company); // Only return offers with valid companies
+
+    return enrichedOffers;
+  },
+});
+
+// Get sale offers for a specific company
+export const getCompanySaleOffer = query({
+  args: {
+    companyId: v.id("companies"),
+  },
+  handler: async (ctx, args) => {
+    const offer = await ctx.db
+      .query("companySaleOffers")
+      .withIndex("by_company_status", (q) =>
+        q.eq("companyId", args.companyId).eq("status", "active")
+      )
+      .first();
+
+    if (!offer) return null;
+
+    const seller = await ctx.db.get(offer.sellerId);
+
+    return {
+      ...offer,
+      sellerName: seller?.name || seller?.username || "Unknown",
+    };
+  },
+});
+
+// Get user's sale offers (as seller)
+export const getMySaleOffers = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getCurrentUserId(ctx);
+    if (!userId) return [];
+
+    const offers = await ctx.db
+      .query("companySaleOffers")
+      .withIndex("by_seller", (q) => q.eq("sellerId", userId))
+      .order("desc")
+      .take(50);
+
+    // Batch fetch companies
+    const companyIds = offers.map(o => o.companyId);
+    const companies = await Promise.all(companyIds.map(id => ctx.db.get(id)));
+
+    const companyMap = new Map();
+    companies.forEach((company: any) => {
+      if (company) {
+        companyMap.set(company._id, company);
+      }
+    });
+
+    const enrichedOffers = offers.map(offer => ({
+      ...offer,
+      company: companyMap.get(offer.companyId),
+    })).filter(o => o.company);
+
+    return enrichedOffers;
+  },
+});
