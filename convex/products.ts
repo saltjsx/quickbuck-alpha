@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
 
 // Helper to get current user ID
 async function getCurrentUserId(ctx: any) {
@@ -65,12 +66,31 @@ export const createProduct = mutation({
 export const getActiveProducts = query({
   args: {},
   handler: async (ctx) => {
-    // BANDWIDTH OPTIMIZATION: Reduced from 75 to 50 (further reduction)
-    // Marketplace UI should use pagination instead of loading all products
-    const products = await ctx.db
-      .query("products")
-      .withIndex("by_active", (q) => q.eq("isActive", true))
-      .take(50); // REDUCED from 75 to 50
+    // Fetch active products in pages so we avoid dropping newer listings when the count grows
+    const MAX_PRODUCTS = 1000; // Hard cap to prevent runaway responses
+    const PAGE_SIZE = 100; // Fetch in batches to stay within query limits
+
+  const products: Doc<"products">[] = [];
+    let cursor: string | null = null;
+
+    while (products.length < MAX_PRODUCTS) {
+      const page = await ctx.db
+        .query("products")
+        .withIndex("by_active", (q) => q.eq("isActive", true))
+        .order("desc")
+        .paginate({
+          cursor,
+          numItems: Math.min(PAGE_SIZE, MAX_PRODUCTS - products.length),
+        });
+
+  products.push(...(page.page as Doc<"products">[]));
+
+      if (page.isDone || page.page.length === 0 || !page.continueCursor) {
+        break;
+      }
+
+      cursor = page.continueCursor;
+    }
 
     // OPTIMIZED: Batch fetch all companies at once (minimal fields)
     const companyIds = [...new Set(products.map(p => p.companyId))];
