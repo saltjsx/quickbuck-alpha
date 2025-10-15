@@ -42,20 +42,29 @@ export const updateCompanyMetrics = internalMutation({
         .take(200), // REDUCED from 500
     ]);
 
+    // Revenue: incoming transactions for product sales
     const revenueTypes = new Set(["product_purchase", "marketplace_batch"]);
+    // Costs: outgoing transactions for production costs (NOT expenses)
     const costTypes = new Set(["product_cost", "marketplace_batch"]);
 
     let revenue30d = 0;
     let costs30d = 0;
     let expenses30d = 0;
 
+    // Process incoming transactions (revenue)
     for (const tx of incoming30d) {
       if (revenueTypes.has(tx.type)) revenue30d += tx.amount || 0;
     }
 
+    // Process outgoing transactions (costs and expenses separately)
     for (const tx of outgoing30d) {
-      if (costTypes.has(tx.type)) costs30d += tx.amount || 0;
-      else if (tx.type === "expense") expenses30d += tx.amount || 0;
+      if (costTypes.has(tx.type)) {
+        // Production costs (COGS - Cost of Goods Sold)
+        costs30d += tx.amount || 0;
+      } else if (tx.type === "expense") {
+        // Operating expenses (overhead, taxes, licenses, maintenance)
+        expenses30d += tx.amount || 0;
+      }
     }
 
     // Upsert 30d metrics
@@ -286,13 +295,13 @@ export const getUserCompanies = query({
     });
 
     const ownedCompanies = validCompanies.filter((company) => company.ownerId === userId);
-    // BANDWIDTH OPTIMIZATION: Reduced from 500 to 50 stocks per company for ownership calculation
+    // Fetch stock holdings for ownership calculation - need enough for accurate metrics
     const ownedHoldings = await Promise.all(
       ownedCompanies.map((company) =>
         ctx.db
           .query("stocks")
           .withIndex("by_company", (q) => q.eq("companyId", company._id))
-          .take(50)
+          .take(200) // Increased from 50 to 200 for accurate ownership calculation
       )
     );
 
@@ -616,11 +625,11 @@ export const getCompanyDashboard = query({
       .withIndex("by_company_active", (q) => q.eq("companyId", args.companyId).eq("isActive", true))
       .take(50); // Limit to 50 active products max
 
-    // ULTRA-OPTIMIZED: Use smaller holding sample for ownership calculation
+    // Fetch stock holdings for accurate ownership calculation
     const companyHoldings = await ctx.db
       .query("stocks")
       .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
-      .take(20); // Reduced from 100 to 20 - enough for ownership calc
+      .take(200); // Increased from 20 to 200 for accurate ownership calculation
     const ownershipSnapshot = computeOwnerMetricsFromHoldings(company, companyHoldings ?? [], company.ownerId);
 
     // BANDWIDTH OPTIMIZATION: Always use cached metrics (extend cache time to 30 min)
@@ -666,13 +675,16 @@ export const getCompanyDashboard = query({
           .take(50), // REDUCED from 200 to 50
       ]);
 
+      // Revenue: incoming transactions for product sales
       const revenueTypes = new Set(["product_purchase", "marketplace_batch"]);
+      // Costs: outgoing transactions for production costs (NOT expenses)
       const costTypes = new Set(["product_cost", "marketplace_batch"]);
       
       const dailyRevenue: Record<string, number> = {};
       const dailyCosts: Record<string, number> = {};
       const dailyExpenses: Record<string, number> = {};
 
+      // Process incoming transactions (revenue)
       for (const tx of incomingTx) {
         if (revenueTypes.has(tx.type)) {
           const date = new Date(tx.createdAt).toISOString().split('T')[0];
@@ -680,11 +692,14 @@ export const getCompanyDashboard = query({
         }
       }
 
+      // Process outgoing transactions (costs and expenses separately)
       for (const tx of outgoingTx) {
         const date = new Date(tx.createdAt).toISOString().split('T')[0];
         if (costTypes.has(tx.type)) {
+          // Production costs (COGS - Cost of Goods Sold)
           dailyCosts[date] = (dailyCosts[date] || 0) + (tx.amount || 0);
         } else if (tx.type === "expense") {
+          // Operating expenses (overhead, taxes, licenses, maintenance)
           dailyExpenses[date] = (dailyExpenses[date] || 0) + (tx.amount || 0);
         }
       }

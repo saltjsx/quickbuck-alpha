@@ -426,7 +426,7 @@ export const getLeaderboard = query({
         ctx.db
           .query("stocks")
           .withIndex("by_company", (q) => q.eq("companyId", ref.company._id))
-          .take(50) // BANDWIDTH OPTIMIZATION: Reduced from 500 to 50
+          .take(200) // Increased from 50 to 200 for accurate ownership calculation
       )
     );
 
