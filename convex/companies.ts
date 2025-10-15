@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { computeOwnerMetricsFromHoldings } from "./utils/stocks";
+import type { Doc } from "./_generated/dataModel";
 
 // Helper to get current user ID
 async function getCurrentUserId(ctx: any) {
@@ -255,8 +256,29 @@ export const createCompany = mutation({
 export const getCompanies = query({
   args: {},
   handler: async (ctx) => {
-    // BANDWIDTH OPTIMIZATION: Reduced from 200 to 100
-    const companies = await ctx.db.query("companies").take(100);
+    const MAX_COMPANIES = 1000;
+    const PAGE_SIZE = 100;
+
+    const companies: Doc<"companies">[] = [];
+    let cursor: string | null = null;
+
+    while (companies.length < MAX_COMPANIES) {
+      const page = await ctx.db
+        .query("companies")
+        .order("desc")
+        .paginate({
+          cursor,
+          numItems: Math.min(PAGE_SIZE, MAX_COMPANIES - companies.length),
+        });
+
+      companies.push(...(page.page as Doc<"companies">[]));
+
+      if (page.isDone || page.page.length === 0 || !page.continueCursor) {
+        break;
+      }
+
+      cursor = page.continueCursor;
+    }
     
     // Batch fetch all accounts using cached balance
     const accountIds = companies.map(c => c.accountId);
