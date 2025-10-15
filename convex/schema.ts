@@ -73,7 +73,8 @@ export default defineSchema({
     game: v.union(
       v.literal("slots"),
       v.literal("blackjack"),
-      v.literal("roulette")
+      v.literal("roulette"),
+      v.literal("dice")
     ),
     bet: v.number(),
     payout: v.number(),
