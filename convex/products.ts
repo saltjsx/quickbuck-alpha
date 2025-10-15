@@ -65,16 +65,18 @@ export const createProduct = mutation({
 export const getActiveProducts = query({
   args: {},
   handler: async (ctx) => {
-    // BANDWIDTH OPTIMIZATION: Reduced from 500 to 150
+    // BANDWIDTH OPTIMIZATION: Reduced from 150 to 75 (50% reduction)
+    // This is called frequently from the marketplace UI
     const products = await ctx.db
       .query("products")
       .withIndex("by_active", (q) => q.eq("isActive", true))
-      .take(150);
+      .take(75); // REDUCED from 150
 
-    // OPTIMIZED: Batch fetch all companies at once
+    // OPTIMIZED: Batch fetch all companies at once (minimal fields)
     const companyIds = [...new Set(products.map(p => p.companyId))];
     const companies = await Promise.all(companyIds.map(id => ctx.db.get(id)));
     
+    // BANDWIDTH OPTIMIZATION: Create minimal company map with only essential fields
     const companyMap = new Map();
     companies.forEach(company => {
       if (company) {

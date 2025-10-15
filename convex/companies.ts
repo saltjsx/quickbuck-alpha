@@ -24,22 +24,22 @@ export const updateCompanyMetrics = internalMutation({
     if (!company) return;
 
     const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-    const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
 
-    // Calculate metrics for 30 days
+    // BANDWIDTH OPTIMIZATION: Reduced from 500 to 200 per query (400 total -> 200 total)
+    // This function is called frequently by cron, so reducing this will have massive impact
     const [incoming30d, outgoing30d] = await Promise.all([
       ctx.db
         .query("ledger")
         .withIndex("by_to_account_created", (q) => 
           q.eq("toAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
         )
-        .take(500),
+        .take(200), // REDUCED from 500
       ctx.db
         .query("ledger")
         .withIndex("by_from_account_created", (q) => 
           q.eq("fromAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
         )
-        .take(500),
+        .take(200), // REDUCED from 500
     ]);
 
     const revenueTypes = new Set(["product_purchase", "marketplace_batch"]);
@@ -91,8 +91,9 @@ export const updateCompanyMetrics = internalMutation({
 export const updateAllCompanyMetrics = internalMutation({
   args: {},
   handler: async (ctx) => {
-    // Get all companies (limit to 100 per batch to avoid timeout)
-    const companies = await ctx.db.query("companies").take(100);
+    // BANDWIDTH OPTIMIZATION: Reduced from 100 to 50 companies per batch
+    // This spreads the load more evenly and prevents bandwidth spikes
+    const companies = await ctx.db.query("companies").take(50); // REDUCED from 100
     
     let updated = 0;
     for (const company of companies) {
@@ -622,7 +623,7 @@ export const getCompanyDashboard = query({
       .take(20); // Reduced from 100 to 20 - enough for ownership calc
     const ownershipSnapshot = computeOwnerMetricsFromHoldings(company, companyHoldings ?? [], company.ownerId);
 
-    // ULTRA-OPTIMIZED: Try to use cached metrics first
+    // BANDWIDTH OPTIMIZATION: Always use cached metrics (extend cache time to 30 min)
     const cachedMetrics = await ctx.db
       .query("companyMetrics")
       .withIndex("by_company_period", (q) => 
@@ -630,9 +631,9 @@ export const getCompanyDashboard = query({
       )
       .first();
 
-    // Check if cache is fresh (less than 5 minutes old)
+    // Check if cache is fresh (less than 30 minutes old - increased from 5 min)
     const cacheAge = cachedMetrics ? Date.now() - cachedMetrics.lastUpdated : Infinity;
-    const useCachedData = cachedMetrics && cacheAge < 5 * 60 * 1000;
+    const useCachedData = cachedMetrics && cacheAge < 30 * 60 * 1000;
 
     let totalRevenue = 0;
     let totalCosts = 0;
@@ -641,13 +642,13 @@ export const getCompanyDashboard = query({
     let chartData: Array<{ date: string; revenue: number; costs: number; expenses: number; profit: number }> = [];
 
     if (useCachedData) {
-      // CACHED PATH: Use pre-calculated metrics
+      // CACHED PATH: Use pre-calculated metrics (MAIN PATH - saves massive bandwidth)
       totalRevenue = cachedMetrics.totalRevenue;
       totalCosts = cachedMetrics.totalCosts;
       totalExpenses = cachedMetrics.totalExpenses;
       totalProfit = cachedMetrics.totalProfit;
       
-      // For chart data, still need to fetch (but limit to last 7 days for chart)
+      // BANDWIDTH OPTIMIZATION: Limit chart to last 7 days with hard cap of 50 transactions
       const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
       
       const [incomingTx, outgoingTx] = await Promise.all([
@@ -656,13 +657,13 @@ export const getCompanyDashboard = query({
           .withIndex("by_to_account_created", (q) => 
             q.eq("toAccountId", company.accountId).gt("createdAt", sevenDaysAgo)
           )
-          .take(200), // Smaller limit for chart
+          .take(50), // REDUCED from 200 to 50
         ctx.db
           .query("ledger")
           .withIndex("by_from_account_created", (q) => 
             q.eq("fromAccountId", company.accountId).gt("createdAt", sevenDaysAgo)
           )
-          .take(200),
+          .take(50), // REDUCED from 200 to 50
       ]);
 
       const revenueTypes = new Set(["product_purchase", "marketplace_batch"]);
@@ -703,25 +704,26 @@ export const getCompanyDashboard = query({
           profit: (dailyRevenue[date] || 0) - (dailyCosts[date] || 0) - (dailyExpenses[date] || 0),
         }))
         .sort((a, b) => a.date.localeCompare(b.date))
-        .slice(-7); // Only last 7 days for chart when using cache
+        .slice(-7); // Only last 7 days for chart
 
     } else {
-      // FALLBACK PATH: Calculate from ledger (with hard limits)
+      // FALLBACK PATH: Calculate from ledger (with AGGRESSIVE limits to reduce bandwidth)
       const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
       
+      // BANDWIDTH OPTIMIZATION: Reduced from 500 to 100 for fallback path
       const [incomingTx, outgoingTx] = await Promise.all([
         ctx.db
           .query("ledger")
           .withIndex("by_to_account_created", (q) => 
             q.eq("toAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
           )
-          .take(500),
+          .take(100), // REDUCED from 500
         ctx.db
           .query("ledger")
           .withIndex("by_from_account_created", (q) => 
             q.eq("fromAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
           )
-          .take(500),
+          .take(100), // REDUCED from 500
       ]);
 
       const revenueTypes = new Set(["product_purchase", "marketplace_batch"]);
@@ -759,6 +761,7 @@ export const getCompanyDashboard = query({
         ...Object.keys(dailyExpenses),
       ]);
 
+      // BANDWIDTH OPTIMIZATION: Only last 7 days even in fallback
       chartData = Array.from(allDates)
         .map(date => ({
           date,
@@ -768,7 +771,7 @@ export const getCompanyDashboard = query({
           profit: (dailyRevenue[date] || 0) - (dailyCosts[date] || 0) - (dailyExpenses[date] || 0),
         }))
         .sort((a, b) => a.date.localeCompare(b.date))
-        .slice(-30);
+        .slice(-7); // CHANGED from -30 to -7 for consistency
     }
 
     // ULTRA-OPTIMIZED: Use stored totals from products table (no additional queries needed)
