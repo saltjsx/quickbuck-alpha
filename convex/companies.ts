@@ -977,3 +977,116 @@ export const distributeDividends = mutation({
     };
   },
 });
+
+// Internal mutation to delete company without authentication (for moderation)
+export const internalDeleteCompany = internalMutation({
+  args: {
+    companyId: v.id("companies"),
+  },
+  handler: async (ctx, args) => {
+    const company = await ctx.db.get(args.companyId);
+    if (!company) throw new Error("Company not found");
+
+    // Deactivate all products (don't delete for historical record)
+    const products = await ctx.db
+      .query("products")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .collect();
+
+    for (const product of products) {
+      await ctx.db.patch(product._id, { isActive: false });
+    }
+
+    // Delete all stock holdings for this company
+    const stocks = await ctx.db
+      .query("stocks")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .collect();
+
+    for (const stock of stocks) {
+      await ctx.db.delete(stock._id);
+    }
+
+    // Delete stock price history
+    const priceHistory = await ctx.db
+      .query("stockPriceHistory")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .collect();
+
+    for (const history of priceHistory) {
+      await ctx.db.delete(history._id);
+    }
+
+    // Delete stock transactions
+    const stockTransactions = await ctx.db
+      .query("stockTransactions")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .collect();
+
+    for (const transaction of stockTransactions) {
+      await ctx.db.delete(transaction._id);
+    }
+
+    // Delete all company access records
+    const accessRecords = await ctx.db
+      .query("companyAccess")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .collect();
+
+    for (const access of accessRecords) {
+      await ctx.db.delete(access._id);
+    }
+
+    // Delete balance record
+    const balanceRecord = await ctx.db
+      .query("balances")
+      .withIndex("by_account", (q) => q.eq("accountId", company.accountId))
+      .first();
+
+    if (balanceRecord) {
+      await ctx.db.delete(balanceRecord._id);
+    }
+
+    // Delete company account
+    await ctx.db.delete(company.accountId);
+
+    // Finally, delete the company
+    await ctx.db.delete(args.companyId);
+
+    return {
+      success: true,
+    };
+  },
+});
+
+// Admin mutation to batch delete companies (requires admin key)
+export const adminDeleteCompanies = mutation({
+  args: {
+    companyIds: v.array(v.id("companies")),
+    adminKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Check admin key
+    if (args.adminKey !== process.env.ADMIN_KEY) {
+      throw new Error("Invalid admin key");
+    }
+
+    const results = [];
+    for (const companyId of args.companyIds) {
+      try {
+        await ctx.scheduler.runAfter(0, internal.companies.internalDeleteCompany, {
+          companyId,
+        });
+        results.push({ companyId, success: true });
+      } catch (error) {
+        results.push({ 
+          companyId, 
+          success: false, 
+          error: error instanceof Error ? error.message : "Unknown error" 
+        });
+      }
+    }
+
+    return results;
+  },
+});

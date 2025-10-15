@@ -520,3 +520,87 @@ export const automaticPurchase = internalMutation({
     };
   },
 });
+
+// Delete a product (deactivate it)
+export const deleteProduct = mutation({
+  args: {
+    productId: v.id("products"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const product = await ctx.db.get(args.productId);
+    if (!product) throw new Error("Product not found");
+
+    // Check if user has access to the company
+    const access = await ctx.db
+      .query("companyAccess")
+      .withIndex("by_company_user", (q) =>
+        q.eq("companyId", product.companyId).eq("userId", userId)
+      )
+      .first();
+
+    if (!access) throw new Error("No access to this company");
+
+    // Deactivate the product instead of deleting for historical record
+    await ctx.db.patch(args.productId, {
+      isActive: false,
+    });
+
+    return { success: true };
+  },
+});
+
+// Internal mutation to delete product without authentication (for moderation)
+export const internalDeleteProduct = internalMutation({
+  args: {
+    productId: v.id("products"),
+  },
+  handler: async (ctx, args) => {
+    const product = await ctx.db.get(args.productId);
+    if (!product) throw new Error("Product not found");
+
+    // Deactivate the product
+    await ctx.db.patch(args.productId, {
+      isActive: false,
+    });
+
+    return { success: true };
+  },
+});
+
+// Admin mutation to batch delete products (requires admin key)
+export const adminDeleteProducts = mutation({
+  args: {
+    productIds: v.array(v.id("products")),
+    adminKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Check admin key
+    if (args.adminKey !== process.env.ADMIN_KEY) {
+      throw new Error("Invalid admin key");
+    }
+
+    const results = [];
+    for (const productId of args.productIds) {
+      try {
+        const product = await ctx.db.get(productId);
+        if (product) {
+          await ctx.db.patch(productId, { isActive: false });
+          results.push({ productId, success: true });
+        } else {
+          results.push({ productId, success: false, error: "Product not found" });
+        }
+      } catch (error) {
+        results.push({ 
+          productId, 
+          success: false, 
+          error: error instanceof Error ? error.message : "Unknown error" 
+        });
+      }
+    }
+
+    return results;
+  },
+});
