@@ -53,4 +53,11 @@ crons.daily(
   internal.expenses.expireLicenses
 );
 
+// Apply daily interest to loans and auto-deduct overdue loans at 2 AM UTC
+crons.daily(
+  "apply loan interest and process defaults",
+  { hourUTC: 2, minuteUTC: 0 },
+  internal.loans.applyDailyInterest
+);
+
 export default crons;

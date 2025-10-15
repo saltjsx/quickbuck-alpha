@@ -27,7 +27,10 @@ export default defineSchema({
       v.literal("expense"),
       v.literal("gamble"),
       v.literal("gamble_payout"),
-      v.literal("dividend")
+      v.literal("dividend"),
+      v.literal("loan_disbursement"),
+      v.literal("loan_repayment"),
+      v.literal("loan_default")
     ),
     description: v.optional(v.string()),
     productId: v.optional(v.id("products")),
@@ -286,5 +289,28 @@ export default defineSchema({
     .index("by_company", ["companyId"])
     .index("by_company_period", ["companyId", "period"])
     .index("by_lastUpdated", ["lastUpdated"]),
+
+  loans: defineTable({
+    userId: v.id("users"),
+    accountId: v.id("accounts"),
+    principal: v.number(), // Original loan amount
+    currentBalance: v.number(), // Current amount owed (principal + interest)
+    interestRate: v.number(), // Daily interest rate (0.05 = 5%)
+    daysRemaining: v.number(), // Days left to repay
+    status: v.union(
+      v.literal("active"),
+      v.literal("repaid"),
+      v.literal("defaulted")
+    ),
+    lastInterestApplied: v.number(), // Timestamp of last interest application
+    dueDate: v.number(), // Timestamp when loan must be repaid
+    createdAt: v.number(),
+    repaidAt: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_status", ["userId", "status"])
+    .index("by_status", ["status"])
+    .index("by_status_dueDate", ["status", "dueDate"])
+    .index("by_lastInterestApplied", ["lastInterestApplied"]),
 });
 

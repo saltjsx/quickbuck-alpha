@@ -389,6 +389,19 @@ export const getDashboardOverview = query({
     const portfolioValue = portfolio.reduce((sum: number, p: any) => sum + (p?.currentValue ?? 0), 0);
     const cashBalance = personalAccount?.balance ?? 0;
 
+    // Calculate total loan debt (negative impact on net worth)
+    const activeLoans = await ctx.db
+      .query("loans")
+      .withIndex("by_user_status", (q) =>
+        q.eq("userId", userId).eq("status", "active")
+      )
+      .collect();
+
+    const totalLoanDebt = activeLoans.reduce(
+      (sum, loan) => sum + loan.currentBalance,
+      0
+    );
+
     return {
       personalAccount,
       companies: enrichedCompanies,
@@ -396,7 +409,8 @@ export const getDashboardOverview = query({
       totalCompanies: enrichedCompanies.length,
       portfolioValue,
       ownerEquityValue,
-      netWorth: cashBalance + portfolioValue + ownerEquityValue,
+      totalLoanDebt,
+      netWorth: cashBalance + portfolioValue + ownerEquityValue - totalLoanDebt,
     };
   },
 });
