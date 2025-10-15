@@ -76,112 +76,112 @@ export default function Page() {
   return (
     <div className="flex flex-1 flex-col">
       <div className="@container/main flex flex-1 flex-col gap-2">
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+        <div className="flex flex-col gap-3 py-3 md:gap-4 md:py-4">
           {/* Header */}
           <div className="px-4 lg:px-6">
-            <h1 className="text-3xl font-bold">Dashboard</h1>
-            <p className="text-muted-foreground mt-1">
+            <h1 className="text-2xl font-bold">Dashboard</h1>
+            <p className="text-muted-foreground text-sm mt-0.5">
               Welcome to QuickBuck! Build your financial empire.
             </p>
           </div>
 
           {/* Stats Grid */}
           <div className="px-4 lg:px-6">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
+              <Card className="py-4">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                  <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     Net Worth
                   </CardTitle>
                   <DollarSign className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">
+                  <div className="text-xl font-bold">
                     $
                     {totalNetWorth.toLocaleString("en-US", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p className="text-xs text-muted-foreground mt-1.5">
                     Total assets value
                   </p>
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
+              <Card className="py-4">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                  <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     Cash Balance
                   </CardTitle>
                   <Wallet className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">
+                  <div className="text-xl font-bold">
                     $
                     {personalBalance.toLocaleString("en-US", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p className="text-xs text-muted-foreground mt-1.5">
                     Available funds
                   </p>
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
+              <Card className="py-4">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                  <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     Companies
                   </CardTitle>
                   <Building2 className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{totalCompanies}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <div className="text-xl font-bold">{totalCompanies}</div>
+                  <p className="text-xs text-muted-foreground mt-1.5">
                     {myProducts} products listed
                   </p>
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
+              <Card className="py-4">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                  <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     Portfolio Value
                   </CardTitle>
                   <TrendingUp className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">
+                  <div className="text-xl font-bold">
                     $
                     {portfolioValue.toLocaleString("en-US", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p className="text-xs text-muted-foreground mt-1.5">
                     Stock investments
                   </p>
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
+              <Card className="py-4">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                  <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                     Founder Equity
                   </CardTitle>
                   <Building2 className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">
+                  <div className="text-xl font-bold">
                     $
                     {ownerEquity.toLocaleString("en-US", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p className="text-xs text-muted-foreground mt-1.5">
                     Value of your owned companies
                   </p>
                 </CardContent>
@@ -191,15 +191,15 @@ export default function Page() {
 
           {/* Quick Actions */}
           <div className="px-4 lg:px-6">
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-2">
               <Card>
                 <CardHeader>
-                  <CardTitle>Quick Actions</CardTitle>
-                  <CardDescription>
+                  <CardTitle className="text-base">Quick Actions</CardTitle>
+                  <CardDescription className="text-xs">
                     Get started with these common tasks
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-2">
+                <CardContent className="space-y-1.5">
                   <Link to="/dashboard/companies">
                     <Button
                       variant="outline"
@@ -241,53 +241,52 @@ export default function Page() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>How to Play</CardTitle>
-                  <CardDescription>
+                  <CardTitle className="text-base">How to Play</CardTitle>
+                  <CardDescription className="text-xs">
                     Build your financial empire in 4 steps
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="space-y-2.5">
                   <div className="flex gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-primary text-primary-foreground text-sm font-semibold">
                       1
                     </div>
                     <div>
-                      <p className="font-medium">Create a Company</p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="font-medium text-sm">Create a Company</p>
+                      <p className="text-xs text-muted-foreground">
                         Start your business empire
                       </p>
                     </div>
                   </div>
                   <div className="flex gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-primary text-primary-foreground text-sm font-semibold">
                       2
                     </div>
                     <div>
-                      <p className="font-medium">List Products</p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="font-medium text-sm">List Products</p>
+                      <p className="text-xs text-muted-foreground">
                         Add products to sell
                       </p>
                     </div>
                   </div>
                   <div className="flex gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-primary text-primary-foreground text-sm font-semibold">
                       3
                     </div>
                     <div>
-                      <p className="font-medium">Earn Money</p>
-                      <p className="text-sm text-muted-foreground">
-                        Products sell automatically every 10 min (fair
-                        distribution!)
+                      <p className="font-medium text-sm">Earn Money</p>
+                      <p className="text-xs text-muted-foreground">
+                        Products sell automatically every 10 min (fair distribution)
                       </p>
                     </div>
                   </div>
                   <div className="flex gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-primary text-primary-foreground text-sm font-semibold">
                       4
                     </div>
                     <div>
-                      <p className="font-medium">Go Public & Invest</p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="font-medium text-sm">Go Public & Invest</p>
+                      <p className="text-xs text-muted-foreground">
                         Reach $50K to list on stock market
                       </p>
                     </div>

@@ -23,33 +23,33 @@ export function CompaniesTab({ companies }: CompaniesTabProps) {
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>My Companies</CardTitle>
-            <CardDescription>Companies you own or manage</CardDescription>
+            <CardTitle className="text-base">My Companies</CardTitle>
+            <CardDescription className="text-xs">Companies you own or manage</CardDescription>
           </div>
           <CreateCompanyDialog />
         </div>
       </CardHeader>
       <CardContent>
         {companies?.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-muted-foreground mb-4">No companies yet</p>
-            <p className="text-sm text-muted-foreground">
-              Create your first company to start selling products!
+          <div className="text-center py-6">
+            <p className="text-muted-foreground text-sm mb-2">No companies yet</p>
+            <p className="text-xs text-muted-foreground">
+              Create your first company to start selling products
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {companies?.map((company: any) => (
-              <div key={company._id} className="p-4 border rounded-lg">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h3 className="font-semibold text-lg">{company.name}</h3>
-                    <p className="text-sm text-muted-foreground">
+              <div key={company._id} className="p-4 border rounded">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-base">{company.name}</h3>
+                    <p className="text-xs text-muted-foreground mt-1">
                       {company.description}
                     </p>
-                    <div className="mt-2 flex gap-2">
+                    <div className="mt-2 flex gap-1.5">
                       <span
-                        className={`text-xs px-2 py-1 rounded ${
+                        className={`text-xs px-2 py-0.5 rounded ${
                           company.isPublic
                             ? "bg-green-100 text-green-800"
                             : "bg-gray-100 text-gray-800"
@@ -57,13 +57,13 @@ export function CompaniesTab({ companies }: CompaniesTabProps) {
                       >
                         {company.isPublic ? "Public" : "Private"}
                       </span>
-                      <span className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-800 capitalize">
+                      <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-800 capitalize">
                         {company.role}
                       </span>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xl font-bold">
+                  <div className="text-right ml-4">
+                    <p className="text-lg font-bold">
                       $
                       {company.balance?.toLocaleString("en-US", {
                         minimumFractionDigits: 2,
@@ -71,13 +71,13 @@ export function CompaniesTab({ companies }: CompaniesTabProps) {
                       })}
                     </p>
                     {company.isPublic && (
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         ${company.sharePrice?.toFixed(2)}/share
                       </p>
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <CreateProductDialog companyId={company._id} />
                   {company.role === "owner" && company.isPublic && (
                     <DistributeDividendDialog
@@ -88,8 +88,8 @@ export function CompaniesTab({ companies }: CompaniesTabProps) {
                     />
                   )}
                   {company.balance > 50000 && !company.isPublic && (
-                    <p className="text-sm text-green-600">
-                      ✨ Eligible for stock market listing!
+                    <p className="text-xs text-green-600 font-medium">
+                      Eligible for stock market listing
                     </p>
                   )}
                 </div>

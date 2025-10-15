@@ -178,36 +178,36 @@ export function MarketplaceTab() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-7xl">
+    <div className="container mx-auto px-4 py-4 max-w-7xl">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold mb-2 text-balance">
+      <div className="mb-4">
+        <h1 className="text-2xl font-bold mb-1 text-balance">
           QuickBuck Marketplace
         </h1>
-        <p className="text-muted-foreground text-lg">
+        <p className="text-muted-foreground text-sm">
           Discover and purchase products from top companies
         </p>
       </div>
 
       {/* Search and Filters Bar */}
-      <div className="mb-8 space-y-4">
+      <div className="mb-4 space-y-3">
         {/* Search Bar */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="text"
             placeholder="Search for products and companies..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 h-12 text-base"
+            className="pl-9 h-10 text-sm"
           />
         </div>
 
         {/* Filters and Sort */}
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-2">
           {/* Company Filter */}
           <Select value={selectedCompany} onValueChange={setSelectedCompany}>
-            <SelectTrigger className="w-full sm:w-[200px]">
+            <SelectTrigger className="w-full sm:w-[180px] h-9 text-sm">
               <SelectValue placeholder="Filter by company" />
             </SelectTrigger>
             <SelectContent>
@@ -225,14 +225,15 @@ export function MarketplaceTab() {
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="outline"
-                  className="w-full sm:w-auto bg-transparent"
+                  size="sm"
+                  className="w-full sm:w-auto"
                 >
-                  <SlidersHorizontal className="h-4 w-4 mr-2" />
+                  <SlidersHorizontal className="h-3.5 w-3.5 mr-2" />
                   Tags {selectedTags.length > 0 && `(${selectedTags.length})`}
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56">
-                <DropdownMenuLabel>Filter by tags</DropdownMenuLabel>
+              <DropdownMenuContent className="w-48">
+                <DropdownMenuLabel className="text-xs">Filter by tags</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {allTags.map((tag) => (
                   <DropdownMenuCheckboxItem
@@ -255,7 +256,7 @@ export function MarketplaceTab() {
 
           {/* Sort */}
           <Select value={sortBy} onValueChange={setSortBy}>
-            <SelectTrigger className="w-full sm:w-[200px] sm:ml-auto">
+            <SelectTrigger className="w-full sm:w-[180px] sm:ml-auto h-9 text-sm">
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
             <SelectContent>
@@ -299,23 +300,24 @@ export function MarketplaceTab() {
 
       {/* Products Grid */}
       {filteredProducts.length === 0 ? (
-        <div className="text-center py-12">
+        <div className="text-center py-8">
           {products.length === 0 ? (
             <>
-              <p className="text-lg text-muted-foreground">
+              <p className="text-base text-muted-foreground">
                 No products available yet
               </p>
-              <p className="text-sm text-muted-foreground mt-2">
-                Create a company and add products to get started!
+              <p className="text-xs text-muted-foreground mt-1">
+                Create a company and add products to get started
               </p>
             </>
           ) : (
             <>
-              <p className="text-lg text-muted-foreground">
-                No products found matching your search criteria.
+              <p className="text-base text-muted-foreground">
+                No products found matching your search criteria
               </p>
               <Button
                 variant="link"
+                size="sm"
                 onClick={() => {
                   setSearchQuery("");
                   setSelectedCompany("All Companies");
@@ -329,15 +331,15 @@ export function MarketplaceTab() {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredProducts.map((product: any) => (
             <Card
               key={product._id}
-              className="overflow-hidden flex flex-col hover:shadow-lg transition-shadow cursor-pointer"
+              className="overflow-hidden flex flex-col hover:shadow-md transition-shadow cursor-pointer"
               onClick={() => handleProductClick(product)}
             >
               {/* Product Image */}
-              <div className="relative h-48 bg-muted overflow-hidden">
+              <div className="relative h-40 bg-muted overflow-hidden">
                 {product.imageUrl ? (
                   <img
                     src={product.imageUrl}
@@ -346,16 +348,16 @@ export function MarketplaceTab() {
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                    <span className="text-4xl">{product.name[0]}</span>
+                    <span className="text-3xl font-semibold">{product.name[0]}</span>
                   </div>
                 )}
               </div>
 
               {/* Product Content */}
-              <div className="p-5 flex flex-col flex-1">
+              <div className="p-4 flex flex-col flex-1">
                 {/* Company Info */}
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                     {product.companyLogoUrl ? (
                       <img
                         src={product.companyLogoUrl}
@@ -363,13 +365,13 @@ export function MarketplaceTab() {
                         className="h-full w-full object-cover"
                       />
                     ) : (
-                      <span className="text-sm font-semibold">
+                      <span className="text-xs font-semibold">
                         {product.companyName?.[0] || "?"}
                       </span>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
+                    <p className="text-xs font-medium truncate">
                       {product.companyName}
                     </p>
                     {product.companyTicker && (
@@ -381,20 +383,20 @@ export function MarketplaceTab() {
                 </div>
 
                 {/* Product Name */}
-                <h3 className="text-xl font-semibold mb-2 text-balance leading-tight">
+                <h3 className="text-base font-semibold mb-1.5 text-balance leading-tight">
                   {product.name}
                 </h3>
 
                 {/* Description */}
-                <p className="text-sm text-muted-foreground mb-4 leading-relaxed line-clamp-2">
+                <p className="text-xs text-muted-foreground mb-3 leading-relaxed line-clamp-2">
                   {product.description}
                 </p>
 
                 {/* Tags */}
                 {product.tags && product.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mb-4">
+                  <div className="flex flex-wrap gap-1 mb-3">
                     {product.tags.map((tag: string, i: number) => (
-                      <Badge key={i} variant="outline" className="text-xs">
+                      <Badge key={i} variant="outline" className="text-xs py-0">
                         {tag}
                       </Badge>
                     ))}
@@ -402,10 +404,10 @@ export function MarketplaceTab() {
                 )}
 
                 {/* Footer - Price and Stats */}
-                <div className="mt-auto pt-4 border-t">
-                  <div className="flex items-center justify-between mb-3">
+                <div className="mt-auto pt-3 border-t">
+                  <div className="flex items-center justify-between mb-2.5">
                     <div>
-                      <p className="text-2xl font-bold">
+                      <p className="text-xl font-bold">
                         ${product.price.toFixed(2)}
                       </p>
                       <p className="text-xs text-muted-foreground">
@@ -417,7 +419,7 @@ export function MarketplaceTab() {
                   {/* Buy Button */}
                   <Button
                     className="w-full"
-                    size="lg"
+                    size="sm"
                     onClick={(e) => handleBuyNow(product, e)}
                     disabled={purchasingProductId === product._id}
                   >

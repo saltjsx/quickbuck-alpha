@@ -118,17 +118,17 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
     totals.revenue > 0 ? (totals.profit / totals.revenue) * 100 : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-2xl font-bold">{company.name} Dashboard</h2>
-          <p className="text-muted-foreground">
+          <h2 className="text-xl font-bold">{company.name} Dashboard</h2>
+          <p className="text-muted-foreground text-sm">
             Track your company's performance and growth
           </p>
         </div>
-        <div className="flex gap-2">
-          <Badge variant={company.isPublic ? "default" : "outline"}>
+        <div className="flex gap-1.5">
+          <Badge variant={company.isPublic ? "default" : "outline"} className="text-xs">
             {company.isPublic ? "Public Company" : "Private Company"}
           </Badge>
           <EditCompanyDialog
@@ -150,54 +150,54 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
       </div>
 
       {/* Key Metrics */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="py-4">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Current Balance
             </CardTitle>
             <Wallet className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-xl font-bold">
               $
               {company.balance.toLocaleString("en-US", {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-1.5">
               Company account balance
             </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+        <Card className="py-4">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Total Revenue</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-xl font-bold">
               $
               {totals.revenue.toLocaleString("en-US", {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-1.5">
               All-time product sales
             </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Profit</CardTitle>
+        <Card className="py-4">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Total Profit</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold flex items-center gap-1">
+            <div className="text-xl font-bold flex items-center gap-1">
               $
               {totals.profit.toLocaleString("en-US", {
                 minimumFractionDigits: 2,
@@ -209,26 +209,25 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
                 <ArrowDownIcon className="h-4 w-4 text-red-600" />
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-1.5">
               {profitMargin.toFixed(1)}% profit margin
             </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+        <Card className="py-4">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Active Products
             </CardTitle>
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-xl font-bold">
               {products.filter((p) => p.isActive).length}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {products.reduce((sum, p) => sum + p.unitsSold, 0)} total units
-              sold
+            <p className="text-xs text-muted-foreground mt-1.5">
+              {products.reduce((sum, p) => sum + p.unitsSold, 0)} total units sold
             </p>
           </CardContent>
         </Card>
@@ -238,13 +237,13 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
       {chartData.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Revenue & Profit Trends</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-base">Revenue & Profit Trends</CardTitle>
+            <CardDescription className="text-xs">
               Daily revenue, costs, and profit over the last 30 days
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={chartConfig} className="h-[300px] w-full">
+            <ChartContainer config={chartConfig} className="h-[280px] w-full">
               <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="fillRevenue" x1="0" y1="0" x2="0" y2="1">
@@ -334,15 +333,15 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
       {/* Products Performance */}
       <Card>
         <CardHeader>
-          <CardTitle>Product Performance</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-base">Product Performance</CardTitle>
+          <CardDescription className="text-xs">
             Detailed breakdown of each product's sales and profitability
           </CardDescription>
         </CardHeader>
         <CardContent>
           {products.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No products yet. Create your first product to start selling!
+            <div className="text-center py-6 text-muted-foreground text-sm">
+              No products yet. Create your first product to start selling
             </div>
           ) : (
             <Table>
@@ -375,7 +374,7 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
                             <img
                               src={product.imageUrl}
                               alt={product.name}
-                              className="h-8 w-8 rounded object-cover"
+                              className="h-7 w-7 rounded object-cover"
                               onError={(e) => {
                                 (e.target as HTMLImageElement).style.display =
                                   "none";
@@ -383,10 +382,10 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
                             />
                           )}
                           <div>
-                            <div>{product.name}</div>
+                            <div className="text-sm">{product.name}</div>
                             <div className="text-xs text-muted-foreground">
-                              {product.description.slice(0, 40)}
-                              {product.description.length > 40 ? "..." : ""}
+                              {product.description.slice(0, 35)}
+                              {product.description.length > 35 ? "..." : ""}
                             </div>
                           </div>
                         </div>
@@ -485,8 +484,8 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
       {products.length > 0 && products.some((p) => p.revenue > 0) && (
         <Card>
           <CardHeader>
-            <CardTitle>Product Revenue Comparison</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-base">Product Revenue Comparison</CardTitle>
+            <CardDescription className="text-xs">
               Compare revenue and profit across all products
             </CardDescription>
           </CardHeader>
@@ -502,7 +501,7 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
                   color: "hsl(var(--chart-3))",
                 },
               }}
-              className="h-[300px] w-full"
+              className="h-[280px] w-full"
             >
               <BarChart
                 data={products

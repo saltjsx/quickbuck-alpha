@@ -106,14 +106,14 @@ export default function CompaniesPage() {
   return (
     <div className="flex flex-1 flex-col">
       <div className="@container/main flex flex-1 flex-col gap-2">
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+        <div className="flex flex-col gap-3 py-3 md:gap-4 md:py-4">
           <div className="px-4 lg:px-6 flex items-start justify-between">
             <div>
-              <h1 className="text-3xl font-bold flex items-center gap-2">
-                <Building2 className="h-8 w-8" />
+              <h1 className="text-2xl font-bold flex items-center gap-2">
+                <Building2 className="h-6 w-6" />
                 My Companies
               </h1>
-              <p className="text-muted-foreground mt-1">
+              <p className="text-muted-foreground text-sm mt-0.5">
                 Companies you own or manage
               </p>
             </div>
@@ -123,23 +123,23 @@ export default function CompaniesPage() {
           <div className="px-4 lg:px-6">
             <Card>
               <CardHeader>
-                <CardTitle>Your Businesses</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-base">Your Businesses</CardTitle>
+                <CardDescription className="text-xs">
                   Create companies, list products, and grow your empire
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {companies?.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-muted-foreground mb-4">
+                  <div className="text-center py-6">
+                    <p className="text-muted-foreground text-sm mb-2">
                       No companies yet
                     </p>
-                    <p className="text-sm text-muted-foreground">
-                      Create your first company to start selling products!
+                    <p className="text-xs text-muted-foreground">
+                      Create your first company to start selling products
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-6">
+                  <div className="space-y-4">
                     {companies?.map((company: any) => {
                       const addProductAction = (
                         <CreateProductDialog
@@ -252,8 +252,8 @@ export default function CompaniesPage() {
                         company.role === "owner" &&
                         company.balance > 50000 &&
                         !company.isPublic ? (
-                          <p className="text-sm text-green-600">
-                            ✨ Eligible for stock market listing!
+                          <p className="text-sm text-green-600 font-medium">
+                            Eligible for stock market listing
                           </p>
                         ) : undefined;
 
