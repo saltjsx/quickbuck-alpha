@@ -29,6 +29,7 @@ interface EditCompanyDialogProps {
     logoUrl?: string;
   };
   trigger?: ReactNode;
+  trigger?: React.ReactNode;
 }
 
 export function EditCompanyDialog({
@@ -199,6 +200,7 @@ export function EditCompanyDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger || (
+        {trigger ?? (
           <Button variant="outline" size="sm">
             <Pencil className="h-4 w-4 mr-2" />
             Edit Company

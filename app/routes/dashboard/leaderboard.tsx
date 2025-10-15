@@ -11,17 +11,9 @@ import {
   Package,
   ArrowUpDown,
 } from "lucide-react";
+import { Trophy, Building2, User, Package } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "~/components/ui/card";
 import { Skeleton } from "~/components/ui/skeleton";
-import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
-import { cn } from "~/lib/utils";
 import type { MetaFunction } from "react-router";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import {
@@ -156,6 +148,11 @@ function getItemAccent(rank: number) {
       return "border-border/50 bg-background/60";
   }
 }
+  OverviewTabLeaderboard,
+  CompaniesTabLeaderboard,
+  PlayersTabLeaderboard,
+  ProductsTabLeaderboard,
+} from "~/components/leaderboard";
 
 function LastUpdated({ timestamp }: { timestamp?: number }) {
   if (!timestamp) return null;
@@ -168,41 +165,9 @@ function LastUpdated({ timestamp }: { timestamp?: number }) {
 
 function LeaderboardSkeleton() {
   return (
-    <div className="grid gap-6">
-      {[...Array(5)].map((_, index) => (
-        <Card key={index} className="border-border/50 bg-muted/10">
-          <CardHeader className="space-y-2">
-            <Skeleton className="h-5 w-48" />
-            <Skeleton className="h-4 w-64" />
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {[...Array(3)].map((__, rowIndex) => (
-              <div
-                key={rowIndex}
-                className="flex flex-col gap-4 rounded-2xl border border-border/50 bg-background/60 p-4 md:flex-row md:items-center md:justify-between"
-              >
-                <div className="flex items-center gap-4">
-                  <Skeleton className="h-10 w-10 rounded-full" />
-                  <Skeleton className="h-12 w-12 rounded-full" />
-                  <div className="space-y-2">
-                    <Skeleton className="h-4 w-32" />
-                    <Skeleton className="h-3 w-20" />
-                  </div>
-                </div>
-                <div className="flex gap-4">
-                  <div className="space-y-2 text-right">
-                    <Skeleton className="ml-auto h-3 w-24" />
-                    <Skeleton className="ml-auto h-4 w-20" />
-                  </div>
-                  <div className="space-y-2 text-right">
-                    <Skeleton className="ml-auto h-3 w-20" />
-                    <Skeleton className="ml-auto h-4 w-16" />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+    <div className="space-y-4">
+      {[...Array(5)].map((_, i) => (
+        <Skeleton key={i} className="h-20 w-full" />
       ))}
     </div>
   );
@@ -247,157 +212,60 @@ export default function LeaderboardPage() {
     | LeaderboardData
     | undefined;
 
+  const leaderboard = useQuery(api.leaderboard.getLeaderboard, { limit: 5 });
   const allCompanies = useQuery(api.leaderboard.getAllCompanies, {});
   const allPlayers = useQuery(api.leaderboard.getAllPlayers, {});
   const allProducts = useQuery(api.leaderboard.getAllProducts, {});
 
   const isLoading = leaderboard === undefined;
 
-  const sections = useMemo<LeaderboardSection[] | null>(() => {
-    if (!leaderboard) {
-      return null;
-    }
+  // Prepare data for overview tab
+  const overviewData = useMemo(() => {
+    if (!leaderboard) return null;
 
-    return [
-      {
-        id: "highest-balance-players",
-        title: "Top Cash Players",
-        description: "Players with the largest personal account balances.",
-        icon: PiggyBank,
-        items: leaderboard.highestBalancePlayers.map((player, index) => ({
-          key: String(player.accountId ?? index),
-          rank: index + 1,
-          title: player.name,
-          subtitle: player.username ? `@${player.username}` : undefined,
-          avatarUrl: player.avatarUrl,
-          fallback: getInitials(player.name),
-          metrics: [
-            {
-              label: "Cash",
-              value: formatCurrency(player.balance ?? 0),
-              highlight: true,
-            },
-          ],
-        })),
-        emptyMessage: "Nobody has earned cash yet. Be the first!",
-      },
-      {
-        id: "highest-net-worth",
-        title: "Highest Net Worth",
-        description: "Combined cash, portfolio value, and founder equity.",
-        icon: Trophy,
-        items: leaderboard.highestNetWorthPlayers.map((player, index) => ({
-          key: String(player.accountId ?? index),
-          rank: index + 1,
-          title: player.name,
-          subtitle: player.username ? `@${player.username}` : undefined,
-          avatarUrl: player.avatarUrl,
-          fallback: getInitials(player.name),
-          metrics: [
-            {
-              label: "Net Worth",
-              value: formatCurrency(player.netWorth ?? 0),
-              highlight: true,
-            },
-            {
-              label: "Cash",
-              value: formatCurrency(player.cashBalance ?? 0),
-            },
-            {
-              label: "Portfolio",
-              value: formatCurrency(player.portfolioValue ?? 0),
-            },
-            {
-              label: "Founder Equity",
-              value: formatCurrency(player.ownerEquityValue ?? 0),
-            },
-          ],
-        })),
-        emptyMessage: "Start investing to climb this chart.",
-      },
-      {
-        id: "most-valuable-companies",
-        title: "Most Valuable Companies",
-        description: "Highest market capitalization among all companies.",
-        icon: Building2,
-        items: leaderboard.mostValuableCompanies.map((company, index) => ({
-          key: String(company.companyId ?? index),
-          rank: index + 1,
-          title: company.name,
-          subtitle: company.ticker,
-          avatarUrl: company.logoUrl,
-          fallback: getInitials(company.name),
-          metrics: [
-            {
-              label: "Market Cap",
-              value: formatCurrency(company.marketCap ?? 0),
-              highlight: true,
-            },
-            {
-              label: "Share Price",
-              value: formatCurrency(company.sharePrice ?? 0),
-            },
-          ],
-        })),
-        emptyMessage: "No companies valued yet. Build something great!",
-      },
-      {
-        id: "most-cash-companies",
-        title: "Most Cash on Hand",
-        description:
-          "Companies with the largest bank balances ready to deploy.",
-        icon: DollarSign,
-        items: leaderboard.mostCashCompanies.map((company, index) => ({
-          key: String(company.companyId ?? index),
-          rank: index + 1,
-          title: company.name,
-          subtitle: company.ticker,
-          avatarUrl: company.logoUrl,
-          fallback: getInitials(company.name),
-          metrics: [
-            {
-              label: "Cash",
-              value: formatCurrency(company.balance ?? 0),
-              highlight: true,
-            },
-            {
-              label: "Market Cap",
-              value: formatCurrency(company.marketCap ?? 0),
-            },
-          ],
-        })),
-        emptyMessage: "Grow your company to top the cash leaderboard.",
-      },
-      {
-        id: "best-selling-products",
-        title: "Best Selling Products",
-        description: "Products with the highest lifetime unit sales.",
-        icon: ShoppingCart,
-        items: leaderboard.bestSellingProducts.map((product, index) => ({
-          key: String(product.productId ?? index),
-          rank: index + 1,
-          title: product.name,
-          subtitle: product.companyTicker
-            ? `${product.companyName} • ${product.companyTicker}`
-            : product.companyName,
-          avatarUrl: product.imageUrl || product.companyLogoUrl,
-          fallback: getInitials(product.name),
-          metrics: [
-            {
-              label: "Units Sold",
-              value: formatNumber(product.totalSales ?? 0),
-              highlight: true,
-            },
-            {
-              label: "Price",
-              value: formatCurrency(product.price ?? 0),
-            },
-          ],
-        })),
-        emptyMessage:
-          "No products have sold yet. Launch something in the marketplace!",
-      },
-    ];
+    return {
+      topCashPlayers: leaderboard.highestBalancePlayers.map((p) => ({
+        _id: p.userId,
+        name: p.name,
+        username: p.username,
+        avatarUrl: p.avatarUrl,
+        cashBalance: p.balance,
+        netWorth: p.balance, // For cash leaderboard, just use balance
+      })),
+      topNetWorthPlayers: leaderboard.highestNetWorthPlayers.map((p) => ({
+        _id: p.userId,
+        name: p.name,
+        username: p.username,
+        avatarUrl: p.avatarUrl,
+        cashBalance: p.cashBalance,
+        netWorth: p.netWorth,
+      })),
+      topCompanies: leaderboard.mostValuableCompanies.map((c) => ({
+        _id: c.companyId,
+        name: c.name,
+        ticker: c.ticker || "",
+        logoUrl: c.logoUrl,
+        balance: 0, // Not included in mostValuableCompanies
+        marketCap: c.marketCap,
+      })),
+      topCashCompanies: leaderboard.mostCashCompanies.map((c) => ({
+        _id: c.companyId,
+        name: c.name,
+        ticker: c.ticker || "",
+        logoUrl: c.logoUrl,
+        balance: c.balance,
+        marketCap: c.marketCap,
+      })),
+      topProducts: leaderboard.bestSellingProducts.map((p) => ({
+        _id: p.productId,
+        name: p.name,
+        imageUrl: p.imageUrl,
+        companyName: p.companyName,
+        companyTicker: p.companyTicker,
+        companyLogoUrl: p.companyLogoUrl,
+        totalSales: p.totalSales || 0,
+      })),
+    };
   }, [leaderboard]);
 
   // Types and helpers for sorting
@@ -543,7 +411,7 @@ export default function LeaderboardPage() {
           </TabsList>
 
           <TabsContent value="overview" className="mt-6">
-            {isLoading || !sections ? (
+            {isLoading || !overviewData ? (
               <LeaderboardSkeleton />
             ) : (
               <div className="grid gap-6">
@@ -687,6 +555,13 @@ export default function LeaderboardPage() {
                   </Card>
                 ))}
               </div>
+              <OverviewTabLeaderboard
+                topCashPlayers={overviewData.topCashPlayers}
+                topNetWorthPlayers={overviewData.topNetWorthPlayers}
+                topCompanies={overviewData.topCompanies}
+                topCashCompanies={overviewData.topCashCompanies}
+                topProducts={overviewData.topProducts}
+              />
             )}
           </TabsContent>
 
@@ -1178,6 +1053,27 @@ export default function LeaderboardPage() {
                 )}
               </CardContent>
             </Card>
+            {!allCompanies ? (
+              <LeaderboardSkeleton />
+            ) : (
+              <CompaniesTabLeaderboard companies={allCompanies} />
+            )}
+          </TabsContent>
+
+          <TabsContent value="players" className="mt-6">
+            {!allPlayers ? (
+              <LeaderboardSkeleton />
+            ) : (
+              <PlayersTabLeaderboard players={allPlayers} />
+            )}
+          </TabsContent>
+
+          <TabsContent value="products" className="mt-6">
+            {!allProducts ? (
+              <LeaderboardSkeleton />
+            ) : (
+              <ProductsTabLeaderboard products={allProducts} />
+            )}
           </TabsContent>
         </Tabs>
       </div>

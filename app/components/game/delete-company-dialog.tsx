@@ -21,6 +21,7 @@ interface DeleteCompanyDialogProps {
   companyName: string;
   balance: number;
   trigger?: ReactNode;
+  trigger?: React.ReactNode;
 }
 
 export function DeleteCompanyDialog({
@@ -70,6 +71,7 @@ export function DeleteCompanyDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger || (
+        {trigger ?? (
           <Button variant="destructive" size="sm">
             <Trash2 className="h-4 w-4 mr-2" />
             Delete Company

@@ -10,3 +10,4 @@ export { CollectionsTab } from "./collections-tab";
 export { GambleTab } from "./gamble-tab";
 export { LoansTab } from "./loans-tab";
 export { DistributeDividendDialog } from "./distribute-dividend-dialog";
+export { CompanyView } from "./company-view";
