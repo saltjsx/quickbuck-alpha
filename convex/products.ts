@@ -70,29 +70,12 @@ export const getActiveProducts = query({
     const MAX_PRODUCTS = 1000; // Hard cap to prevent runaway responses
     const PAGE_SIZE = 100; // Fetch in batches to stay within query limits
 
-  const products: Doc<"products">[] = [];
-    let cursor: string | null = null;
-
-    while (products.length < MAX_PRODUCTS) {
-      const page = await ctx.db
-        .query("products")
-        .withIndex("by_active", (q) => q.eq("isActive", true))
-        .order("desc")
-        .paginate({
-          cursor,
-          numItems: Math.min(PAGE_SIZE, MAX_PRODUCTS - products.length),
-        });
-
-  products.push(...(page.page as Doc<"products">[]));
-
-      if (page.isDone || page.page.length === 0 || !page.continueCursor) {
-        break;
-      }
-
-      cursor = page.continueCursor;
-    }
-
-    // OPTIMIZED: Batch fetch all companies at once (minimal fields)
+    // Simply collect ALL active products - no pagination needed for now
+    const products = await ctx.db
+      .query("products")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .order("desc")
+      .collect();    // OPTIMIZED: Batch fetch all companies at once (minimal fields)
     const companyIds = [...new Set(products.map(p => p.companyId))];
     const companies = await Promise.all(companyIds.map(id => ctx.db.get(id)));
     
