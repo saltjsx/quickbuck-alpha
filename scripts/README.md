@@ -103,9 +103,60 @@ This means no problematic content was found. The AI is conservative and only fla
 - **Cost**: Free tier available
 - **Rate Limits**: Check OpenRouter dashboard
 
+## Fix Orphaned Products
+
+If companies are deleted but their products remain active, those products become "orphaned" and won't show up properly in the marketplace. This script finds and deactivates them:
+
+```bash
+npm run fix-orphaned-products
+```
+
+You'll be prompted for:
+1. Your Convex admin key (only if orphaned products are found)
+
+The script will:
+1. Scan all active products
+2. Check if their parent company still exists
+3. Show you which products are orphaned
+4. Ask for confirmation before deactivating them
+
+**When to use this:**
+- After running prune-companies
+- When users report products/companies not showing up in marketplace
+- When you see products with "Unknown" company names
+
+## Troubleshooting Marketplace Issues
+
+### Problem: Products/Companies Not Showing Up
+
+**Symptoms:**
+- Products marked as `isActive: true` in database but not visible in marketplace
+- Company names showing as "Unknown" in marketplace
+- Some products from a company show up, but not all
+
+**Cause:**
+When the pruning scripts delete companies, sometimes their products remain active but orphaned (referencing a deleted company). The `getActiveProducts` query filters these out.
+
+**Solution:**
+1. Run the fix script:
+   ```bash
+   npm run fix-orphaned-products
+   ```
+
+2. Check the database after:
+   - Orphaned products should now be `isActive: false`
+   - Only products with valid companies should be active
+   - Marketplace should display correctly
+
+**Prevention:**
+The company deletion process now automatically deactivates all products when a company is deleted. But older deletions may have left orphaned products behind.
+
 ## Future Improvements
 
 - [ ] Add dry-run mode (show what would be deleted without actually deleting)
 - [ ] Add filtering by date (e.g., only check items created in the last week)
 - [ ] Add option to export flagged items to CSV before deleting
 - [ ] Support for custom moderation rules/criteria
+- [ ] Auto-fix orphaned products after company deletion
+
+````

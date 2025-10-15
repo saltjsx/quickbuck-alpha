@@ -9,7 +9,8 @@
     "typecheck": "react-router typegen && tsc",
     "reset": "npx convex run debug:resetEconomy",
     "prune-companies": "tsx scripts/prune-companies.ts",
-    "prune-products": "tsx scripts/prune-products.ts"
+    "prune-products": "tsx scripts/prune-products.ts",
+    "fix-orphaned-products": "tsx scripts/fix-orphaned-products.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.22",
