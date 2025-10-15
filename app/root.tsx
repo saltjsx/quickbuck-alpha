@@ -75,6 +75,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7103093110347946"
+          crossOrigin="anonymous"
+        ></script>
         <Meta />
         <Links />
       </head>
