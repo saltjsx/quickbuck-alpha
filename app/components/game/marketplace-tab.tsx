@@ -13,7 +13,6 @@ import {
 } from "~/components/ui/select";
 import { Badge } from "~/components/ui/badge";
 import { Card } from "~/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -356,18 +355,19 @@ export function MarketplaceTab() {
               <div className="p-5 flex flex-col flex-1">
                 {/* Company Info */}
                 <div className="flex items-center gap-2 mb-3">
-                  <Avatar className="h-8 w-8">
+                  <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                     {product.companyLogoUrl ? (
-                      <AvatarImage
+                      <img
                         src={product.companyLogoUrl}
                         alt={product.companyName}
+                        className="h-full w-full object-cover"
                       />
                     ) : (
-                      <AvatarFallback>
+                      <span className="text-sm font-semibold">
                         {product.companyName?.[0] || "?"}
-                      </AvatarFallback>
+                      </span>
                     )}
-                  </Avatar>
+                  </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">
                       {product.companyName}
