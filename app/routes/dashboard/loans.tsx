@@ -1,7 +1,6 @@
 import { LoansTab } from "~/components/game/loans-tab";
-import type { Route } from "./+types/loans";
 
-export function meta({}: Route.MetaArgs) {
+export function meta() {
   return [
     { title: "Loans - QuickBuck" },
     {
