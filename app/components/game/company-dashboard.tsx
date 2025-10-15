@@ -201,6 +201,43 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
   }));
 
   return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-xl font-bold">{company.name} Dashboard</h2>
+          <p className="text-muted-foreground text-sm">
+            Track your company's performance and growth
+          </p>
+        </div>
+        <div className="flex gap-1.5">
+          <Badge variant={company.isPublic ? "default" : "outline"} className="text-xs">
+            {company.isPublic ? "Public Company" : "Private Company"}
+          </Badge>
+          <EditCompanyDialog
+            company={{
+              _id: company._id,
+              name: company.name,
+              description: company.description,
+              tags: company.tags,
+              ticker: company.ticker,
+              logoUrl: company.logoUrl,
+            }}
+          />
+          <DeleteCompanyDialog
+            companyId={company._id}
+            companyName={company.name}
+            balance={company.balance}
+          />
+        </div>
+      </div>
+
+      {/* Key Metrics */}
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="py-4">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Current Balance
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <Button variant="outline" size="sm" asChild className="bg-transparent">
@@ -322,12 +359,67 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
+            <div className="text-xl font-bold">
+              $
+              {company.balance.toLocaleString("en-US", {
             <div className="text-2xl font-bold">
               {formatCurrency(company.balance, {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}
             </div>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Company account balance
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="py-4">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Total Revenue</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-xl font-bold">
+              $
+              {totals.revenue.toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              All-time product sales
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="py-4">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Total Profit</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-xl font-bold flex items-center gap-1">
+              $
+              {totals.profit.toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+              {profitMargin > 0 ? (
+                <ArrowUpIcon className="h-4 w-4 text-green-600" />
+              ) : (
+                <ArrowDownIcon className="h-4 w-4 text-red-600" />
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              {profitMargin.toFixed(1)}% profit margin
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="py-4">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             <p className="text-xs text-muted-foreground">
               Current available funds
             </p>
@@ -369,6 +461,11 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
+            <div className="text-xl font-bold">
+              {products.filter((p) => p.isActive).length}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              {products.reduce((sum, p) => sum + p.unitsSold, 0)} total units sold
             <div className="text-2xl font-bold">{activeProductCount}</div>
             <p className="text-xs text-muted-foreground">
               {activeUnitsSold.toLocaleString()} total units sold
@@ -380,6 +477,14 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
       {trendData.length > 0 ? (
         <Card>
           <CardHeader>
+            <CardTitle className="text-base">Revenue & Profit Trends</CardTitle>
+            <CardDescription className="text-xs">
+              Daily revenue, costs, and profit over the last 30 days
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={chartConfig} className="h-[280px] w-full">
+              <AreaChart data={chartData}>
             <CardTitle>Revenue & Profit Trends</CardTitle>
             <CardDescription>
               Daily performance over the last 30 days
@@ -478,6 +583,9 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-base">Product Performance</CardTitle>
+          <CardDescription className="text-xs">
+            Detailed breakdown of each product's sales and profitability
           <CardTitle>Products</CardTitle>
           <CardDescription>
             Manage your product catalog and performance
@@ -485,6 +593,8 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
         </CardHeader>
         <CardContent>
           {products.length === 0 ? (
+            <div className="text-center py-6 text-muted-foreground text-sm">
+              No products yet. Create your first product to start selling
             <div className="py-8 text-center text-sm text-muted-foreground">
               You have not launched any products yet.
             </div>
@@ -511,6 +621,26 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
                         ? (product.profit / product.revenue) * 100
                         : 0;
 
+                  return (
+                    <TableRow key={product._id}>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {product.imageUrl && (
+                            <img
+                              src={product.imageUrl}
+                              alt={product.name}
+                              className="h-7 w-7 rounded object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display =
+                                  "none";
+                              }}
+                            />
+                          )}
+                          <div>
+                            <div className="text-sm">{product.name}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {product.description.slice(0, 35)}
+                              {product.description.length > 35 ? "..." : ""}
                     return (
                       <TableRow key={product._id}>
                         <TableCell>
@@ -631,6 +761,9 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
       {topProducts.length > 0 && (
         <Card>
           <CardHeader>
+            <CardTitle className="text-base">Product Revenue Comparison</CardTitle>
+            <CardDescription className="text-xs">
+              Compare revenue and profit across all products
             <CardTitle>Top 10 Products by Revenue</CardTitle>
             <CardDescription>
               Comparison of revenue and profit for best-performing products
@@ -638,6 +771,17 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
           </CardHeader>
           <CardContent>
             <ChartContainer
+              config={{
+                revenue: {
+                  label: "Revenue",
+                  color: "hsl(var(--chart-1))",
+                },
+                profit: {
+                  label: "Profit",
+                  color: "hsl(var(--chart-3))",
+                },
+              }}
+              className="h-[280px] w-full"
               config={topProductsChartConfig}
               className="h-[360px]"
             >

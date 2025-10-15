@@ -27,7 +27,10 @@ export default defineSchema({
       v.literal("expense"),
       v.literal("gamble"),
       v.literal("gamble_payout"),
-      v.literal("dividend")
+      v.literal("dividend"),
+      v.literal("loan_disbursement"),
+      v.literal("loan_repayment"),
+      v.literal("loan_default")
     ),
     description: v.optional(v.string()),
     productId: v.optional(v.id("products")),
@@ -73,7 +76,8 @@ export default defineSchema({
     game: v.union(
       v.literal("slots"),
       v.literal("blackjack"),
-      v.literal("roulette")
+      v.literal("roulette"),
+      v.literal("dice")
     ),
     bet: v.number(),
     payout: v.number(),
@@ -168,7 +172,8 @@ export default defineSchema({
     .index("by_company_holder", ["companyId", "holderId"])
     .index("by_holderType_shares", ["holderType", "shares"])
     .index("by_holder_holderType", ["holderId", "holderType"])
-    .index("by_company_holder_holderType", ["companyId", "holderId", "holderType"]),
+    .index("by_company_holder_holderType", ["companyId", "holderId", "holderType"])
+    .index("by_company_shares", ["companyId", "shares"]),
 
   stockPriceHistory: defineTable({
     companyId: v.id("companies"),
@@ -221,7 +226,8 @@ export default defineSchema({
     .index("by_created_by", ["createdBy"])
     .index("by_company_active", ["companyId", "isActive"])
     .index("by_active_totalRevenue", ["isActive", "totalRevenue"])
-    .index("by_active_price", ["isActive", "price"]),
+    .index("by_active_price", ["isActive", "price"])
+    .index("by_company_active_revenue", ["companyId", "isActive", "totalRevenue"]),
 
   collections: defineTable({
     userId: v.id("users"),
@@ -268,5 +274,43 @@ export default defineSchema({
     .index("by_company_created", ["companyId", "createdAt"])
     .index("by_company_type", ["companyId", "type"])
     .index("by_company_type_created", ["companyId", "type", "createdAt"]),
+
+  // ULTRA-OPTIMIZATION: Cached company metrics to avoid repeated ledger scans
+  companyMetrics: defineTable({
+    companyId: v.id("companies"),
+    period: v.union(v.literal("30d"), v.literal("7d"), v.literal("all_time")),
+    totalRevenue: v.number(),
+    totalCosts: v.number(),
+    totalExpenses: v.number(),
+    totalProfit: v.number(),
+    transactionCount: v.number(),
+    lastUpdated: v.number(),
+  })
+    .index("by_company", ["companyId"])
+    .index("by_company_period", ["companyId", "period"])
+    .index("by_lastUpdated", ["lastUpdated"]),
+
+  loans: defineTable({
+    userId: v.id("users"),
+    accountId: v.id("accounts"),
+    principal: v.number(), // Original loan amount
+    currentBalance: v.number(), // Current amount owed (principal + interest)
+    interestRate: v.number(), // Daily interest rate (0.05 = 5%)
+    daysRemaining: v.number(), // Days left to repay
+    status: v.union(
+      v.literal("active"),
+      v.literal("repaid"),
+      v.literal("defaulted")
+    ),
+    lastInterestApplied: v.number(), // Timestamp of last interest application
+    dueDate: v.number(), // Timestamp when loan must be repaid
+    createdAt: v.number(),
+    repaidAt: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_status", ["userId", "status"])
+    .index("by_status", ["status"])
+    .index("by_status_dueDate", ["status", "dueDate"])
+    .index("by_lastInterestApplied", ["lastInterestApplied"]),
 });
 

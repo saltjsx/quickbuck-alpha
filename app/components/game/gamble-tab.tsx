@@ -88,11 +88,24 @@ type RouletteResult = {
   houseEdgeApplied: boolean;
 };
 
+type DiceResult = {
+  bet: number;
+  die1: number;
+  die2: number;
+  total: number;
+  prediction: "over" | "under" | "lucky7" | "snake_eyes" | "boxcars";
+  payout: number;
+  net: number;
+  outcome: string;
+  balance: number;
+  houseEdgeApplied: boolean;
+};
+
 type GambleHistoryEntry = {
   _id: Id<"gambles">;
   _creationTime: number;
   accountId: Id<"accounts">;
-  game: "slots" | "blackjack" | "roulette";
+  game: "slots" | "blackjack" | "roulette" | "dice";
   bet: number;
   payout: number;
   net: number;
@@ -133,6 +146,7 @@ export function GambleTab() {
   const hitBlackjack = useMutation(api.gamble.blackjackHit);
   const standBlackjack = useMutation(api.gamble.blackjackStand);
   const playRoulette = useMutation(api.gamble.playRoulette);
+  const playDice = useMutation(api.gamble.playDice);
 
   const [slotBet, setSlotBet] = useState(100);
   const [blackjackBet, setBlackjackBet] = useState(150);
@@ -140,10 +154,15 @@ export function GambleTab() {
   const [rouletteMode, setRouletteMode] = useState<RouletteMode>("color");
   const [rouletteColor, setRouletteColor] = useState<RouletteColor>("red");
   const [rouletteNumber, setRouletteNumber] = useState(7);
+  const [diceBet, setDiceBet] = useState(100);
+  const [dicePrediction, setDicePrediction] = useState<
+    "over" | "under" | "lucky7" | "snake_eyes" | "boxcars"
+  >("over");
 
   const [isSlotsLoading, setIsSlotsLoading] = useState(false);
   const [isBlackjackLoading, setIsBlackjackLoading] = useState(false);
   const [isRouletteLoading, setIsRouletteLoading] = useState(false);
+  const [isDiceLoading, setIsDiceLoading] = useState(false);
 
   const [slotDisplay, setSlotDisplay] = useState<string[]>(() =>
     DEFAULT_SLOT_REELS.slice()
@@ -155,8 +174,17 @@ export function GambleTab() {
   const [rouletteResult, setRouletteResult] = useState<RouletteResult | null>(
     null
   );
+  const [diceResult, setDiceResult] = useState<DiceResult | null>(null);
+  const [diceDisplay, setDiceDisplay] = useState<[number, number]>([1, 1]);
   const [isHitLoading, setIsHitLoading] = useState(false);
   const [isStandLoading, setIsStandLoading] = useState(false);
+
+  const diceRollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+    null
+  );
+  const diceRevealTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
 
   const slotSpinIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
     null
@@ -197,6 +225,15 @@ export function GambleTab() {
           typeof details.winningColor === "string"
         ) {
           return `Wheel: ${details.winningNumber} (${details.winningColor})`;
+        }
+        return null;
+      case "dice":
+        if (
+          typeof details.die1 === "number" &&
+          typeof details.die2 === "number" &&
+          typeof details.total === "number"
+        ) {
+          return `Dice: ${details.die1} + ${details.die2} = ${details.total} · Bet: ${details.prediction}`;
         }
         return null;
       default:
@@ -243,8 +280,41 @@ export function GambleTab() {
         clearTimeout(slotRevealTimeoutRef.current);
         slotRevealTimeoutRef.current = null;
       }
+      if (diceRollIntervalRef.current !== null) {
+        clearInterval(diceRollIntervalRef.current);
+        diceRollIntervalRef.current = null;
+      }
+      if (diceRevealTimeoutRef.current !== null) {
+        clearTimeout(diceRevealTimeoutRef.current);
+        diceRevealTimeoutRef.current = null;
+      }
     };
   }, []);
+
+  const stopDiceAnimation = () => {
+    if (diceRollIntervalRef.current !== null) {
+      clearInterval(diceRollIntervalRef.current);
+      diceRollIntervalRef.current = null;
+    }
+    if (diceRevealTimeoutRef.current !== null) {
+      clearTimeout(diceRevealTimeoutRef.current);
+      diceRevealTimeoutRef.current = null;
+    }
+  };
+
+  const startDiceAnimation = () => {
+    stopDiceAnimation();
+    diceRollIntervalRef.current = setInterval(() => {
+      const randomDie1 = Math.floor(Math.random() * 6) + 1;
+      const randomDie2 = Math.floor(Math.random() * 6) + 1;
+      setDiceDisplay([randomDie1, randomDie2] as [number, number]);
+    }, 100);
+  };
+
+  const getDiceFace = (value: number) => {
+    const faces = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
+    return faces[value - 1] || "⚀";
+  };
 
   const handleSlotSpin = async () => {
     try {
@@ -447,6 +517,59 @@ export function GambleTab() {
     }
   };
 
+  const handleDiceRoll = async () => {
+    try {
+      const bet = ensureValidBet(diceBet);
+      setIsDiceLoading(true);
+      startDiceAnimation();
+
+      const resultPromise = playDice({
+        bet,
+        prediction: dicePrediction,
+      }) as Promise<DiceResult>;
+
+      const delayPromise = new Promise<void>((resolve) => {
+        diceRevealTimeoutRef.current = setTimeout(() => {
+          diceRevealTimeoutRef.current = null;
+          resolve();
+        }, 2000);
+      });
+
+      const [result] = await Promise.all([resultPromise, delayPromise]);
+      stopDiceAnimation();
+      setDiceResult(result);
+      setDiceDisplay([result.die1, result.die2]);
+
+      if (result.payout > 0) {
+        toast({
+          title: "Winner!",
+          description: `Rolled ${result.die1} + ${result.die2} = ${
+            result.total
+          }. Net profit: ${formatCurrency(result.net)}.`,
+        });
+      } else {
+        toast({
+          title: "House wins",
+          description: `Rolled ${result.die1} + ${result.die2} = ${
+            result.total
+          }. You lost ${formatCurrency(result.bet)}.`,
+        });
+      }
+    } catch (error: any) {
+      stopDiceAnimation();
+      if (diceResult) {
+        setDiceDisplay([diceResult.die1, diceResult.die2]);
+      }
+      toast({
+        title: "Dice roll failed",
+        description: error.message || "The dice flew off the table",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDiceLoading(false);
+    }
+  };
+
   if (personalAccount === undefined || history === undefined) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -516,7 +639,7 @@ export function GambleTab() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
         <Card className="shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -594,6 +717,141 @@ export function GambleTab() {
                     <p className="text-sm text-muted-foreground">
                       Net result: {formatCurrency(slotResult.net)} · New
                       balance: {formatCurrency(slotResult.balance)}
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Dice3 className="h-5 w-5 text-primary" />
+              Dice Roll
+            </CardTitle>
+            <CardDescription>
+              Roll two dice and bet on the outcome. Big payouts for rare rolls!
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-muted-foreground">
+                Bet amount
+              </label>
+              <Input
+                type="number"
+                min={minBet}
+                step="10"
+                value={diceBet}
+                onChange={(event) => setDiceBet(Number(event.target.value))}
+                className="mt-2"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                Choose your bet
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  variant={dicePrediction === "over" ? "default" : "outline"}
+                  onClick={() => setDicePrediction("over")}
+                  className="text-xs"
+                >
+                  Over 7 (2x)
+                </Button>
+                <Button
+                  variant={dicePrediction === "under" ? "default" : "outline"}
+                  onClick={() => setDicePrediction("under")}
+                  className="text-xs"
+                >
+                  Under 7 (2x)
+                </Button>
+                <Button
+                  variant={dicePrediction === "lucky7" ? "default" : "outline"}
+                  onClick={() => setDicePrediction("lucky7")}
+                  className="text-xs"
+                >
+                  Lucky 7 (5x)
+                </Button>
+                <Button
+                  variant={
+                    dicePrediction === "snake_eyes" ? "default" : "outline"
+                  }
+                  onClick={() => setDicePrediction("snake_eyes")}
+                  className="text-xs"
+                >
+                  Snake Eyes (30x)
+                </Button>
+                <Button
+                  variant={dicePrediction === "boxcars" ? "default" : "outline"}
+                  onClick={() => setDicePrediction("boxcars")}
+                  className="text-xs col-span-2"
+                >
+                  Boxcars (30x)
+                </Button>
+              </div>
+            </div>
+
+            <Button
+              className="w-full"
+              size="lg"
+              disabled={isDiceLoading}
+              onClick={handleDiceRoll}
+            >
+              {isDiceLoading ? "Rolling..." : "Roll the dice"}
+            </Button>
+
+            {(diceResult || isDiceLoading) && (
+              <div className="space-y-3 rounded-md border bg-muted/30 p-3 text-center">
+                <div
+                  className={`flex items-center justify-center gap-4 text-6xl transition-all ${
+                    isDiceLoading ? "animate-bounce" : ""
+                  }`}
+                >
+                  <span className="inline-block">
+                    {getDiceFace(diceDisplay[0])}
+                  </span>
+                  <span className="inline-block">
+                    {getDiceFace(diceDisplay[1])}
+                  </span>
+                </div>
+
+                {isDiceLoading && (
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                    Rolling the dice...
+                  </p>
+                )}
+
+                {diceResult && !isDiceLoading && (
+                  <>
+                    <div className="text-2xl font-semibold">
+                      {diceResult.die1} + {diceResult.die2} = {diceResult.total}
+                    </div>
+                    <div className="flex items-center justify-center gap-2 text-sm">
+                      <Badge
+                        variant={
+                          diceResult.outcome.includes("win")
+                            ? "default"
+                            : "secondary"
+                        }
+                      >
+                        {diceResult.outcome.includes("win")
+                          ? `WIN! ${diceResult.prediction}`
+                          : `Lost - ${diceResult.prediction}`}
+                      </Badge>
+                      {diceResult.houseEdgeApplied &&
+                        diceResult.payout > diceResult.bet && (
+                          <span className="text-muted-foreground text-xs">
+                            Rake skimmed
+                          </span>
+                        )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Net result: {formatCurrency(diceResult.net)} · New
+                      balance: {formatCurrency(diceResult.balance)}
                     </p>
                   </>
                 )}

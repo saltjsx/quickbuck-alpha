@@ -1,4 +1,4 @@
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { Link } from "react-router";
 import { api } from "../../../convex/_generated/api";
 import {
@@ -8,17 +8,27 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
-import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import { Building2, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import {
+  Building2,
+  Edit,
+  Globe,
+  LayoutDashboard,
+  Plus,
+  Trash2,
+  TrendingUp,
+} from "lucide-react";
+import { useState } from "react";
+import type { Route } from "./+types/companies";
+import { Spinner } from "~/components/ui/spinner";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { CreateCompanyDialog } from "~/components/game/create-company-dialog";
 import { CreateProductDialog } from "~/components/game/create-product-dialog";
 import { EditCompanyDialog } from "~/components/game/edit-company-dialog";
 import { DeleteCompanyDialog } from "~/components/game/delete-company-dialog";
-import { CompanyDashboard } from "~/components/game/company-dashboard";
-import { useState } from "react";
-import type { Route } from "./+types/companies";
-import { Spinner } from "~/components/ui/spinner";
+import { DistributeDividendDialog } from "~/components/game/distribute-dividend-dialog";
+import { CompanyCard } from "~/components/game/company-card";
+import { useToast } from "~/hooks/use-toast";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -33,7 +43,54 @@ export function meta({}: Route.MetaArgs) {
 
 export default function CompaniesPage() {
   const companies = useQuery(api.companies.getUserCompanies);
-  const [expandedCompany, setExpandedCompany] = useState<string | null>(null);
+  const checkPublicStatus = useMutation(
+    api.companies.checkAndUpdatePublicStatus
+  );
+  const { toast } = useToast();
+  const [checkingCompanyId, setCheckingCompanyId] =
+    useState<Id<"companies"> | null>(null);
+
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+    }).format(amount);
+
+  const handleGoPublic = async (
+    companyId: Id<"companies">,
+    companyName: string
+  ) => {
+    setCheckingCompanyId(companyId);
+    try {
+      const result = await checkPublicStatus({ companyId });
+
+      if (result.madePublic) {
+        toast({
+          title: "Company Listed!",
+          description: `${companyName} is now public at ${formatCurrency(
+            result.ipoPrice ?? 0
+          )} per share.`,
+        });
+      } else {
+        toast({
+          title: "Not Eligible Yet",
+          description: `${companyName} needs a balance above ${formatCurrency(
+            50000
+          )}. Current balance: ${formatCurrency(result.balance ?? 0)}.`,
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Go Public Failed",
+        description:
+          error?.message || "Unable to check public status right now.",
+        variant: "destructive",
+      });
+    } finally {
+      setCheckingCompanyId(null);
+    }
+  };
 
   if (companies === undefined) {
     return (
@@ -49,14 +106,14 @@ export default function CompaniesPage() {
   return (
     <div className="flex flex-1 flex-col">
       <div className="@container/main flex flex-1 flex-col gap-2">
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+        <div className="flex flex-col gap-3 py-3 md:gap-4 md:py-4">
           <div className="px-4 lg:px-6 flex items-start justify-between">
             <div>
-              <h1 className="text-3xl font-bold flex items-center gap-2">
-                <Building2 className="h-8 w-8" />
+              <h1 className="text-2xl font-bold flex items-center gap-2">
+                <Building2 className="h-6 w-6" />
                 My Companies
               </h1>
-              <p className="text-muted-foreground mt-1">
+              <p className="text-muted-foreground text-sm mt-0.5">
                 Companies you own or manage
               </p>
             </div>
@@ -66,169 +123,166 @@ export default function CompaniesPage() {
           <div className="px-4 lg:px-6">
             <Card>
               <CardHeader>
-                <CardTitle>Your Businesses</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-base">Your Businesses</CardTitle>
+                <CardDescription className="text-xs">
                   Create companies, list products, and grow your empire
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {companies?.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-muted-foreground mb-4">
+                  <div className="text-center py-6">
+                    <p className="text-muted-foreground text-sm mb-2">
                       No companies yet
                     </p>
-                    <p className="text-sm text-muted-foreground">
-                      Create your first company to start selling products!
+                    <p className="text-xs text-muted-foreground">
+                      Create your first company to start selling products
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-6">
-                    {companies?.map((company: any) => (
-                      <div
-                        key={company._id}
-                        className="border rounded-lg overflow-hidden"
-                      >
-                        <div className="p-4">
-                          <div className="flex items-start justify-between mb-4">
-                            <div className="flex gap-4 flex-1">
-                              {company.logoUrl && (
-                                <div className="flex-shrink-0">
-                                  <img
-                                    src={company.logoUrl}
-                                    alt={`${company.name} logo`}
-                                    className="h-16 w-16 object-contain rounded border"
-                                    onError={(e) => {
-                                      (
-                                        e.target as HTMLImageElement
-                                      ).style.display = "none";
-                                    }}
-                                  />
-                                </div>
-                              )}
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <h3 className="font-semibold text-lg">
-                                    {company.name}
-                                  </h3>
-                                  <Badge
-                                    variant="outline"
-                                    className="font-mono text-xs"
-                                  >
-                                    {company.ticker}
-                                  </Badge>
-                                </div>
-                                {company.description && (
-                                  <p className="text-sm text-muted-foreground mb-2">
-                                    {company.description}
-                                  </p>
-                                )}
-                                {company.tags && company.tags.length > 0 && (
-                                  <div className="flex flex-wrap gap-1 mb-2">
-                                    {company.tags.map((tag: string) => (
-                                      <Badge
-                                        key={tag}
-                                        variant="secondary"
-                                        className="text-xs"
-                                      >
-                                        {tag}
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                )}
-                                <div className="flex gap-2">
-                                  <Badge
-                                    variant={
-                                      company.isPublic ? "default" : "outline"
-                                    }
-                                  >
-                                    {company.isPublic ? "Public" : "Private"}
-                                  </Badge>
-                                  <Badge
-                                    variant="secondary"
-                                    className="capitalize"
-                                  >
-                                    {company.role}
-                                  </Badge>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-xl font-bold">
-                                $
-                                {company.balance?.toLocaleString("en-US", {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })}
-                              </p>
-                              {company.isPublic && (
-                                <p className="text-sm text-muted-foreground">
-                                  ${company.sharePrice?.toFixed(2)}/share
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <CreateProductDialog companyId={company._id} />
-                            <EditCompanyDialog
-                              company={{
-                                _id: company._id,
-                                name: company.name,
-                                description: company.description,
-                                tags: company.tags,
-                                ticker: company.ticker,
-                                logoUrl: company.logoUrl,
-                              }}
-                            />
-                            <DeleteCompanyDialog
-                              companyId={company._id}
-                              companyName={company.name}
-                              balance={company.balance}
-                            />
-                            <Link to={`/dashboard/companies/${company._id}`}>
-                              <Button variant="outline" size="sm">
-                                <ExternalLink className="h-4 w-4 mr-1" />
-                                Full Dashboard
+                  <div className="space-y-4">
+                    {companies?.map((company: any) => {
+                      const addProductAction = (
+                        <CreateProductDialog
+                          companyId={company._id}
+                          trigger={
+                            <Button size="sm" className="w-full justify-center">
+                              <Plus className="w-4 h-4 mr-1.5" />
+                              Add Product
+                            </Button>
+                          }
+                        />
+                      );
+
+                      const dashboardAction = (
+                        <Link
+                          to={`/dashboard/companies/${company._id}`}
+                          className="w-full"
+                        >
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full justify-center bg-transparent"
+                          >
+                            <LayoutDashboard className="w-4 h-4 mr-1.5" />
+                            Dashboard
+                          </Button>
+                        </Link>
+                      );
+
+                      const dividendsAction =
+                        company.role === "owner" && company.isPublic ? (
+                          <DistributeDividendDialog
+                            companyId={company._id}
+                            companyName={company.name}
+                            companyBalance={company.balance ?? 0}
+                            companyOwnerId={company.ownerId}
+                            trigger={
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full justify-center bg-transparent"
+                              >
+                                <TrendingUp className="w-4 h-4 mr-1.5" />
+                                Dividends
                               </Button>
-                            </Link>
+                            }
+                          />
+                        ) : undefined;
+
+                      const editAction = (
+                        <EditCompanyDialog
+                          company={{
+                            _id: company._id,
+                            name: company.name,
+                            description: company.description,
+                            tags: company.tags ?? [],
+                            ticker: company.ticker,
+                            logoUrl: company.logoUrl,
+                          }}
+                          trigger={
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() =>
-                                setExpandedCompany(
-                                  expandedCompany === company._id
-                                    ? null
-                                    : company._id
-                                )
-                              }
+                              className="h-9 w-9 p-0 bg-transparent"
+                              aria-label={`Edit ${company.name}`}
                             >
-                              {expandedCompany === company._id ? (
-                                <>
-                                  <ChevronUp className="h-4 w-4 mr-1" />
-                                  Hide Preview
-                                </>
-                              ) : (
-                                <>
-                                  <ChevronDown className="h-4 w-4 mr-1" />
-                                  Quick Preview
-                                </>
-                              )}
+                              <Edit className="w-4 h-4" />
                             </Button>
-                            {company.balance > 50000 && !company.isPublic && (
-                              <p className="text-sm text-green-600">
-                                ✨ Eligible for stock market listing!
-                              </p>
-                            )}
-                          </div>
-                        </div>
+                          }
+                        />
+                      );
 
-                        {/* Dashboard Section */}
-                        {expandedCompany === company._id && (
-                          <div className="border-t bg-muted/30 p-6">
-                            <CompanyDashboard companyId={company._id} />
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                      const deleteAction = (
+                        <DeleteCompanyDialog
+                          companyId={company._id}
+                          companyName={company.name}
+                          balance={company.balance ?? 0}
+                          trigger={
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-9 w-9 p-0 bg-transparent text-destructive border-destructive/40 hover:bg-destructive/10"
+                              aria-label={`Delete ${company.name}`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          }
+                        />
+                      );
+
+                      const goPublicAction =
+                        company.role === "owner" && !company.isPublic ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="flex-shrink-0 bg-transparent"
+                            onClick={() =>
+                              handleGoPublic(company._id, company.name)
+                            }
+                            disabled={checkingCompanyId === company._id}
+                          >
+                            <Globe className="w-4 h-4 mr-1.5" />
+                            {checkingCompanyId === company._id
+                              ? "Checking..."
+                              : "Go Public"}
+                          </Button>
+                        ) : undefined;
+
+                      const footerContent =
+                        company.role === "owner" &&
+                        company.balance > 50000 &&
+                        !company.isPublic ? (
+                          <p className="text-sm text-green-600 font-medium">
+                            Eligible for stock market listing
+                          </p>
+                        ) : undefined;
+
+                      return (
+                        <CompanyCard
+                          key={company._id}
+                          company={{
+                            logoUrl: company.logoUrl,
+                            name: company.name,
+                            ticker: company.ticker,
+                            tags: company.tags ?? [],
+                            description: company.description,
+                            balance: company.balance ?? 0,
+                            sharePrice: company.sharePrice ?? 0,
+                            isPublic: company.isPublic,
+                            role: company.role,
+                          }}
+                          goPublicAction={goPublicAction}
+                          actions={{
+                            addProduct: addProductAction,
+                            dashboard: dashboardAction,
+                            dividends: dividendsAction,
+                            edit: editAction,
+                            delete: deleteAction,
+                          }}
+                          footerContent={footerContent}
+                        />
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>

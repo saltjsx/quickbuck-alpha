@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
 
 // Helper to get current user ID
 async function getCurrentUserId(ctx: any) {
@@ -65,16 +66,19 @@ export const createProduct = mutation({
 export const getActiveProducts = query({
   args: {},
   handler: async (ctx) => {
-    // BANDWIDTH OPTIMIZATION: Reduced from 500 to 150
-    const products = await ctx.db
+    // Convex limits: single pagination per query, max 1000 items per page
+    // Fetch as many as possible in one paginated query
+    const paginationResult = await ctx.db
       .query("products")
       .withIndex("by_active", (q) => q.eq("isActive", true))
-      .take(150);
-
-    // OPTIMIZED: Batch fetch all companies at once
+      .order("desc")
+      .paginate({ numItems: 1000, cursor: null });
+    
+    const products = paginationResult.page;    // OPTIMIZED: Batch fetch all companies at once (minimal fields)
     const companyIds = [...new Set(products.map(p => p.companyId))];
     const companies = await Promise.all(companyIds.map(id => ctx.db.get(id)));
     
+    // BANDWIDTH OPTIMIZATION: Create minimal company map with only essential fields
     const companyMap = new Map();
     companies.forEach(company => {
       if (company) {
@@ -86,11 +90,22 @@ export const getActiveProducts = query({
       }
     });
 
-    // Enrich with company info
+    // BANDWIDTH OPTIMIZATION: Return only essential product fields
+    // Remove unnecessary data from response
     const enrichedProducts = products.map(product => {
       const companyInfo = companyMap.get(product.companyId);
       return {
-        ...product,
+        _id: product._id,
+        name: product.name,
+        description: product.description,
+        price: product.price,
+        imageUrl: product.imageUrl,
+        tags: product.tags,
+        companyId: product.companyId,
+        isActive: product.isActive,
+        quality: product.quality,
+        totalSales: product.totalSales,
+        // Only include company info, not full product object
         companyName: companyInfo?.name || "Unknown",
         companyLogoUrl: companyInfo?.logoUrl,
         companyTicker: companyInfo?.ticker,
@@ -162,11 +177,12 @@ export const automaticPurchase = internalMutation({
   args: {},
   handler: async (ctx) => {
     // Get all active products
-    // BANDWIDTH OPTIMIZATION: Limit to 200 products instead of collecting all
+    // BANDWIDTH OPTIMIZATION: Limit to 150 products (reduced from 200)
+    // Focus on most popular products to reduce bandwidth
     const products = await ctx.db
       .query("products")
       .withIndex("by_active", (q) => q.eq("isActive", true))
-      .take(200);
+      .take(150); // REDUCED from 200 to 150
 
     if (products.length === 0) return { message: "No products available" };
 
@@ -453,26 +469,31 @@ export const automaticPurchase = internalMutation({
       // Patch account balance
       await ctx.db.patch(tx.accountId, { balance: currentBalance });
 
+      // BANDWIDTH OPTIMIZATION: Batch all ledger inserts and product patches
+      const ledgerInserts: any[] = [];
+      const productPatches: Array<{ id: any; updates: any }> = [];
+      
       for (const [productIdStr, salesData] of tx.productSales) {
         const product = productMap.get(productIdStr);
         if (!product) continue;
 
-        await ctx.db.insert("ledger", {
+        // Queue ledger entries for batch insert
+        ledgerInserts.push({
           fromAccountId: systemAccount._id,
           toAccountId: tx.accountId,
           amount: salesData.totalRevenue,
-          type: "marketplace_batch",
+          type: "marketplace_batch" as const,
           productId: product._id,
           batchCount: salesData.count,
           description: `Batch purchase of ${salesData.count}x ${product.name}`,
           createdAt: Date.now(),
         });
 
-        await ctx.db.insert("ledger", {
+        ledgerInserts.push({
           fromAccountId: tx.accountId,
           toAccountId: systemAccount._id,
           amount: salesData.totalCost,
-          type: "marketplace_batch",
+          type: "marketplace_batch" as const,
           productId: product._id,
           batchCount: salesData.count,
           description: `Batch production cost for ${salesData.count}x ${product.name}`,
@@ -491,9 +512,15 @@ export const automaticPurchase = internalMutation({
             ...updatedTotals,
           });
 
-          await ctx.db.patch(product._id, updatedTotals);
+          productPatches.push({ id: product._id, updates: updatedTotals });
         }
       }
+      
+      // Execute all batched operations
+      await Promise.all([
+        ...ledgerInserts.map(entry => ctx.db.insert("ledger", entry)),
+        ...productPatches.map(({ id, updates }) => ctx.db.patch(id, updates))
+      ]);
     }
 
     // After all purchases, check which companies should be made public using cached balances
@@ -516,5 +543,89 @@ export const automaticPurchase = internalMutation({
       purchases,
       productsCount: purchases.length,
     };
+  },
+});
+
+// Delete a product (deactivate it)
+export const deleteProduct = mutation({
+  args: {
+    productId: v.id("products"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const product = await ctx.db.get(args.productId);
+    if (!product) throw new Error("Product not found");
+
+    // Check if user has access to the company
+    const access = await ctx.db
+      .query("companyAccess")
+      .withIndex("by_company_user", (q) =>
+        q.eq("companyId", product.companyId).eq("userId", userId)
+      )
+      .first();
+
+    if (!access) throw new Error("No access to this company");
+
+    // Deactivate the product instead of deleting for historical record
+    await ctx.db.patch(args.productId, {
+      isActive: false,
+    });
+
+    return { success: true };
+  },
+});
+
+// Internal mutation to delete product without authentication (for moderation)
+export const internalDeleteProduct = internalMutation({
+  args: {
+    productId: v.id("products"),
+  },
+  handler: async (ctx, args) => {
+    const product = await ctx.db.get(args.productId);
+    if (!product) throw new Error("Product not found");
+
+    // Deactivate the product
+    await ctx.db.patch(args.productId, {
+      isActive: false,
+    });
+
+    return { success: true };
+  },
+});
+
+// Admin mutation to batch delete products (requires admin key)
+export const adminDeleteProducts = mutation({
+  args: {
+    productIds: v.array(v.id("products")),
+    adminKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Check admin key
+    if (args.adminKey !== process.env.ADMIN_KEY) {
+      throw new Error("Invalid admin key");
+    }
+
+    const results = [];
+    for (const productId of args.productIds) {
+      try {
+        const product = await ctx.db.get(productId);
+        if (product) {
+          await ctx.db.patch(productId, { isActive: false });
+          results.push({ productId, success: true });
+        } else {
+          results.push({ productId, success: false, error: "Product not found" });
+        }
+      } catch (error) {
+        results.push({ 
+          productId, 
+          success: false, 
+          error: error instanceof Error ? error.message : "Unknown error" 
+        });
+      }
+    }
+
+    return results;
   },
 });

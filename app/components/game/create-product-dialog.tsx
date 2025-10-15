@@ -1,3 +1,4 @@
+import { useState, type ReactNode } from "react";
 import {
   useState,
   useRef,
@@ -28,6 +29,12 @@ import { Filter } from "bad-words";
 interface CreateProductDialogProps {
   companyId: Id<"companies">;
   trigger?: ReactNode;
+}
+
+export function CreateProductDialog({
+  companyId,
+  trigger,
+}: CreateProductDialogProps) {
   hiddenTrigger?: boolean;
 }
 
@@ -182,6 +189,11 @@ export const CreateProductDialog = forwardRef<
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
+        {trigger || (
+          <Button size="sm">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Product
+          </Button>
         {hiddenTrigger ? (
           <button
             ref={triggerRef}

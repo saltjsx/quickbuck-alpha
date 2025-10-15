@@ -554,3 +554,77 @@ export const continueResetEconomy = internalMutation({
     };
   },
 });
+
+// Find orphaned products (products whose companies no longer exist)
+export const findOrphanedProducts = query({
+  args: {},
+  handler: async (ctx) => {
+    // Get all active products
+    const activeProducts = await ctx.db
+      .query("products")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .collect();
+
+    const orphanedProducts = [];
+
+    for (const product of activeProducts) {
+      const company = await ctx.db.get(product.companyId);
+      if (!company) {
+        orphanedProducts.push({
+          _id: product._id,
+          name: product.name,
+          companyId: product.companyId,
+          createdBy: product.createdBy,
+          createdAt: product.createdAt,
+          price: product.price,
+        });
+      }
+    }
+
+    return {
+      total: activeProducts.length,
+      orphaned: orphanedProducts.length,
+      orphanedProducts,
+    };
+  },
+});
+
+// Fix orphaned products by deactivating them
+export const fixOrphanedProducts = mutation({
+  args: {
+    adminKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Check admin key
+    if (args.adminKey !== process.env.ADMIN_KEY) {
+      throw new Error("Invalid admin key");
+    }
+
+    // Get all active products
+    const activeProducts = await ctx.db
+      .query("products")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .collect();
+
+    let fixedCount = 0;
+    const fixedProducts = [];
+
+    for (const product of activeProducts) {
+      const company = await ctx.db.get(product.companyId);
+      if (!company) {
+        await ctx.db.patch(product._id, { isActive: false });
+        fixedCount++;
+        fixedProducts.push({
+          _id: product._id,
+          name: product.name,
+          companyId: product.companyId,
+        });
+      }
+    }
+
+    return {
+      fixed: fixedCount,
+      fixedProducts,
+    };
+  },
+});

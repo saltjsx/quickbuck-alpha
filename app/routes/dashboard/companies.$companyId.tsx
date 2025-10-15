@@ -41,7 +41,7 @@ export default function CompanyDashboardPage() {
       const result = await checkPublicStatus({ companyId });
       if (result.madePublic) {
         setStatusMessage(
-          `🎉 Congratulations! Your company is now listed on the stock market with a balance of $${result.balance.toLocaleString()}!`
+          `Congratulations! Your company is now listed on the stock market with a balance of $${result.balance.toLocaleString()}.`
         );
       } else {
         setStatusMessage(
@@ -95,10 +95,10 @@ export default function CompanyDashboardPage() {
   return (
     <div className="flex flex-1 flex-col">
       <div className="@container/main flex flex-1 flex-col gap-2">
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+        <div className="flex flex-col gap-3 py-3 md:gap-4 md:py-4">
           {/* Header */}
           <div className="px-4 lg:px-6">
-            <div className="mb-4">
+            <div className="mb-3">
               <Link to="/dashboard/companies">
                 <Button variant="ghost" size="sm">
                   <ArrowLeft className="h-4 w-4 mr-2" />
@@ -108,12 +108,12 @@ export default function CompanyDashboardPage() {
             </div>
 
             <div className="flex items-start justify-between">
-              <div className="flex gap-4 items-start">
+              <div className="flex gap-3 items-start">
                 {company.logoUrl && (
                   <img
                     src={company.logoUrl}
                     alt={`${company.name} logo`}
-                    className="h-20 w-20 object-contain rounded border"
+                    className="h-16 w-16 object-contain rounded border"
                     onError={(e) => {
                       (e.target as HTMLImageElement).style.display = "none";
                     }}
@@ -121,15 +121,15 @@ export default function CompanyDashboardPage() {
                 )}
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <h1 className="text-3xl font-bold flex items-center gap-2">
+                    <h1 className="text-2xl font-bold flex items-center gap-2">
                       {company.name}
                     </h1>
-                    <Badge variant="outline" className="font-mono">
+                    <Badge variant="outline" className="font-mono text-xs">
                       {company.ticker}
                     </Badge>
                   </div>
                   {company.description && (
-                    <p className="text-muted-foreground mb-2">
+                    <p className="text-muted-foreground text-sm mb-1.5">
                       {company.description}
                     </p>
                   )}
@@ -146,11 +146,11 @@ export default function CompanyDashboardPage() {
                       ))}
                     </div>
                   )}
-                  <div className="flex gap-2">
-                    <Badge variant={company.isPublic ? "default" : "outline"}>
+                  <div className="flex gap-1.5">
+                    <Badge variant={company.isPublic ? "default" : "outline"} className="text-xs">
                       {company.isPublic ? "Public Company" : "Private Company"}
                     </Badge>
-                    <Badge variant="secondary" className="capitalize">
+                    <Badge variant="secondary" className="capitalize text-xs">
                       {company.role}
                     </Badge>
                   </div>
@@ -198,7 +198,7 @@ export default function CompanyDashboardPage() {
             {/* Status Message */}
             {statusMessage && (
               <div
-                className={`mt-4 p-3 rounded-lg ${
+                className={`mt-3 p-3 rounded text-sm ${
                   statusMessage.includes("Congratulations")
                     ? "bg-green-500/10 border border-green-500/20 text-green-600"
                     : statusMessage.includes("Error")

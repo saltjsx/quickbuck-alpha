@@ -188,7 +188,7 @@ async function recordLedger(
 async function recordGame(ctx: any, data: {
   userId: string;
   accountId: any;
-  game: "slots" | "blackjack" | "roulette";
+  game: "slots" | "blackjack" | "roulette" | "dice";
   bet: number;
   payout: number;
   net: number;
@@ -827,6 +827,135 @@ export const playRoulette = mutation({
       bet,
       winningNumber,
       winningColor,
+      payout,
+      net,
+      outcome,
+      balance: playerBalance,
+      houseEdgeApplied: payout > bet,
+    };
+  },
+});
+
+export const playDice = mutation({
+  args: {
+    bet: v.number(),
+    prediction: v.union(
+      v.literal("over"),
+      v.literal("under"),
+      v.literal("lucky7"),
+      v.literal("snake_eyes"),
+      v.literal("boxcars")
+    ),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const bet = ensureBet(args.bet);
+    const account = await getPersonalAccount(ctx, userId);
+    if (!account) throw new Error("Personal account not found");
+
+    const balance = account.balance ?? 0;
+    if (balance < bet) throw new Error("Insufficient funds");
+
+    const casinoAccount = await getCasinoAccount(ctx, userId);
+    let playerBalance = balance - bet;
+    let houseBalance = (casinoAccount.balance ?? 0) + bet;
+
+    await ctx.db.patch(account._id, { balance: playerBalance });
+    await ctx.db.patch(casinoAccount._id, { balance: houseBalance });
+    await recordLedger(ctx, account._id, casinoAccount._id, bet, "Dice roll wager", "gamble");
+
+    // Roll two dice
+    const die1 = Math.floor(Math.random() * 6) + 1;
+    const die2 = Math.floor(Math.random() * 6) + 1;
+    const total = die1 + die2;
+
+    let rawPayout = 0;
+    let outcome: string;
+
+    switch (args.prediction) {
+      case "over":
+        // Over 7 - pays 2x (slightly under 50% chance: 15/36)
+        if (total > 7) {
+          rawPayout = bet * 2;
+          outcome = "over_win";
+        } else {
+          outcome = "over_lose";
+        }
+        break;
+      case "under":
+        // Under 7 - pays 2x (slightly under 50% chance: 15/36)
+        if (total < 7) {
+          rawPayout = bet * 2;
+          outcome = "under_win";
+        } else {
+          outcome = "under_lose";
+        }
+        break;
+      case "lucky7":
+        // Exactly 7 - pays 5x (1/6 chance: 6/36)
+        if (total === 7) {
+          rawPayout = bet * 5;
+          outcome = "lucky7_win";
+        } else {
+          outcome = "lucky7_lose";
+        }
+        break;
+      case "snake_eyes":
+        // Double 1s - pays 30x (1/36 chance)
+        if (die1 === 1 && die2 === 1) {
+          rawPayout = bet * 30;
+          outcome = "snake_eyes_win";
+        } else {
+          outcome = "snake_eyes_lose";
+        }
+        break;
+      case "boxcars":
+        // Double 6s - pays 30x (1/36 chance)
+        if (die1 === 6 && die2 === 6) {
+          rawPayout = bet * 30;
+          outcome = "boxcars_win";
+        } else {
+          outcome = "boxcars_lose";
+        }
+        break;
+    }
+
+    const payout = rawPayout > 0 ? applyHouseEdge(rawPayout, bet) : 0;
+
+    if (payout > 0) {
+      houseBalance -= payout;
+      playerBalance += payout;
+      await ctx.db.patch(casinoAccount._id, { balance: houseBalance });
+      await ctx.db.patch(account._id, { balance: playerBalance });
+      await recordLedger(ctx, casinoAccount._id, account._id, payout, "Dice roll payout", "gamble_payout");
+    }
+
+    const net = payout - bet;
+
+    await recordGame(ctx, {
+      userId,
+      accountId: account._id,
+      game: "dice",
+      bet,
+      payout,
+      net,
+      outcome,
+      details: {
+        die1,
+        die2,
+        total,
+        prediction: args.prediction,
+      },
+    });
+
+    return {
+      bet,
+      die1,
+      die2,
+      total,
+      prediction: args.prediction,
       payout,
       net,
       outcome,

@@ -1,6 +1,8 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { computeOwnerMetricsFromHoldings } from "./utils/stocks";
+import type { Doc } from "./_generated/dataModel";
 
 // Helper to get current user ID
 async function getCurrentUserId(ctx: any) {
@@ -14,6 +16,163 @@ async function getCurrentUserId(ctx: any) {
   
   return user?._id || null;
 }
+
+// ULTRA-OPTIMIZATION: Update cached company metrics (with skip logic)
+export const updateCompanyMetrics = internalMutation({
+  args: { companyId: v.id("companies") },
+  handler: async (ctx, args) => {
+    const company = await ctx.db.get(args.companyId);
+    if (!company) return;
+
+    // Check existing metrics first to avoid unnecessary queries
+    const existing30d = await ctx.db
+      .query("companyMetrics")
+      .withIndex("by_company_period", (q) => 
+        q.eq("companyId", args.companyId).eq("period", "30d")
+      )
+      .first();
+
+    // OPTIMIZATION: Skip update if cache is less than 20 minutes old
+    // This prevents redundant updates when cron runs frequently
+    if (existing30d) {
+      const cacheAge = Date.now() - existing30d.lastUpdated;
+      if (cacheAge < 20 * 60 * 1000) { // 20 minutes
+        return existing30d; // Skip update - cache is fresh enough
+      }
+    }
+
+    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+
+    // BANDWIDTH OPTIMIZATION: Reduced from 200 to 150 per query
+    // Further reduction since we're now updating less frequently
+    const [incoming30d, outgoing30d] = await Promise.all([
+      ctx.db
+        .query("ledger")
+        .withIndex("by_to_account_created", (q) => 
+          q.eq("toAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
+        )
+        .take(150), // REDUCED from 200 to 150
+      ctx.db
+        .query("ledger")
+        .withIndex("by_from_account_created", (q) => 
+          q.eq("fromAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
+        )
+        .take(150), // REDUCED from 200 to 150
+    ]);
+
+    // Revenue: incoming transactions for product sales
+    const revenueTypes = new Set(["product_purchase", "marketplace_batch"]);
+    // Costs: outgoing transactions for production costs (NOT expenses)
+    const costTypes = new Set(["product_cost", "marketplace_batch"]);
+
+    let revenue30d = 0;
+    let costs30d = 0;
+    let expenses30d = 0;
+
+    // Process incoming transactions (revenue)
+    for (const tx of incoming30d) {
+      if (revenueTypes.has(tx.type)) revenue30d += tx.amount || 0;
+    }
+
+    // Process outgoing transactions (costs and expenses separately)
+    for (const tx of outgoing30d) {
+      if (costTypes.has(tx.type)) {
+        // Production costs (COGS - Cost of Goods Sold)
+        costs30d += tx.amount || 0;
+      } else if (tx.type === "expense") {
+        // Operating expenses (overhead, taxes, licenses, maintenance)
+        expenses30d += tx.amount || 0;
+      }
+    }
+
+    const metrics30d = {
+      companyId: args.companyId,
+      period: "30d" as const,
+      totalRevenue: revenue30d,
+      totalCosts: costs30d,
+      totalExpenses: expenses30d,
+      totalProfit: revenue30d - costs30d - expenses30d,
+      transactionCount: incoming30d.length + outgoing30d.length,
+      lastUpdated: Date.now(),
+    };
+
+    // OPTIMIZATION: Only write if values have actually changed (skip redundant writes)
+    if (existing30d) {
+      const hasChanged = 
+        existing30d.totalRevenue !== metrics30d.totalRevenue ||
+        existing30d.totalCosts !== metrics30d.totalCosts ||
+        existing30d.totalExpenses !== metrics30d.totalExpenses ||
+        existing30d.transactionCount !== metrics30d.transactionCount;
+      
+      if (hasChanged) {
+        await ctx.db.patch(existing30d._id, metrics30d);
+      } else {
+        // Just update timestamp if no data changed
+        await ctx.db.patch(existing30d._id, { lastUpdated: Date.now() });
+      }
+    } else {
+      await ctx.db.insert("companyMetrics", metrics30d);
+    }
+
+    return metrics30d;
+  },
+});
+
+// ULTRA-OPTIMIZATION: Batch update all company metrics (called by cron)
+export const updateAllCompanyMetrics = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    // BANDWIDTH OPTIMIZATION: Only update companies that need it
+    // Prioritize: 1) Public companies, 2) Active companies with recent transactions
+    
+    // Get up to 30 companies (reduced from 50)
+    const companies = await ctx.db.query("companies").take(30);
+    
+    // Get existing metrics for all companies
+    const metricsPromises = companies.map(company =>
+      ctx.db
+        .query("companyMetrics")
+        .withIndex("by_company_period", (q) => 
+          q.eq("companyId", company._id).eq("period", "30d")
+        )
+        .first()
+    );
+    const allMetrics = await Promise.all(metricsPromises);
+    
+    // Filter to only update companies that need it
+    const companiesToUpdate = companies.filter((company, index) => {
+      const metrics = allMetrics[index];
+      
+      // Always update if no metrics exist
+      if (!metrics) return true;
+      
+      // Update if cache is older than 25 minutes
+      const cacheAge = Date.now() - metrics.lastUpdated;
+      if (cacheAge > 25 * 60 * 1000) return true;
+      
+      // Otherwise skip
+      return false;
+    });
+    
+    let scheduled = 0;
+    for (const company of companiesToUpdate) {
+      try {
+        await ctx.scheduler.runAfter(0, internal.companies.updateCompanyMetrics, {
+          companyId: company._id,
+        });
+        scheduled++;
+      } catch (error) {
+        console.error(`Failed to schedule metrics update for company ${company._id}:`, error);
+      }
+    }
+    
+    return { 
+      scheduled, 
+      total: companies.length, 
+      skipped: companies.length - scheduled 
+    };
+  },
+});
 
 // Create a new company
 export const createCompany = mutation({
@@ -97,8 +256,29 @@ export const createCompany = mutation({
 export const getCompanies = query({
   args: {},
   handler: async (ctx) => {
-    // BANDWIDTH OPTIMIZATION: Reduced from 200 to 100
-    const companies = await ctx.db.query("companies").take(100);
+    const MAX_COMPANIES = 1000;
+    const PAGE_SIZE = 100;
+
+    const companies: Doc<"companies">[] = [];
+    let cursor: string | null = null;
+
+    while (companies.length < MAX_COMPANIES) {
+      const page = await ctx.db
+        .query("companies")
+        .order("desc")
+        .paginate({
+          cursor,
+          numItems: Math.min(PAGE_SIZE, MAX_COMPANIES - companies.length),
+        });
+
+      companies.push(...(page.page as Doc<"companies">[]));
+
+      if (page.isDone || page.page.length === 0 || !page.continueCursor) {
+        break;
+      }
+
+      cursor = page.continueCursor;
+    }
     
     // Batch fetch all accounts using cached balance
     const accountIds = companies.map(c => c.accountId);
@@ -190,13 +370,13 @@ export const getUserCompanies = query({
     });
 
     const ownedCompanies = validCompanies.filter((company) => company.ownerId === userId);
-    // BANDWIDTH OPTIMIZATION: Reduced from 500 to 50 stocks per company for ownership calculation
+    // Fetch stock holdings for ownership calculation - need enough for accurate metrics
     const ownedHoldings = await Promise.all(
       ownedCompanies.map((company) =>
         ctx.db
           .query("stocks")
           .withIndex("by_company", (q) => q.eq("companyId", company._id))
-          .take(50)
+          .take(200) // Increased from 50 to 200 for accurate ownership calculation
       )
     );
 
@@ -510,76 +690,189 @@ export const getCompanyDashboard = query({
     const company = await ctx.db.get(args.companyId);
     if (!company) throw new Error("Company not found");
 
-    // Get all products for this company
-    const products = await ctx.db
-      .query("products")
-      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
-      .collect();
-
-    const companyHoldings = await ctx.db
-      .query("stocks")
-      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
-      .take(100); // BANDWIDTH OPTIMIZATION: Reduced from 500 to 100
-    const ownershipSnapshot = computeOwnerMetricsFromHoldings(company, companyHoldings ?? [], company.ownerId);
-
     // Get cached balance directly from account
     const account = await ctx.db.get(company.accountId);
     const balance = account?.balance ?? 0;
 
-    // OPTIMIZED: Use indexed queries with type filters to reduce data transfer
-    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-    
-    // OPTIMIZED: Use triple compound index for efficient type+time filtered queries
-    // Query only revenue transactions TO this account
-    const revenueTypes = ["product_purchase", "marketplace_batch"];
-    const revenueTransactions = (await Promise.all(
-      revenueTypes.map(type =>
+    // ULTRA-OPTIMIZED: Query only active products (most companies have <10 products)
+    const products = await ctx.db
+      .query("products")
+      .withIndex("by_company_active", (q) => q.eq("companyId", args.companyId).eq("isActive", true))
+      .take(50); // Limit to 50 active products max
+
+    // Fetch stock holdings for accurate ownership calculation
+    const companyHoldings = await ctx.db
+      .query("stocks")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .take(200); // Increased from 20 to 200 for accurate ownership calculation
+    const ownershipSnapshot = computeOwnerMetricsFromHoldings(company, companyHoldings ?? [], company.ownerId);
+
+    // BANDWIDTH OPTIMIZATION: Always use cached metrics (extend cache time to 30 min)
+    const cachedMetrics = await ctx.db
+      .query("companyMetrics")
+      .withIndex("by_company_period", (q) => 
+        q.eq("companyId", args.companyId).eq("period", "30d")
+      )
+      .first();
+
+    // Check if cache is fresh (less than 60 minutes old - increased from 30 min)
+    // Since cron now runs every 30 min, we can trust cache for up to 60 min
+    const cacheAge = cachedMetrics ? Date.now() - cachedMetrics.lastUpdated : Infinity;
+    const useCachedData = cachedMetrics && cacheAge < 60 * 60 * 1000;
+
+    let totalRevenue = 0;
+    let totalCosts = 0;
+    let totalExpenses = 0;
+    let totalProfit = 0;
+    let chartData: Array<{ date: string; revenue: number; costs: number; expenses: number; profit: number }> = [];
+
+    if (useCachedData) {
+      // CACHED PATH: Use pre-calculated metrics (MAIN PATH - saves massive bandwidth)
+      totalRevenue = cachedMetrics.totalRevenue;
+      totalCosts = cachedMetrics.totalCosts;
+      totalExpenses = cachedMetrics.totalExpenses;
+      totalProfit = cachedMetrics.totalProfit;
+      
+      // BANDWIDTH OPTIMIZATION: Limit chart to last 7 days with hard cap of 30 transactions
+      // Charts don't need perfect accuracy - reduced from 50 to 30 per direction
+      const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+      
+      const [incomingTx, outgoingTx] = await Promise.all([
         ctx.db
           .query("ledger")
-          .withIndex("by_to_account_type_created", (q) => 
-            q.eq("toAccountId", company.accountId).eq("type", type as any).gt("createdAt", thirtyDaysAgo)
+          .withIndex("by_to_account_created", (q) => 
+            q.eq("toAccountId", company.accountId).gt("createdAt", sevenDaysAgo)
           )
-          .collect()
-      )
-    )).flat();
-    const totalRevenue = revenueTransactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
-
-    // Query only cost transactions FROM this account
-    const costTypes = ["product_cost", "marketplace_batch"];
-    const costTransactions = (await Promise.all(
-      costTypes.map(type =>
+          .take(30), // REDUCED from 50 to 30
         ctx.db
           .query("ledger")
-          .withIndex("by_from_account_type_created", (q) => 
-            q.eq("fromAccountId", company.accountId).eq("type", type as any).gt("createdAt", thirtyDaysAgo)
+          .withIndex("by_from_account_created", (q) => 
+            q.eq("fromAccountId", company.accountId).gt("createdAt", sevenDaysAgo)
           )
-          .collect()
-      )
-    )).flat();
-    const totalCosts = costTransactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
+          .take(30), // REDUCED from 50 to 30
+      ]);
 
-    // Query only expense transactions FROM this account
-    const expenseTransactions = await ctx.db
-      .query("ledger")
-      .withIndex("by_from_account_type_created", (q) => 
-        q.eq("fromAccountId", company.accountId).eq("type", "expense").gt("createdAt", thirtyDaysAgo)
-      )
-      .collect();
-    const totalExpenses = expenseTransactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
+      // Revenue: incoming transactions for product sales
+      const revenueTypes = new Set(["product_purchase", "marketplace_batch"]);
+      // Costs: outgoing transactions for production costs (NOT expenses)
+      const costTypes = new Set(["product_cost", "marketplace_batch"]);
+      
+      const dailyRevenue: Record<string, number> = {};
+      const dailyCosts: Record<string, number> = {};
+      const dailyExpenses: Record<string, number> = {};
 
-    // Calculate profit (revenue - costs - expenses)
-    const totalProfit = totalRevenue - totalCosts - totalExpenses;
+      // Process incoming transactions (revenue)
+      for (const tx of incomingTx) {
+        if (revenueTypes.has(tx.type)) {
+          const date = new Date(tx.createdAt).toISOString().split('T')[0];
+          dailyRevenue[date] = (dailyRevenue[date] || 0) + (tx.amount || 0);
+        }
+      }
 
-    // OPTIMIZED: Use stored totalRevenue and totalCosts from products table
+      // Process outgoing transactions (costs and expenses separately)
+      for (const tx of outgoingTx) {
+        const date = new Date(tx.createdAt).toISOString().split('T')[0];
+        if (costTypes.has(tx.type)) {
+          // Production costs (COGS - Cost of Goods Sold)
+          dailyCosts[date] = (dailyCosts[date] || 0) + (tx.amount || 0);
+        } else if (tx.type === "expense") {
+          // Operating expenses (overhead, taxes, licenses, maintenance)
+          dailyExpenses[date] = (dailyExpenses[date] || 0) + (tx.amount || 0);
+        }
+      }
+
+      const allDates = new Set([
+        ...Object.keys(dailyRevenue),
+        ...Object.keys(dailyCosts),
+        ...Object.keys(dailyExpenses),
+      ]);
+
+      chartData = Array.from(allDates)
+        .map(date => ({
+          date,
+          revenue: dailyRevenue[date] || 0,
+          costs: dailyCosts[date] || 0,
+          expenses: dailyExpenses[date] || 0,
+          profit: (dailyRevenue[date] || 0) - (dailyCosts[date] || 0) - (dailyExpenses[date] || 0),
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(-7); // Only last 7 days for chart
+
+    } else {
+      // FALLBACK PATH: Calculate from ledger (with AGGRESSIVE limits to reduce bandwidth)
+      const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+      
+      // BANDWIDTH OPTIMIZATION: Reduced from 100 to 75 for fallback path
+      // Fallback should rarely be used, so make it even more aggressive
+      const [incomingTx, outgoingTx] = await Promise.all([
+        ctx.db
+          .query("ledger")
+          .withIndex("by_to_account_created", (q) => 
+            q.eq("toAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
+          )
+          .take(75), // REDUCED from 100 to 75
+        ctx.db
+          .query("ledger")
+          .withIndex("by_from_account_created", (q) => 
+            q.eq("fromAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
+          )
+          .take(75), // REDUCED from 100 to 75
+      ]);
+
+      const revenueTypes = new Set(["product_purchase", "marketplace_batch"]);
+      const costTypes = new Set(["product_cost", "marketplace_batch"]);
+      
+      const dailyRevenue: Record<string, number> = {};
+      const dailyCosts: Record<string, number> = {};
+      const dailyExpenses: Record<string, number> = {};
+
+      for (const tx of incomingTx) {
+        if (revenueTypes.has(tx.type)) {
+          totalRevenue += tx.amount || 0;
+          const date = new Date(tx.createdAt).toISOString().split('T')[0];
+          dailyRevenue[date] = (dailyRevenue[date] || 0) + (tx.amount || 0);
+        }
+      }
+
+      for (const tx of outgoingTx) {
+        if (costTypes.has(tx.type)) {
+          totalCosts += tx.amount || 0;
+          const date = new Date(tx.createdAt).toISOString().split('T')[0];
+          dailyCosts[date] = (dailyCosts[date] || 0) + (tx.amount || 0);
+        } else if (tx.type === "expense") {
+          totalExpenses += tx.amount || 0;
+          const date = new Date(tx.createdAt).toISOString().split('T')[0];
+          dailyExpenses[date] = (dailyExpenses[date] || 0) + (tx.amount || 0);
+        }
+      }
+
+      totalProfit = totalRevenue - totalCosts - totalExpenses;
+
+      const allDates = new Set([
+        ...Object.keys(dailyRevenue),
+        ...Object.keys(dailyCosts),
+        ...Object.keys(dailyExpenses),
+      ]);
+
+      // BANDWIDTH OPTIMIZATION: Only last 7 days even in fallback
+      chartData = Array.from(allDates)
+        .map(date => ({
+          date,
+          revenue: dailyRevenue[date] || 0,
+          costs: dailyCosts[date] || 0,
+          expenses: dailyExpenses[date] || 0,
+          profit: (dailyRevenue[date] || 0) - (dailyCosts[date] || 0) - (dailyExpenses[date] || 0),
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(-7); // CHANGED from -30 to -7 for consistency
+    }
+
+    // ULTRA-OPTIMIZED: Use stored totals from products table (no additional queries needed)
     const productStats = products.map((product) => {
       const productRevenue = product.totalRevenue || 0;
       const productCosts = product.totalCosts || 0;
       const productProfit = productRevenue - productCosts;
-      
-      // Use totalSales field for lifetime units sold
       const unitsSold = product.totalSales || 0;
-      
-      // Calculate avg sale price
       const avgSalePrice = unitsSold > 0 ? productRevenue / unitsSold : product.price;
 
       return {
@@ -591,53 +884,6 @@ export const getCompanyDashboard = query({
         avgSalePrice: avgSalePrice,
       };
     });
-
-    // Group by day for charts (OPTIMIZED: combine in one pass)
-    const dailyData: Record<string, { revenue: number; costs: number; expenses: number; profit: number }> = {};
-    
-    // Process revenue transactions
-    revenueTransactions.forEach(tx => {
-      const date = new Date(tx.createdAt).toISOString().split('T')[0];
-      if (!dailyData[date]) {
-        dailyData[date] = { revenue: 0, costs: 0, expenses: 0, profit: 0 };
-      }
-      dailyData[date].revenue += tx.amount || 0;
-    });
-    
-    // Process cost transactions
-    costTransactions.forEach(tx => {
-      const date = new Date(tx.createdAt).toISOString().split('T')[0];
-      if (!dailyData[date]) {
-        dailyData[date] = { revenue: 0, costs: 0, expenses: 0, profit: 0 };
-      }
-      dailyData[date].costs += tx.amount || 0;
-    });
-    
-    // Process expense transactions
-    expenseTransactions.forEach(tx => {
-      const date = new Date(tx.createdAt).toISOString().split('T')[0];
-      if (!dailyData[date]) {
-        dailyData[date] = { revenue: 0, costs: 0, expenses: 0, profit: 0 };
-      }
-      dailyData[date].expenses += tx.amount || 0;
-    });
-    
-    // Calculate daily profit
-    Object.values(dailyData).forEach(data => {
-      data.profit = data.revenue - data.costs - data.expenses;
-    });
-
-    // Convert to array and sort by date (limit to 30 most recent days)
-    const chartData = Object.entries(dailyData)
-      .map(([date, data]) => ({
-        date,
-        revenue: data.revenue,
-        costs: data.costs,
-        expenses: data.expenses,
-        profit: data.profit,
-      }))
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .slice(-30); // Keep only last 30 days for chart
 
     return {
       company: {
@@ -657,6 +903,7 @@ export const getCompanyDashboard = query({
       },
       products: productStats,
       chartData,
+      cachedData: useCachedData, // Indicate if using cached data
     };
   },
 });
@@ -821,5 +1068,118 @@ export const distributeDividends = mutation({
         amount: d.amount,
       })),
     };
+  },
+});
+
+// Internal mutation to delete company without authentication (for moderation)
+export const internalDeleteCompany = internalMutation({
+  args: {
+    companyId: v.id("companies"),
+  },
+  handler: async (ctx, args) => {
+    const company = await ctx.db.get(args.companyId);
+    if (!company) throw new Error("Company not found");
+
+    // Deactivate all products (don't delete for historical record)
+    const products = await ctx.db
+      .query("products")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .collect();
+
+    for (const product of products) {
+      await ctx.db.patch(product._id, { isActive: false });
+    }
+
+    // Delete all stock holdings for this company
+    const stocks = await ctx.db
+      .query("stocks")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .collect();
+
+    for (const stock of stocks) {
+      await ctx.db.delete(stock._id);
+    }
+
+    // Delete stock price history
+    const priceHistory = await ctx.db
+      .query("stockPriceHistory")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .collect();
+
+    for (const history of priceHistory) {
+      await ctx.db.delete(history._id);
+    }
+
+    // Delete stock transactions
+    const stockTransactions = await ctx.db
+      .query("stockTransactions")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .collect();
+
+    for (const transaction of stockTransactions) {
+      await ctx.db.delete(transaction._id);
+    }
+
+    // Delete all company access records
+    const accessRecords = await ctx.db
+      .query("companyAccess")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .collect();
+
+    for (const access of accessRecords) {
+      await ctx.db.delete(access._id);
+    }
+
+    // Delete balance record
+    const balanceRecord = await ctx.db
+      .query("balances")
+      .withIndex("by_account", (q) => q.eq("accountId", company.accountId))
+      .first();
+
+    if (balanceRecord) {
+      await ctx.db.delete(balanceRecord._id);
+    }
+
+    // Delete company account
+    await ctx.db.delete(company.accountId);
+
+    // Finally, delete the company
+    await ctx.db.delete(args.companyId);
+
+    return {
+      success: true,
+    };
+  },
+});
+
+// Admin mutation to batch delete companies (requires admin key)
+export const adminDeleteCompanies = mutation({
+  args: {
+    companyIds: v.array(v.id("companies")),
+    adminKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Check admin key
+    if (args.adminKey !== process.env.ADMIN_KEY) {
+      throw new Error("Invalid admin key");
+    }
+
+    const results = [];
+    for (const companyId of args.companyIds) {
+      try {
+        await ctx.scheduler.runAfter(0, internal.companies.internalDeleteCompany, {
+          companyId,
+        });
+        results.push({ companyId, success: true });
+      } catch (error) {
+        results.push({ 
+          companyId, 
+          success: false, 
+          error: error instanceof Error ? error.message : "Unknown error" 
+        });
+      }
+    }
+
+    return results;
   },
 });

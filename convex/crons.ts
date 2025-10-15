@@ -17,6 +17,14 @@ crons.interval(
   internal.stocks.updateStockPrices
 );
 
+// BANDWIDTH OPTIMIZATION: Update company metrics cache every 30 minutes (reduced frequency)
+// Most companies don't need real-time metrics - 30 min is acceptable
+crons.interval(
+  "update company metrics cache",
+  { minutes: 30 },
+  internal.companies.updateAllCompanyMetrics
+);
+
 // Clean up old price history daily at 3 AM
 crons.daily(
   "cleanup old price history",
@@ -43,6 +51,13 @@ crons.daily(
   "expire old licenses",
   { hourUTC: 1, minuteUTC: 0 },
   internal.expenses.expireLicenses
+);
+
+// Apply daily interest to loans and auto-deduct overdue loans at 2 AM UTC
+crons.daily(
+  "apply loan interest and process defaults",
+  { hourUTC: 2, minuteUTC: 0 },
+  internal.loans.applyDailyInterest
 );
 
 export default crons;

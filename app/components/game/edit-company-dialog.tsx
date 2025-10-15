@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -28,6 +28,7 @@ interface EditCompanyDialogProps {
     ticker: string;
     logoUrl?: string;
   };
+  trigger?: ReactNode;
   trigger?: React.ReactNode;
 }
 
@@ -198,6 +199,7 @@ export function EditCompanyDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
+        {trigger || (
         {trigger ?? (
           <Button variant="outline" size="sm">
             <Pencil className="h-4 w-4 mr-2" />
