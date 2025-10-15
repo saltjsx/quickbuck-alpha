@@ -97,7 +97,7 @@ async function main() {
     try {
       // Call AI to analyze products
       const result = await generateText({
-        model: openai("google/gemini-2.0-flash-exp:free"),
+        model: openai("z-ai/glm-4.5-air:free"),
         prompt: `You are a moderator for the game QuickBuck. Review these products and identify ones that are low effort, spam, inappropriate, or not suitable.
 
 Products to review:
@@ -112,17 +112,25 @@ Flag products that are:
 - Test entries (e.g., "test", "asdf", "qwerty")
 - Spam or nonsense names
 - Inappropriate content
-- Single words with no real description`,
+- Single words with no description
+
+Do not flag products just because they are low quality or have a bad description. Only flag if they are clearly inappropriate or spam.`,
       });
 
       // Parse the JSON response
       try {
         let jsonText = result.text.trim();
         
-        // Try multiple cleanup strategies
+        // Remove markdown code blocks if present
         jsonText = jsonText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
-        jsonText = jsonText.replace(/^[^{]*/, ''); // Remove everything before first {
-        jsonText = jsonText.replace(/[^}]*$/, ''); // Remove everything after last }
+        
+        // Find the JSON object - look for the first { and last }
+        const firstBrace = jsonText.indexOf('{');
+        const lastBrace = jsonText.lastIndexOf('}');
+        
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          jsonText = jsonText.substring(firstBrace, lastBrace + 1);
+        }
         
         const parsed = JSON.parse(jsonText);
         const batchResults = parsed.productsToRemove || [];
@@ -134,8 +142,9 @@ Flag products that are:
           console.log(`   ✅ No issues found in this batch`);
         }
       } catch (parseError) {
-        console.warn(`   ⚠️  Warning: Couldn't parse batch ${Math.floor(i / BATCH_SIZE) + 1} response, skipping...`);
-        console.log("   Raw response:", result.text.substring(0, 200) + "...");
+        console.warn(`   ⚠️  Warning: Couldn't parse batch ${Math.floor(i / BATCH_SIZE) + 1} response`);
+        console.log("   Error:", parseError);
+        console.log("   Raw response (first 500 chars):", result.text.substring(0, 500));
       }
       
       // Add a small delay between batches to avoid rate limiting
