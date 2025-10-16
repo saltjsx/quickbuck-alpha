@@ -4,6 +4,107 @@ import { internal } from "./_generated/api";
 import { computeOwnerMetricsFromHoldings } from "./utils/stocks";
 import type { Doc } from "./_generated/dataModel";
 
+const COMPANY_METRICS_PAYLOAD_VERSION = 2;
+const COMPANY_METRICS_ALLOWED_FIELDS = new Set([
+  "_id",
+  "_creationTime",
+  "companyId",
+  "period",
+  "totalRevenue",
+  "totalCosts",
+  "totalExpenses",
+  "totalProfit",
+  "transactionCount",
+  "lastUpdated",
+  "payloadVersion",
+]);
+
+async function scrubLegacyCompanyMetricsPayload(
+  ctx: any,
+  metricsDoc: Doc<"companyMetrics">
+): Promise<{ doc: Doc<"companyMetrics">; mutated: boolean }> {
+  const docRecord = metricsDoc as Record<string, any>;
+  const extraFields = Object.keys(docRecord).filter(
+    (key) => !COMPANY_METRICS_ALLOWED_FIELDS.has(key)
+  );
+
+  const sanitizedPayload = {
+    companyId: metricsDoc.companyId,
+    period: metricsDoc.period,
+    totalRevenue: metricsDoc.totalRevenue,
+    totalCosts: metricsDoc.totalCosts,
+    totalExpenses: metricsDoc.totalExpenses,
+    totalProfit: metricsDoc.totalProfit,
+    transactionCount: metricsDoc.transactionCount,
+    lastUpdated:
+      typeof metricsDoc.lastUpdated === "number"
+        ? metricsDoc.lastUpdated
+        : Date.now(),
+    payloadVersion: COMPANY_METRICS_PAYLOAD_VERSION,
+  } as const;
+
+  const needsVersionUpdate =
+    metricsDoc.payloadVersion !== COMPANY_METRICS_PAYLOAD_VERSION;
+
+  if (extraFields.length === 0 && !needsVersionUpdate) {
+    return { doc: metricsDoc, mutated: false };
+  }
+
+  const patchPayload: Record<string, any> = { ...sanitizedPayload };
+  for (const field of extraFields) {
+    patchPayload[field] = undefined;
+  }
+
+  try {
+    await ctx.db.patch(metricsDoc._id, patchPayload as any);
+
+    return {
+      doc: {
+        _id: metricsDoc._id,
+        _creationTime: metricsDoc._creationTime,
+        ...sanitizedPayload,
+      } as Doc<"companyMetrics">,
+      mutated: true,
+    };
+  } catch (error) {
+    try {
+      await ctx.db.delete(metricsDoc._id);
+    } catch (deleteError) {
+      // Ignore if already removed.
+    }
+
+    const maybeReplacement = await ctx.db
+      .query("companyMetrics")
+      .withIndex("by_company_period", (q: any) =>
+        q.eq("companyId", metricsDoc.companyId).eq("period", metricsDoc.period)
+      )
+      .first();
+
+    if (
+      maybeReplacement &&
+      maybeReplacement.payloadVersion === COMPANY_METRICS_PAYLOAD_VERSION &&
+      Object.keys(maybeReplacement as Record<string, any>).every((key) =>
+        COMPANY_METRICS_ALLOWED_FIELDS.has(key)
+      )
+    ) {
+      return { doc: maybeReplacement, mutated: true };
+    }
+
+    const newId = await ctx.db.insert("companyMetrics", sanitizedPayload);
+    const refreshedDoc = await ctx.db.get(newId);
+
+    return {
+      doc:
+        (refreshedDoc as Doc<"companyMetrics">) ?? {
+          _id: newId,
+          _creationTime: Date.now(),
+          ...sanitizedPayload,
+        },
+      mutated: true,
+    };
+  }
+}
+
 // Helper to get current user ID
 async function getCurrentUserId(ctx: any) {
   const identity = await ctx.auth.getUserIdentity();
@@ -25,19 +126,30 @@ export const updateCompanyMetrics = internalMutation({
     if (!company) return;
 
     // Check existing metrics first to avoid unnecessary queries
-    const existing30d = await ctx.db
+    let existing30d = await ctx.db
       .query("companyMetrics")
       .withIndex("by_company_period", (q) => 
         q.eq("companyId", args.companyId).eq("period", "30d")
       )
       .first();
 
-    // OPTIMIZATION: Skip update if cache is less than 20 minutes old
-    // This prevents redundant updates when cron runs frequently
     if (existing30d) {
-      const cacheAge = Date.now() - existing30d.lastUpdated;
-      if (cacheAge < 20 * 60 * 1000) { // 20 minutes
-        return existing30d; // Skip update - cache is fresh enough
+      const { doc: sanitizedDoc } = await scrubLegacyCompanyMetricsPayload(
+        ctx,
+        existing30d
+      );
+      existing30d = sanitizedDoc;
+
+      const lastUpdated =
+        typeof existing30d.lastUpdated === "number"
+          ? existing30d.lastUpdated
+          : 0;
+      const cacheAge = Date.now() - lastUpdated;
+      if (
+        cacheAge < 20 * 60 * 1000 &&
+        existing30d.payloadVersion === COMPANY_METRICS_PAYLOAD_VERSION
+      ) {
+        return existing30d;
       }
     }
 
@@ -85,6 +197,7 @@ export const updateCompanyMetrics = internalMutation({
       }
     }
 
+    const now = Date.now();
     const metrics30d = {
       companyId: args.companyId,
       period: "30d" as const,
@@ -93,7 +206,8 @@ export const updateCompanyMetrics = internalMutation({
       totalExpenses: expenses30d,
       totalProfit: revenue30d - costs30d - expenses30d,
       transactionCount: incoming30d.length + outgoing30d.length,
-      lastUpdated: Date.now(),
+      lastUpdated: now,
+      payloadVersion: COMPANY_METRICS_PAYLOAD_VERSION,
     };
 
     // OPTIMIZATION: Only write if values have actually changed (skip redundant writes)
@@ -102,13 +216,15 @@ export const updateCompanyMetrics = internalMutation({
         existing30d.totalRevenue !== metrics30d.totalRevenue ||
         existing30d.totalCosts !== metrics30d.totalCosts ||
         existing30d.totalExpenses !== metrics30d.totalExpenses ||
-        existing30d.transactionCount !== metrics30d.transactionCount;
+        existing30d.transactionCount !== metrics30d.transactionCount ||
+        (existing30d.payloadVersion ?? COMPANY_METRICS_PAYLOAD_VERSION) !==
+          metrics30d.payloadVersion;
       
       if (hasChanged) {
         await ctx.db.patch(existing30d._id, metrics30d);
       } else {
         // Just update timestamp if no data changed
-        await ctx.db.patch(existing30d._id, { lastUpdated: Date.now() });
+        await ctx.db.patch(existing30d._id, { lastUpdated: now });
       }
     } else {
       await ctx.db.insert("companyMetrics", metrics30d);
@@ -145,6 +261,11 @@ export const updateAllCompanyMetrics = internalMutation({
       
       // Always update if no metrics exist
       if (!metrics) return true;
+
+      const metricsPayloadVersion = metrics.payloadVersion ?? null;
+      if (metricsPayloadVersion !== COMPANY_METRICS_PAYLOAD_VERSION) {
+        return true;
+      }
       
       // Update if cache is older than 25 minutes
       const cacheAge = Date.now() - metrics.lastUpdated;
@@ -171,6 +292,41 @@ export const updateAllCompanyMetrics = internalMutation({
       total: companies.length, 
       skipped: companies.length - scheduled 
     };
+  },
+});
+
+export const repairLegacyCompanyMetrics = internalMutation({
+  args: { batchSize: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const batchSize = Math.max(1, Math.min(args.batchSize ?? 100, 200));
+    let cursor: string | null = null;
+    let inspected = 0;
+    let cleaned = 0;
+
+    while (true) {
+      const page = await ctx.db
+        .query("companyMetrics")
+        .paginate({ cursor, numItems: batchSize });
+
+      for (const metric of page.page) {
+        const { mutated } = await scrubLegacyCompanyMetricsPayload(
+          ctx,
+          metric
+        );
+        inspected += 1;
+        if (mutated) {
+          cleaned += 1;
+        }
+      }
+
+      if (page.isDone || !page.continueCursor) {
+        break;
+      }
+
+      cursor = page.continueCursor;
+    }
+
+    return { inspected, cleaned, batchSize };
   },
 });
 
@@ -718,7 +874,11 @@ export const getCompanyDashboard = query({
     // Check if cache is fresh (less than 60 minutes old - increased from 30 min)
     // Since cron now runs every 30 min, we can trust cache for up to 60 min
     const cacheAge = cachedMetrics ? Date.now() - cachedMetrics.lastUpdated : Infinity;
-    const useCachedData = cachedMetrics && cacheAge < 60 * 60 * 1000;
+    const cachedMetricsPayloadVersion = cachedMetrics?.payloadVersion ?? null;
+    const useCachedData =
+      cachedMetrics &&
+      cachedMetricsPayloadVersion === COMPANY_METRICS_PAYLOAD_VERSION &&
+      cacheAge < 60 * 60 * 1000;
 
     let totalRevenue = 0;
     let totalCosts = 0;

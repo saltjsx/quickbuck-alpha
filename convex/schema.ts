@@ -287,6 +287,7 @@ export default defineSchema({
     totalProfit: v.number(),
     transactionCount: v.number(),
     lastUpdated: v.number(),
+    payloadVersion: v.optional(v.number()),
   })
     .index("by_company", ["companyId"])
     .index("by_company_period", ["companyId", "period"])
