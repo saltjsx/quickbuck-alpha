@@ -98,23 +98,24 @@ export const updateCompanyMetrics = internalMutation({
 
     // OPTIMIZATION: Only write if values have actually changed (skip redundant writes)
     if (existing30d) {
-      const hasChanged = 
+      const hasChanged =
         existing30d.totalRevenue !== metrics30d.totalRevenue ||
         existing30d.totalCosts !== metrics30d.totalCosts ||
         existing30d.totalExpenses !== metrics30d.totalExpenses ||
         existing30d.transactionCount !== metrics30d.transactionCount;
-      
+
       if (hasChanged) {
         await ctx.db.patch(existing30d._id, metrics30d);
+        return metrics30d;
       } else {
-        // Just update timestamp if no data changed
-        await ctx.db.patch(existing30d._id, { lastUpdated: Date.now() });
+        // BANDWIDTH FIX: Skip timestamp-only updates - they waste write bandwidth
+        // The cache age check in getCompanyDashboard handles staleness detection
+        return existing30d;
       }
     } else {
       await ctx.db.insert("companyMetrics", metrics30d);
+      return metrics30d;
     }
-
-    return metrics30d;
   },
 });
 
