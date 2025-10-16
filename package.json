@@ -13,7 +13,8 @@
     "fix-orphaned-products": "tsx scripts/fix-orphaned-products.ts",
     "fix-system-account": "tsx scripts/fix-system-account.ts",
     "ai-buy": "tsx scripts/ai-buy.ts",
-    "bot-buy": "tsx scripts/bot-buy.ts"
+    "bot-buy": "tsx scripts/bot-buy.ts",
+    "moderation": "tsx scripts/moderation.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.22",

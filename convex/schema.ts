@@ -334,5 +334,27 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_status_created", ["status", "createdAt"])
     .index("by_company_status", ["companyId", "status"]),
+
+  userWarnings: defineTable({
+    userId: v.id("users"),
+    reason: v.string(),
+    severity: v.union(v.literal("info"), v.literal("warning"), v.literal("critical")),
+    isAcknowledged: v.boolean(),
+    acknowledgedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_created", ["userId", "createdAt"])
+    .index("by_acknowledged", ["isAcknowledged"]),
+
+  userBans: defineTable({
+    email: v.string(),
+    userId: v.id("users"),
+    reason: v.string(),
+    bannedAt: v.number(),
+    bannedBy: v.optional(v.string()), // Admin who performed the ban
+  })
+    .index("by_email", ["email"])
+    .index("by_user", ["userId"]),
 });
 
