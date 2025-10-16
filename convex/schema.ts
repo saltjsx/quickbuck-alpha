@@ -35,6 +35,7 @@ export default defineSchema({
     ),
     description: v.optional(v.string()),
     productId: v.optional(v.id("products")),
+    companyId: v.optional(v.id("companies")),
     batchCount: v.optional(v.number()),
     createdAt: v.number(),
   })

@@ -469,36 +469,14 @@ export const automaticPurchase = internalMutation({
       // Patch account balance
       await ctx.db.patch(tx.accountId, { balance: currentBalance });
 
-      // BANDWIDTH OPTIMIZATION: Batch all ledger inserts and product patches
-      const ledgerInserts: any[] = [];
+      // BANDWIDTH OPTIMIZATION: Create TWO aggregate ledger entries per company
+      // (one for all revenue, one for all costs) instead of 2 entries PER PRODUCT
+      // This reduces write operations by ~90% (2 entries per company vs 2*N entries for N products)
       const productPatches: Array<{ id: any; updates: any }> = [];
-      
+
       for (const [productIdStr, salesData] of tx.productSales) {
         const product = productMap.get(productIdStr);
         if (!product) continue;
-
-        // Queue ledger entries for batch insert
-        ledgerInserts.push({
-          fromAccountId: systemAccount._id,
-          toAccountId: tx.accountId,
-          amount: salesData.totalRevenue,
-          type: "marketplace_batch" as const,
-          productId: product._id,
-          batchCount: salesData.count,
-          description: `Batch purchase of ${salesData.count}x ${product.name}`,
-          createdAt: Date.now(),
-        });
-
-        ledgerInserts.push({
-          fromAccountId: tx.accountId,
-          toAccountId: systemAccount._id,
-          amount: salesData.totalCost,
-          type: "marketplace_batch" as const,
-          productId: product._id,
-          batchCount: salesData.count,
-          description: `Batch production cost for ${salesData.count}x ${product.name}`,
-          createdAt: Date.now(),
-        });
 
         if ("totalSales" in product) {
           const updatedTotals = {
@@ -515,10 +493,43 @@ export const automaticPurchase = internalMutation({
           productPatches.push({ id: product._id, updates: updatedTotals });
         }
       }
-      
-      // Execute all batched operations
+
+      // Build product summary for description
+      const productList = Array.from(tx.productSales.entries())
+        .map(([productIdStr, salesData]) => {
+          const product = productMap.get(productIdStr);
+          return product ? `${salesData.count}x ${product.name}` : null;
+        })
+        .filter(Boolean)
+        .slice(0, 5) // Only first 5 products in description to keep it concise
+        .join(", ");
+
+      const productSummary = tx.productSales.size > 5
+        ? `${productList} and ${tx.productSales.size - 5} more`
+        : productList;
+
+      // Execute all batched operations with TWO aggregate ledger entries per company
       await Promise.all([
-        ...ledgerInserts.map(entry => ctx.db.insert("ledger", entry)),
+        // Aggregate revenue entry (replaces N individual revenue entries)
+        ctx.db.insert("ledger", {
+          fromAccountId: systemAccount._id,
+          toAccountId: tx.accountId,
+          amount: tx.totalRevenue,
+          type: "marketplace_batch" as const,
+          companyId: tx.companyId,
+          description: `Marketplace revenue: ${productSummary}`,
+          createdAt: Date.now(),
+        }),
+        // Aggregate cost entry (replaces N individual cost entries)
+        ctx.db.insert("ledger", {
+          fromAccountId: tx.accountId,
+          toAccountId: systemAccount._id,
+          amount: tx.totalCost,
+          type: "marketplace_batch" as const,
+          companyId: tx.companyId,
+          description: `Production costs: ${productSummary}`,
+          createdAt: Date.now(),
+        }),
         ...productPatches.map(({ id, updates }) => ctx.db.patch(id, updates))
       ]);
     }
