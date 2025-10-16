@@ -17,11 +17,12 @@ crons.interval(
   internal.stocks.updateStockPrices
 );
 
-// BANDWIDTH OPTIMIZATION: Update company metrics cache every 30 minutes (reduced frequency)
-// Most companies don't need real-time metrics - 30 min is acceptable
+// BANDWIDTH OPTIMIZATION: Update company metrics cache every 60 minutes
+// Most companies don't need real-time metrics - 1 hour is acceptable
+// Cache is now valid for 2 hours, so this provides adequate coverage
 crons.interval(
   "update company metrics cache",
-  { minutes: 30 },
+  { minutes: 60 },
   internal.companies.updateAllCompanyMetrics
 );
 
