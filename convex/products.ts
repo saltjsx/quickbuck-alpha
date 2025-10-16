@@ -182,12 +182,12 @@ export const automaticPurchase = internalMutation({
     const products = await ctx.db
       .query("products")
       .withIndex("by_active", (q) => q.eq("isActive", true))
-      .take(150); // REDUCED from 200 to 150
+      .take(300); // REDUCED from 200 to 150
 
     if (products.length === 0) return { message: "No products available" };
 
-  // Random spend between $300,000 and $425,000
-  const totalSpend = Math.floor(Math.random() * 125000) + 300000;
+  // Random spend between $1,000,000 and $1,500,000
+  const totalSpend = Math.floor(Math.random() * 500000) + 1000000;
 
     // Get or create system account (buyer)
     // OPTIMIZED: Use by_name index for system account lookup
