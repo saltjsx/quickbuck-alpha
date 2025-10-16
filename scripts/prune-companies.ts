@@ -1,8 +1,7 @@
 #!/usr/bin/env tsx
 
 import { config } from "dotenv";
-import { createOpenAI } from "@ai-sdk/openai";
-import { generateText } from "ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../convex/_generated/api";
 import * as readline from "readline";
@@ -24,8 +23,8 @@ function question(query: string): Promise<string> {
 }
 
 async function main() {
-  // Get OpenRouter API key
-  const apiKey = await question("Enter your OpenRouter API key: ");
+  // Get Gemini API key
+  const apiKey = await question("Enter your Gemini API key: ");
   
   if (!apiKey.trim()) {
     console.error("❌ API key is required");
@@ -78,13 +77,11 @@ async function main() {
 
   console.log(`📦 Simplified to ${JSON.stringify(simplifiedCompanies).length} characters`);
   
-  // Initialize OpenAI client with OpenRouter
-  const openai = createOpenAI({
-    apiKey: apiKey.trim(),
-    baseURL: "https://openrouter.ai/api/v1",
-  });
+  // Initialize Gemini AI
+  const genAI = new GoogleGenerativeAI(apiKey.trim());
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
 
-  console.log("\n🤖 Analyzing companies with AI...");
+  console.log("\n🤖 Analyzing companies with AI (Gemini 2.0 Flash Lite)...");
 
   // Process in batches if too many companies
   const BATCH_SIZE = 50;
@@ -96,9 +93,7 @@ async function main() {
 
     try {
       // Call AI to analyze companies
-      const result = await generateText({
-        model: openai("z-ai/glm-4.5-air:free"),
-        prompt: `You are a moderator for the game QuickBuck. Review these companies and identify ones that are low effort, spam, inappropriate, or not suitable.
+      const result = await model.generateContent(`You are a moderator for the game QuickBuck. Review these companies and identify ones that are spam, inappropriate, or not suitable.
 
 Companies to review:
 ${JSON.stringify(batch, null, 2)}
@@ -110,14 +105,16 @@ If none should be removed, return: {"companiesToRemove": []}
 
 Flag companies that are:
 - Test entries (e.g., "test", "asdf", "qwerty")
-- Spam or nonsense names
+- Spam
 - Inappropriate content
-- Single words with no real description`,
-      });
+- Single words with no real description`);
+
+      const response = result.response;
+      const text = response.text();
 
       // Parse the JSON response
       try {
-        let jsonText = result.text.trim();
+        let jsonText = text.trim();
         
         // Remove markdown code blocks if present
         jsonText = jsonText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
@@ -142,7 +139,7 @@ Flag companies that are:
       } catch (parseError) {
         console.warn(`   ⚠️  Warning: Couldn't parse batch ${Math.floor(i / BATCH_SIZE) + 1} response`);
         console.log("   Error:", parseError);
-        console.log("   Raw response (first 500 chars):", result.text.substring(0, 500));
+        console.log("   Raw response (first 500 chars):", text.substring(0, 500));
       }
       
       // Add a small delay between batches to avoid rate limiting

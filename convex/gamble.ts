@@ -153,11 +153,26 @@ async function getCasinoAccount(ctx: any, userId: string) {
     .first();
 
   if (!casinoAccount) {
+    // Get or create a designated casino system user (not a real player)
+    let casinoUser = await ctx.db
+      .query("users")
+      .filter((q: any) => q.eq(q.field("name"), "QuickBuck Casino"))
+      .first();
+    
+    if (!casinoUser) {
+      const casinoUserId = await ctx.db.insert("users", {
+        name: "QuickBuck Casino",
+        email: "casino@quickbuck.internal",
+        tokenIdentifier: "casino-internal-account",
+      });
+      casinoUser = await ctx.db.get(casinoUserId);
+    }
+
     const accountId = await ctx.db.insert("accounts", {
       name: "QuickBuck Casino Reserve",
       type: "personal",
-      ownerId: userId,
-      balance: 250000,
+      ownerId: casinoUser!._id,
+      balance: Number.MAX_SAFE_INTEGER, // Unlimited funds for casino operations
       createdAt: Date.now(),
     });
 

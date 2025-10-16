@@ -628,3 +628,141 @@ export const fixOrphanedProducts = mutation({
     };
   },
 });
+
+// Fix System account to ensure it's not owned by a player
+export const fixSystemAccount = mutation({
+  args: {
+    adminKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Check admin key
+    if (args.adminKey !== process.env.ADMIN_KEY) {
+      throw new Error("Invalid admin key");
+    }
+
+    // === FIX SYSTEM ACCOUNT ===
+    
+    // Get or create designated system user
+    let systemUser = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("name"), "System"))
+      .first();
+    
+    if (!systemUser) {
+      const systemUserId = await ctx.db.insert("users", {
+        name: "System",
+        email: "system@quickbuck.internal",
+        tokenIdentifier: "system-internal-account",
+      });
+      systemUser = await ctx.db.get(systemUserId);
+    }
+
+    // Check if System account exists
+    let systemAccount = await ctx.db
+      .query("accounts")
+      .withIndex("by_name", (q) => q.eq("name", "System"))
+      .first();
+
+    let systemCreated = false;
+    let systemFixed = false;
+    let systemOldOwnerName = null;
+
+    if (!systemAccount) {
+      // Create new system account
+      const systemAccountId = await ctx.db.insert("accounts", {
+        name: "System",
+        type: "personal",
+        ownerId: systemUser!._id,
+        balance: Number.MAX_SAFE_INTEGER,
+        createdAt: Date.now(),
+      });
+      systemAccount = await ctx.db.get(systemAccountId);
+      systemCreated = true;
+    } else {
+      // Check if it's owned by a player (not the system user)
+      if (systemAccount.ownerId !== systemUser!._id) {
+        const oldOwner = await ctx.db.get(systemAccount.ownerId);
+        systemOldOwnerName = oldOwner?.name || "Unknown Player";
+        
+        // Update to be owned by system user
+        await ctx.db.patch(systemAccount._id, {
+          ownerId: systemUser!._id,
+          balance: Number.MAX_SAFE_INTEGER,
+        });
+        
+        systemFixed = true;
+      }
+    }
+
+    // === FIX CASINO RESERVE ACCOUNT ===
+    
+    // Get or create designated casino user
+    let casinoUser = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("name"), "QuickBuck Casino"))
+      .first();
+    
+    if (!casinoUser) {
+      const casinoUserId = await ctx.db.insert("users", {
+        name: "QuickBuck Casino",
+        email: "casino@quickbuck.internal",
+        tokenIdentifier: "casino-internal-account",
+      });
+      casinoUser = await ctx.db.get(casinoUserId);
+    }
+
+    // Check if Casino Reserve account exists
+    let casinoAccount = await ctx.db
+      .query("accounts")
+      .withIndex("by_name", (q) => q.eq("name", "QuickBuck Casino Reserve"))
+      .first();
+
+    let casinoCreated = false;
+    let casinoFixed = false;
+    let casinoOldOwnerName = null;
+
+    if (!casinoAccount) {
+      // Create new casino account
+      const casinoAccountId = await ctx.db.insert("accounts", {
+        name: "QuickBuck Casino Reserve",
+        type: "personal",
+        ownerId: casinoUser!._id,
+        balance: Number.MAX_SAFE_INTEGER,
+        createdAt: Date.now(),
+      });
+      casinoAccount = await ctx.db.get(casinoAccountId);
+      casinoCreated = true;
+    } else {
+      // Check if it's owned by a player (not the casino user)
+      if (casinoAccount.ownerId !== casinoUser!._id) {
+        const oldOwner = await ctx.db.get(casinoAccount.ownerId);
+        casinoOldOwnerName = oldOwner?.name || "Unknown Player";
+        
+        // Update to be owned by casino user
+        await ctx.db.patch(casinoAccount._id, {
+          ownerId: casinoUser!._id,
+          balance: Number.MAX_SAFE_INTEGER,
+        });
+        
+        casinoFixed = true;
+      }
+    }
+
+    return {
+      system: {
+        created: systemCreated,
+        fixed: systemFixed,
+        oldOwnerName: systemOldOwnerName,
+        userId: systemUser!._id,
+        accountId: systemAccount!._id,
+      },
+      casino: {
+        created: casinoCreated,
+        fixed: casinoFixed,
+        oldOwnerName: casinoOldOwnerName,
+        userId: casinoUser!._id,
+        accountId: casinoAccount!._id,
+      },
+    };
+  },
+});

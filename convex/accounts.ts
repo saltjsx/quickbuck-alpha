@@ -174,10 +174,25 @@ export const initializeAccount = mutation({
       .first();
 
     if (!systemAccount) {
+      // Get or create a designated system user (not a real player)
+      let systemUser = await ctx.db
+        .query("users")
+        .filter((q) => q.eq(q.field("name"), "System"))
+        .first();
+      
+      if (!systemUser) {
+        const systemUserId = await ctx.db.insert("users", {
+          name: "System",
+          email: "system@quickbuck.internal",
+          tokenIdentifier: "system-internal-account",
+        });
+        systemUser = await ctx.db.get(systemUserId);
+      }
+      
       const systemAccountId = await ctx.db.insert("accounts", {
         name: "System",
         type: "personal",
-        ownerId: userId, // Dummy owner
+        ownerId: systemUser!._id, // System user, not a player
         balance: 0,
         createdAt: Date.now(),
       });

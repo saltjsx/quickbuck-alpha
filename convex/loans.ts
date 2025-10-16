@@ -30,17 +30,30 @@ async function getSystemAccount(ctx: any) {
     .first();
 
   if (!systemAccount) {
-    const systemUserId = "system_user_placeholder" as any;
-    systemAccount = {
-      _id: await ctx.db.insert("accounts", {
+    // Get or create a designated system user (not a real player)
+    let systemUser = await ctx.db
+      .query("users")
+      .filter((q: any) => q.eq(q.field("name"), "System"))
+      .first();
+    
+    if (!systemUser) {
+      const systemUserId = await ctx.db.insert("users", {
         name: "System",
-        type: "personal" as const,
-        ownerId: systemUserId,
-        balance: 10_000_000_000,
-        createdAt: Date.now(),
-      }),
-    };
-    systemAccount = await ctx.db.get(systemAccount._id);
+        email: "system@quickbuck.internal",
+        tokenIdentifier: "system-internal-account",
+      });
+      systemUser = await ctx.db.get(systemUserId);
+    }
+
+    const systemAccountId = await ctx.db.insert("accounts", {
+      name: "System",
+      type: "personal" as const,
+      ownerId: systemUser._id,
+      balance: Number.MAX_SAFE_INTEGER,
+      createdAt: Date.now(),
+    });
+    
+    systemAccount = await ctx.db.get(systemAccountId);
   }
 
   return systemAccount;

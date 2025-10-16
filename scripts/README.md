@@ -35,12 +35,12 @@ npm run prune-companies
 ```
 
 You'll be prompted for:
-1. Your OpenRouter API key
+1. Your Gemini API key (get one from [Google AI Studio](https://aistudio.google.com/app/apikey))
 2. Your Convex admin key
 
 The script will:
 1. Fetch all companies from Convex
-2. Send the data to AI (GPT-4o-mini via OpenRouter)
+2. Send the data to AI (Gemini 2.0 Flash Lite)
 3. Show you which companies the AI recommends removing
 4. Ask for confirmation before deleting
 
@@ -55,8 +55,8 @@ npm run prune-products
 ## How It Works
 
 1. **Data Fetching**: Uses Convex HTTP client to fetch all companies/products
-2. **AI Analysis**: Sends data to OpenAI's GPT-4o-mini (free tier) via OpenRouter
-3. **Structured Output**: Uses Vercel AI SDK's `generateObject` for reliable JSON responses
+2. **AI Analysis**: Sends data to Google's Gemini 2.0 Flash Lite model
+3. **JSON Parsing**: Parses AI's JSON response with fallback error handling
 4. **Confirmation**: Shows the AI's recommendations and asks for user confirmation
 5. **Batch Deletion**: Uses admin mutations to delete the approved items
 
@@ -79,7 +79,7 @@ The AI filters out content that is:
 
 ## Cost
 
-- **OpenRouter (GPT-4o-mini)**: Free tier available
+- **Gemini 2.0 Flash Lite**: Free tier available (15 RPM, 1500 RPD)
 - **Convex**: Queries and mutations count toward your usage limits
 
 ## Troubleshooting
@@ -98,10 +98,10 @@ This means no problematic content was found. The AI is conservative and only fla
 
 ## Model Information
 
-- **Model**: `openai/gpt-4o-mini-2024-07-18`
-- **Provider**: OpenRouter
+- **Model**: `gemini-2.0-flash-lite`
+- **Provider**: Google AI
 - **Cost**: Free tier available
-- **Rate Limits**: Check OpenRouter dashboard
+- **Rate Limits**: 15 RPM (requests per minute), 1500 RPD (requests per day)
 
 ## Fix Orphaned Products
 
@@ -151,6 +151,97 @@ When the pruning scripts delete companies, sometimes their products remain activ
 **Prevention:**
 The company deletion process now automatically deactivates all products when a company is deleted. But older deletions may have left orphaned products behind.
 
+## Fix System Accounts
+
+**IMPORTANT: Run this BEFORE using ai-buy or gambling features for the first time!**
+
+This script ensures both the "System" and "QuickBuck Casino Reserve" accounts are not owned by players:
+
+```bash
+npm run fix-system-account
+```
+
+You'll be prompted for:
+1. Your Convex admin key
+
+The script will fix **TWO** critical accounts:
+
+### 1. System Account (for AI purchases, loans, initial deposits)
+- Checks if a "System" user exists (creates one if not)
+- Checks if a "System" account exists and who owns it
+- If owned by a player (like "saltjsx"), transfers ownership to the system user
+- If it doesn't exist, creates it with the system user as owner
+- Sets unlimited balance for market operations
+
+### 2. Casino Reserve Account (for gambling operations)
+- Checks if a "QuickBuck Casino" user exists (creates one if not)
+- Checks if a "QuickBuck Casino Reserve" account exists and who owns it
+- If owned by a player (like "saltjsx"), transfers ownership to the casino user
+- If it doesn't exist, creates it with the casino user as owner
+- Sets unlimited balance for casino operations
+
+**Why this is needed:**
+The original code had a bug where the first user to trigger account creation would become the owner of these special accounts. This meant:
+- AI purchases were crediting/debiting a real player's account (System account issue)
+- Casino winnings/losses were affecting a real player's balance (Casino Reserve issue)
+
+**When to run:**
+- ⚠️ **RIGHT NOW** - Before using `ai-buy` or gambling features
+- If you notice a player's account balance changing during AI purchases
+- If you notice a player's account balance changing during casino games
+- After any economy reset
+
+## AI Market Simulation
+
+Simulate realistic market demand by having an AI agent purchase products based on their appeal, quality, and pricing:
+
+```bash
+npm run ai-buy
+```
+
+You'll be prompted for:
+1. Your Gemini API key (get one from [Google AI Studio](https://aistudio.google.com/app/apikey))
+2. Your Convex admin key
+
+The script will:
+1. Fetch all products from the database
+2. Send them to Google's Gemini 2.0 Flash Lite model in batches
+3. AI analyzes each product and determines purchase quantity (1-100) based on:
+   - Product quality (0-100 scale)
+   - Price point (affordable items get more purchases)
+   - Name and description appeal
+   - Tags and relevance
+   - Historical sales data
+4. Show you the top 10 most demanded products
+5. Display total statistics (total spend, average quantity, etc.)
+6. Ask for confirmation
+7. Process all purchases in batches:
+   - Updates product sales statistics
+   - Credits company accounts
+   - Creates ledger entries
+   - Makes companies public if balance > $50,000
+
+**Features:**
+- 🤖 Uses Gemini 2.0 Flash Lite (fast and efficient)
+- 💰 Unlimited budget - AI must purchase every product
+- 📊 Quantities vary realistically (1-100 per product)
+- 🔄 Batch processing for efficiency
+- 📝 Full transaction logging
+- 🚨 Fallback mechanism if AI fails to respond
+- 💼 Automatic company status updates
+
+**Model Information:**
+- **Model**: `gemini-2.0-flash-lite`
+- **Provider**: Google AI
+- **Cost**: Free tier available (15 RPM, 1500 RPD)
+- **Context Window**: 1M tokens
+
+**Use Cases:**
+- Seed the marketplace with realistic purchase data
+- Test product pricing and demand
+- Bootstrap new deployments
+- Simulate market activity for demos
+
 ## Future Improvements
 
 - [ ] Add dry-run mode (show what would be deleted without actually deleting)
@@ -158,5 +249,7 @@ The company deletion process now automatically deactivates all products when a c
 - [ ] Add option to export flagged items to CSV before deleting
 - [ ] Support for custom moderation rules/criteria
 - [ ] Auto-fix orphaned products after company deletion
+- [ ] Add configurable budget limits for AI purchases
+- [ ] Support for multiple AI models (OpenAI, Anthropic, etc.)
 
 ````

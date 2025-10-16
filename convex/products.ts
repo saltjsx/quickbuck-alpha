@@ -189,7 +189,7 @@ export const automaticPurchase = internalMutation({
   // Random spend between $300,000 and $425,000
   const totalSpend = Math.floor(Math.random() * 125000) + 300000;
 
-    // Get system account (buyer)
+    // Get or create system account (buyer)
     // OPTIMIZED: Use by_name index for system account lookup
     let systemAccount = await ctx.db
       .query("accounts")
@@ -197,7 +197,35 @@ export const automaticPurchase = internalMutation({
       .first();
 
     if (!systemAccount) {
-      throw new Error("System account not found");
+      // Get or create a designated system user (not a real player)
+      let systemUser = await ctx.db
+        .query("users")
+        .filter((q) => q.eq(q.field("name"), "System"))
+        .first();
+      
+      if (!systemUser) {
+        const systemUserId = await ctx.db.insert("users", {
+          name: "System",
+          email: "system@quickbuck.internal",
+          tokenIdentifier: "system-internal-account",
+        });
+        systemUser = await ctx.db.get(systemUserId);
+      }
+
+      // Create system account with the system user as owner
+      const systemAccountId = await ctx.db.insert("accounts", {
+        name: "System",
+        type: "personal",
+        ownerId: systemUser!._id,
+        balance: Number.MAX_SAFE_INTEGER, // Unlimited funds for market purchases
+        createdAt: Date.now(),
+      });
+      
+      systemAccount = await ctx.db.get(systemAccountId);
+    }
+    
+    if (!systemAccount) {
+      throw new Error("Failed to create or retrieve system account");
     }
 
   let remainingBudget = totalSpend;
@@ -627,5 +655,211 @@ export const adminDeleteProducts = mutation({
     }
 
     return results;
+  },
+});
+
+// Admin mutation for AI-driven purchases (requires admin key)
+export const adminAIPurchase = mutation({
+  args: {
+    purchases: v.array(v.object({
+      productId: v.id("products"),
+      quantity: v.number(),
+    })),
+    adminKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Check admin key
+    if (args.adminKey !== process.env.ADMIN_KEY) {
+      throw new Error("Invalid admin key");
+    }
+
+    // Get or create system account (buyer)
+    let systemAccount = await ctx.db
+      .query("accounts")
+      .withIndex("by_name", (q) => q.eq("name", "System"))
+      .first();
+
+    if (!systemAccount) {
+      // Get or create a designated system user (not a real player)
+      let systemUser = await ctx.db
+        .query("users")
+        .filter((q) => q.eq(q.field("name"), "System"))
+        .first();
+      
+      if (!systemUser) {
+        const systemUserId = await ctx.db.insert("users", {
+          name: "System",
+          email: "system@quickbuck.internal",
+          tokenIdentifier: "system-internal-account-ai-purchases",
+        });
+        systemUser = await ctx.db.get(systemUserId);
+      }
+
+      // Create system account with the system user as owner
+      const systemAccountId = await ctx.db.insert("accounts", {
+        name: "System",
+        type: "personal",
+        ownerId: systemUser!._id,
+        balance: Number.MAX_SAFE_INTEGER, // Unlimited funds for market purchases
+        createdAt: Date.now(),
+      });
+      
+      systemAccount = await ctx.db.get(systemAccountId);
+    }
+    
+    if (!systemAccount) {
+      throw new Error("Failed to create or retrieve system account");
+    }
+
+    let totalSpent = 0;
+    let totalItems = 0;
+    let productsPurchased = 0;
+    const errors: string[] = [];
+    const companiesAffected = new Set<string>();
+    
+    // Track transactions by company for batching
+    const companyTransactions = new Map<string, {
+      companyId: any;
+      accountId: any;
+      totalRevenue: number;
+      totalCost: number;
+      productSales: Map<string, {
+        product: any;
+        count: number;
+        totalRevenue: number;
+        totalCost: number;
+      }>;
+    }>();
+
+    // Process each purchase
+    for (const purchase of args.purchases) {
+      try {
+        const product = await ctx.db.get(purchase.productId);
+        if (!product || !product.isActive) {
+          errors.push(`Product ${purchase.productId} not found or inactive`);
+          continue;
+        }
+
+        const company = await ctx.db.get(product.companyId);
+        if (!company) {
+          errors.push(`Company for product ${product.name} not found`);
+          continue;
+        }
+
+        // Calculate costs
+        const pricePerUnit = Math.max(product.price, 0.01);
+        const quantity = Math.max(1, Math.min(100, Math.floor(purchase.quantity)));
+        const totalPrice = pricePerUnit * quantity;
+        const costPercentage = 0.23 + Math.random() * 0.44;
+        const productionCost = totalPrice * costPercentage;
+        const profit = totalPrice - productionCost;
+
+        // Track company transactions
+        const companyKey = String(company._id);
+        companiesAffected.add(companyKey);
+        
+        if (!companyTransactions.has(companyKey)) {
+          companyTransactions.set(companyKey, {
+            companyId: company._id,
+            accountId: company.accountId,
+            totalRevenue: 0,
+            totalCost: 0,
+            productSales: new Map(),
+          });
+        }
+
+        const companyTx = companyTransactions.get(companyKey)!;
+        companyTx.totalRevenue += totalPrice;
+        companyTx.totalCost += productionCost;
+
+        const productKey = String(product._id);
+        const existing = companyTx.productSales.get(productKey) ?? {
+          product,
+          count: 0,
+          totalRevenue: 0,
+          totalCost: 0,
+        };
+
+        existing.count += quantity;
+        existing.totalRevenue += totalPrice;
+        existing.totalCost += productionCost;
+        companyTx.productSales.set(productKey, existing);
+
+        totalSpent += totalPrice;
+        totalItems += quantity;
+        productsPurchased++;
+      } catch (error) {
+        errors.push(`Error processing ${purchase.productId}: ${error instanceof Error ? error.message : "Unknown error"}`);
+      }
+    }
+
+    // Process all batched transactions
+    for (const [, tx] of companyTransactions) {
+      try {
+        // Get account
+        const account = await ctx.db.get(tx.accountId);
+        if (!account || !("balance" in account)) {
+          errors.push(`Account not found for company`);
+          continue;
+        }
+
+        // Update account balance
+        const netProfit = tx.totalRevenue - tx.totalCost;
+        const newBalance = (account.balance ?? 0) + netProfit;
+        await ctx.db.patch(tx.accountId, { balance: newBalance });
+
+        // Create ledger entries and update products
+        for (const [, salesData] of tx.productSales) {
+          const product = salesData.product;
+
+          // Ledger entry for revenue
+          await ctx.db.insert("ledger", {
+            fromAccountId: systemAccount._id,
+            toAccountId: tx.accountId,
+            amount: salesData.totalRevenue,
+            type: "ai_purchase",
+            productId: product._id,
+            batchCount: salesData.count,
+            description: `AI market purchase: ${salesData.count}x ${product.name}`,
+            createdAt: Date.now(),
+          });
+
+          // Ledger entry for costs
+          await ctx.db.insert("ledger", {
+            fromAccountId: tx.accountId,
+            toAccountId: systemAccount._id,
+            amount: salesData.totalCost,
+            type: "ai_purchase",
+            productId: product._id,
+            batchCount: salesData.count,
+            description: `AI purchase cost: ${salesData.count}x ${product.name}`,
+            createdAt: Date.now(),
+          });
+
+          // Update product statistics
+          await ctx.db.patch(product._id, {
+            totalSales: (product.totalSales || 0) + salesData.count,
+            totalRevenue: (product.totalRevenue || 0) + salesData.totalRevenue,
+            totalCosts: (product.totalCosts || 0) + salesData.totalCost,
+          });
+        }
+
+        // Check if company should go public
+        const company = await ctx.db.get(tx.companyId);
+        if (company && "isPublic" in company && !company.isPublic && newBalance > 50000) {
+          await ctx.db.patch(company._id, { isPublic: true });
+        }
+      } catch (error) {
+        errors.push(`Error processing company transaction: ${error instanceof Error ? error.message : "Unknown error"}`);
+      }
+    }
+
+    return {
+      totalSpent,
+      totalItems,
+      productsPurchased,
+      companiesAffected: companiesAffected.size,
+      errors: errors.length > 0 ? errors.slice(0, 10) : undefined, // Limit error messages
+    };
   },
 });

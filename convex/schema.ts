@@ -31,7 +31,8 @@ export default defineSchema({
       v.literal("loan_disbursement"),
       v.literal("loan_repayment"),
       v.literal("loan_default"),
-      v.literal("company_sale")
+      v.literal("company_sale"),
+      v.literal("ai_purchase")
     ),
     description: v.optional(v.string()),
     productId: v.optional(v.id("products")),
