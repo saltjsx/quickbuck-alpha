@@ -12,7 +12,7 @@ export function BanCheckComponent() {
         // Check if user is banned via a public check endpoint
         // This will need to be called after auth is set up
         const userEmail = localStorage.getItem("userEmail");
-        
+
         if (userEmail) {
           // Query will be set up once API types are regenerated
           setIsLoading(false);
@@ -38,7 +38,9 @@ export function BanCheckComponent() {
         <div className="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full mx-4">
           <div className="text-center">
             <div className="text-6xl mb-4">⛔</div>
-            <h1 className="text-3xl font-bold text-red-600 mb-2">Account Banned</h1>
+            <h1 className="text-3xl font-bold text-red-600 mb-2">
+              Account Banned
+            </h1>
             <p className="text-gray-600 mb-6">
               Your account has been banned from QuickBuck.
             </p>
@@ -73,7 +75,7 @@ export function WarningPopup() {
 
   // Warning popup will be integrated once API types are regenerated
   // For now, returning null placeholder
-  
+
   if (!currentWarning) {
     return null;
   }
@@ -84,15 +86,11 @@ export function WarningPopup() {
         <div className="text-center">
           <div className="text-5xl mb-4">⚠️</div>
           <h2 className="text-2xl font-bold text-orange-600 mb-2">Warning</h2>
-          <p className="text-gray-600 mb-6 text-lg">
-            {currentWarning.reason}
-          </p>
+          <p className="text-gray-600 mb-6 text-lg">{currentWarning.reason}</p>
           <p className="text-xs text-gray-500 mb-6">
             Issued: {new Date(currentWarning.createdAt).toLocaleDateString()}
           </p>
-          <button
-            className="w-full bg-orange-600 text-white py-2 rounded-lg hover:bg-orange-700 transition font-medium"
-          >
+          <button className="w-full bg-orange-600 text-white py-2 rounded-lg hover:bg-orange-700 transition font-medium">
             I Understand
           </button>
         </div>
