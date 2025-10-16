@@ -62,19 +62,18 @@ export const createProduct = mutation({
 });
 
 // Get all active products
-// OPTIMIZED: Batch fetch all companies at once with limits
+// BANDWIDTH FIX: Reduced from 1000 to 200 products max
+// Loading 1000 products with company data was causing 200+ MB bandwidth usage
 export const getActiveProducts = query({
   args: {},
   handler: async (ctx) => {
-    // Convex limits: single pagination per query, max 1000 items per page
-    // Fetch as many as possible in one paginated query
-    const paginationResult = await ctx.db
+    // BANDWIDTH FIX: Reduced from 1000 to 200 - most users don't need 1000 products
+    // The query was returning massive amounts of data on every marketplace page load
+    const products = await ctx.db
       .query("products")
       .withIndex("by_active", (q) => q.eq("isActive", true))
       .order("desc")
-      .paginate({ numItems: 1000, cursor: null });
-    
-    const products = paginationResult.page;    // OPTIMIZED: Batch fetch all companies at once (minimal fields)
+      .take(200); // REDUCED from paginate(1000) to take(200)    // OPTIMIZED: Batch fetch all companies at once (minimal fields)
     const companyIds = [...new Set(products.map(p => p.companyId))];
     const companies = await Promise.all(companyIds.map(id => ctx.db.get(id)));
     
