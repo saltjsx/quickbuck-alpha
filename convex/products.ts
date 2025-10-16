@@ -176,13 +176,13 @@ export const updateProduct = mutation({
 export const automaticPurchase = internalMutation({
   args: {},
   handler: async (ctx) => {
-    // Get all active products
-    // BANDWIDTH OPTIMIZATION: Limit to 150 products (reduced from 200)
-    // Focus on most popular products to reduce bandwidth
+    // Get active products
+    // We want to consider up to 150 products per run for fairness and bandwidth
+    const MAX_PRODUCTS_TO_CONSIDER = 150;
     const products = await ctx.db
       .query("products")
       .withIndex("by_active", (q) => q.eq("isActive", true))
-      .take(300); // REDUCED from 200 to 150
+      .take(MAX_PRODUCTS_TO_CONSIDER);
 
     if (products.length === 0) return { message: "No products available" };
 
@@ -368,7 +368,9 @@ export const automaticPurchase = internalMutation({
     const mediumBudget = budgetPerTier;
     const expensiveBudget = budgetPerTier;
 
-    const MAX_PURCHASES_PER_PRODUCT = 50;
+  const MAX_PURCHASES_PER_PRODUCT = 50;
+  // Hard cap for total purchases in this automatic run
+  const MAX_TOTAL_PURCHASES = 150;
 
     // Step 3: Purchase from each tier with fair company allocation
     const purchaseFromTier = async (tierProducts: any[], tierBudget: number) => {
@@ -404,7 +406,12 @@ export const automaticPurchase = internalMutation({
         let attempts = 0;
         const maxAttempts = MAX_PURCHASES_PER_PRODUCT * sortedProducts.length;
 
-        while (allocation >= 0.01 && tierRemainingBudget >= 0.01 && attempts < maxAttempts) {
+        while (
+          allocation >= 0.01 &&
+          tierRemainingBudget >= 0.01 &&
+          attempts < maxAttempts &&
+          purchases.length < MAX_TOTAL_PURCHASES
+        ) {
           const product = sortedProducts[rotationIndex % sortedProducts.length];
           const productPrice = Math.max(product.price, 0.01);
 
@@ -440,6 +447,7 @@ export const automaticPurchase = internalMutation({
         for (const product of prioritizedProducts) {
           const productPrice = Math.max(product.price, 0.01);
           if (productPrice > tierRemainingBudget) continue;
+          if (purchases.length >= MAX_TOTAL_PURCHASES) break;
 
           const success = await recordPurchase(product);
           if (!success) continue;
@@ -459,9 +467,13 @@ export const automaticPurchase = internalMutation({
     
     // Step 4: Use remaining budget for bonus round - randomly select products from all tiers
     remainingBudget = Math.max(unusedCheap + unusedMedium + unusedExpensive, 0);
-    const bonusProducts = [...products].sort(() => Math.random() - 0.5).slice(0, 30);
+    // Expand bonus candidates to up to MAX_PRODUCTS_TO_CONSIDER and respect the global purchases cap
+    const BONUS_CANDIDATES = Math.min(products.length, MAX_PRODUCTS_TO_CONSIDER);
+    const bonusProducts = [...products].sort(() => Math.random() - 0.5).slice(0, BONUS_CANDIDATES);
     
     for (const product of bonusProducts) {
+      if (purchases.length >= MAX_TOTAL_PURCHASES) break;
+
       const productPrice = Math.max(product.price, 0.01);
       if (remainingBudget < productPrice) continue;
 
