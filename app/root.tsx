@@ -16,6 +16,7 @@ import "./app.css";
 import { Analytics } from "@vercel/analytics/react";
 import { Toaster } from "~/components/toaster";
 import { Databuddy } from "@databuddy/sdk/react";
+import { ModerationProviders } from "~/components/moderation/moderation-components";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -115,6 +116,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
       signInFallbackRedirectUrl="/"
     >
       <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+        <ModerationProviders />
         <Outlet />
         <Toaster />
       </ConvexProviderWithClerk>

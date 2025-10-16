@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "convex/react";
+import { api } from "convex/_generated/api";
 
 export function BanCheckComponent() {
   const [isBanned, setIsBanned] = useState(false);
@@ -71,10 +72,35 @@ export function BanCheckComponent() {
 }
 
 export function WarningPopup() {
-  const [currentWarning, setCurrentWarning] = useState<any>(null);
+  const warnings = useQuery(api.moderation.getUnacknowledgedWarnings);
+  const acknowledgeWarning = useMutation(api.moderation.acknowledgeWarning);
+  const [isAcknowledging, setIsAcknowledging] = useState(false);
 
-  // Warning popup will be integrated once API types are regenerated
-  // For now, returning null placeholder
+  // Debug: Log warnings data
+  useEffect(() => {
+    if (warnings !== undefined) {
+      console.log("[WarningPopup] Warnings loaded:", warnings);
+      console.log("[WarningPopup] Number of warnings:", warnings?.length || 0);
+    }
+  }, [warnings]);
+
+  // Get the first unacknowledged warning
+  const currentWarning = warnings && warnings.length > 0 ? warnings[0] : null;
+
+  const handleAcknowledge = async () => {
+    if (!currentWarning) return;
+
+    console.log("[WarningPopup] Acknowledging warning:", currentWarning._id);
+    setIsAcknowledging(true);
+    try {
+      await acknowledgeWarning({ warningId: currentWarning._id });
+      console.log("[WarningPopup] Warning acknowledged successfully");
+    } catch (error) {
+      console.error("[WarningPopup] Error acknowledging warning:", error);
+    } finally {
+      setIsAcknowledging(false);
+    }
+  };
 
   if (!currentWarning) {
     return null;
@@ -90,8 +116,12 @@ export function WarningPopup() {
           <p className="text-xs text-gray-500 mb-6">
             Issued: {new Date(currentWarning.createdAt).toLocaleDateString()}
           </p>
-          <button className="w-full bg-orange-600 text-white py-2 rounded-lg hover:bg-orange-700 transition font-medium">
-            I Understand
+          <button
+            onClick={handleAcknowledge}
+            disabled={isAcknowledging}
+            className="w-full bg-orange-600 text-white py-2 rounded-lg hover:bg-orange-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isAcknowledging ? "Acknowledging..." : "I Understand"}
           </button>
         </div>
       </div>
