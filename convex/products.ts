@@ -356,66 +356,86 @@ export const automaticPurchase = internalMutation({
       return true;
     };
 
-    // IMPROVED: Fair distribution system with equal budget split across price ranges
-    // Step 1: Categorize products by price tier
-    const cheapProducts = products.filter((p) => p.price <= 150);
-    const mediumProducts = products.filter((p) => p.price > 150 && p.price < 1000);
-    const expensiveProducts = products.filter((p) => p.price >= 1000);
+    // IMPROVED: Fairer distribution system ensuring every company gets money
+    // New algorithm:
+    // 1. Group products by company
+    // 2. Ensure EVERY company with active products gets at least some purchases (proportional to their products)
+    // 3. Weight by product quality and sales history for fairness
+    // 4. Use remaining budget for bonus round with weighted lottery
 
-    // Step 2: Split budget equally across the three price ranges
-    const budgetPerTier = totalSpend / 3;
-    const cheapBudget = budgetPerTier;
-    const mediumBudget = budgetPerTier;
-    const expensiveBudget = budgetPerTier;
+    const MAX_PURCHASES_PER_PRODUCT = 50;
+    const MAX_TOTAL_PURCHASES = 200; // Increased from 150 to ensure more companies participate
 
-  const MAX_PURCHASES_PER_PRODUCT = 50;
-  // Hard cap for total purchases in this automatic run
-  const MAX_TOTAL_PURCHASES = 150;
+    // Group products by company with metadata
+    interface CompanyProductGroup {
+      companyId: any;
+      products: any[];
+      totalQuality: number;
+      avgSalesHistory: number;
+      totalSalesValue: number;
+    }
 
-    // Step 3: Purchase from each tier with fair company allocation
-    const purchaseFromTier = async (tierProducts: any[], tierBudget: number) => {
-      if (tierProducts.length === 0 || tierBudget <= 0) return tierBudget;
+    const companyGroups = new Map<string, CompanyProductGroup>();
+    
+    for (const product of products) {
+      const key = idToKey(product.companyId);
+      const existingGroup = companyGroups.get(key);
+      const quality = product.quality ?? 100;
+      const sales = product.totalSales ?? 0;
+      const revenue = product.totalRevenue ?? 0;
 
-      const companyGroups = new Map<string, any[]>();
-      tierProducts.forEach((product) => {
-        const key = idToKey(product.companyId);
-        const productsForCompany = companyGroups.get(key) ?? [];
-        productsForCompany.push(product);
-        companyGroups.set(key, productsForCompany);
-      });
+      if (existingGroup) {
+        existingGroup.products.push(product);
+        existingGroup.totalQuality += quality;
+        existingGroup.avgSalesHistory += sales;
+        existingGroup.totalSalesValue += revenue;
+      } else {
+        companyGroups.set(key, {
+          companyId: product.companyId,
+          products: [product],
+          totalQuality: quality,
+          avgSalesHistory: sales,
+          totalSalesValue: revenue,
+        });
+      }
+    }
 
-      const companyEntries = Array.from(companyGroups.entries());
-      if (companyEntries.length === 0) return tierBudget;
+    const companyList = Array.from(companyGroups.values());
+    if (companyList.length === 0) {
+      // No companies, use remaining budget for bonus round
+      remainingBudget = totalSpend;
+    } else {
+      // Phase 1: GUARANTEED MINIMUM - Every company gets at least something
+      // Allocate 60% of budget to ensure minimum presence for all companies
+      const minimumPhaseAllocation = totalSpend * 0.6;
+      const perCompanyMinimum = minimumPhaseAllocation / companyList.length;
 
-      let tierRemainingBudget = tierBudget;
-      const equitableAllocation = tierBudget / companyEntries.length;
+      // Randomize company order to avoid bias
+      const shuffledCompanies = [...companyList].sort(() => Math.random() - 0.5);
 
-      // Randomize processing order each run to avoid deterministic bias
-      companyEntries.sort(() => Math.random() - 0.5);
-
-      for (const [, products] of companyEntries) {
-        let allocation = equitableAllocation;
-        const sortedProducts = [...products].sort((a, b) => {
+      for (const companyGroup of shuffledCompanies) {
+        let companyBudget = perCompanyMinimum;
+        const sortedProducts = [...companyGroup.products].sort((a, b) => {
           const qualityA = a.quality ?? 100;
           const qualityB = b.quality ?? 100;
-          if (qualityA !== qualityB) return qualityB - qualityA;
-          return b.price - a.price;
+          if (qualityA !== qualityB) return qualityB - qualityA; // Higher quality first
+          return (b.totalRevenue ?? 0) - (a.totalRevenue ?? 0); // Better-selling products second
         });
 
         let rotationIndex = 0;
         let attempts = 0;
         const maxAttempts = MAX_PURCHASES_PER_PRODUCT * sortedProducts.length;
 
+        // Round-robin through this company's products
         while (
-          allocation >= 0.01 &&
-          tierRemainingBudget >= 0.01 &&
+          companyBudget >= 0.01 &&
           attempts < maxAttempts &&
           purchases.length < MAX_TOTAL_PURCHASES
         ) {
           const product = sortedProducts[rotationIndex % sortedProducts.length];
           const productPrice = Math.max(product.price, 0.01);
 
-          if (productPrice > allocation || productPrice > tierRemainingBudget) {
+          if (productPrice > companyBudget) {
             rotationIndex++;
             attempts++;
             continue;
@@ -429,58 +449,75 @@ export const automaticPurchase = internalMutation({
             continue;
           }
 
-          allocation -= productPrice;
-          tierRemainingBudget -= productPrice;
+          companyBudget -= productPrice;
+        }
+
+        remainingBudget -= (perCompanyMinimum - companyBudget);
+      }
+
+      // Phase 2: WEIGHTED BONUS ROUND - Use remaining budget with quality/sales weighting
+      // Companies with better products get more weight
+      remainingBudget = Math.max(remainingBudget, 0);
+
+      if (remainingBudget >= 0.01 && purchases.length < MAX_TOTAL_PURCHASES) {
+        // Calculate weights based on product quality and sales history
+        // Higher quality and higher sales = higher probability of getting bonus purchases
+        const weightedCompanies = companyList
+          .map((group) => ({
+            ...group,
+            weight:
+              (group.totalQuality / 100) * // Quality factor (0-100 scale)
+              (1 + Math.log(Math.max(group.avgSalesHistory, 1))) * // Sales history factor (logarithmic)
+              group.products.length, // More products = more chances
+          }))
+          .sort((a, b) => b.weight - a.weight); // Sort descending by weight
+
+        const totalWeight = weightedCompanies.reduce((sum, g) => sum + g.weight, 0);
+
+        for (const companyGroup of weightedCompanies) {
+          if (remainingBudget < 0.01 || purchases.length >= MAX_TOTAL_PURCHASES) break;
+
+          // Allocate budget proportional to this company's weight
+          const companyBonus = (companyGroup.weight / totalWeight) * remainingBudget;
+          let companyBudgetLeft = companyBonus;
+
+          // Randomize product selection for variety
+          const shuffledProducts = [...companyGroup.products].sort(() => Math.random() - 0.5);
+
+          for (const product of shuffledProducts) {
+            if (companyBudgetLeft < 0.01 || purchases.length >= MAX_TOTAL_PURCHASES) break;
+
+            const productPrice = Math.max(product.price, 0.01);
+            if (productPrice > companyBudgetLeft) continue;
+
+            const success = await recordPurchase(product, true);
+            if (!success) continue;
+
+            companyBudgetLeft -= productPrice;
+          }
+
+          remainingBudget -= companyBonus;
         }
       }
 
-      if (tierRemainingBudget >= 0.01) {
-        const prioritizedProducts = [...tierProducts]
-          .sort((a, b) => {
-            const qualityA = a.quality ?? 100;
-            const qualityB = b.quality ?? 100;
-            if (qualityA !== qualityB) return qualityB - qualityA;
-            return a.price - b.price;
-          })
-          .slice(0, 25);
+      remainingBudget = Math.max(remainingBudget, 0);
+    }
 
-        for (const product of prioritizedProducts) {
-          const productPrice = Math.max(product.price, 0.01);
-          if (productPrice > tierRemainingBudget) continue;
-          if (purchases.length >= MAX_TOTAL_PURCHASES) break;
+    // Phase 3: EMERGENCY BONUS - If still budget left, do random purchases (shouldn't happen often)
+    if (remainingBudget >= 0.01 && purchases.length < MAX_TOTAL_PURCHASES) {
+      const emergencyProducts = [...products].sort(() => Math.random() - 0.5);
+      
+      for (const product of emergencyProducts) {
+        if (purchases.length >= MAX_TOTAL_PURCHASES) break;
 
-          const success = await recordPurchase(product);
-          if (!success) continue;
+        const productPrice = Math.max(product.price, 0.01);
+        if (remainingBudget < productPrice) continue;
 
-          tierRemainingBudget -= productPrice;
+        const success = await recordPurchase(product, true);
+        if (!success) continue;
 
-          if (tierRemainingBudget < 0.01) break;
-        }
+        remainingBudget -= productPrice;
       }
-
-      return tierRemainingBudget;
-    };
-
-    const unusedCheap = await purchaseFromTier(cheapProducts, cheapBudget);
-    const unusedMedium = await purchaseFromTier(mediumProducts, mediumBudget);
-    const unusedExpensive = await purchaseFromTier(expensiveProducts, expensiveBudget);
-    
-    // Step 4: Use remaining budget for bonus round - randomly select products from all tiers
-    remainingBudget = Math.max(unusedCheap + unusedMedium + unusedExpensive, 0);
-    // Expand bonus candidates to up to MAX_PRODUCTS_TO_CONSIDER and respect the global purchases cap
-    const BONUS_CANDIDATES = Math.min(products.length, MAX_PRODUCTS_TO_CONSIDER);
-    const bonusProducts = [...products].sort(() => Math.random() - 0.5).slice(0, BONUS_CANDIDATES);
-    
-    for (const product of bonusProducts) {
-      if (purchases.length >= MAX_TOTAL_PURCHASES) break;
-
-      const productPrice = Math.max(product.price, 0.01);
-      if (remainingBudget < productPrice) continue;
-
-      const success = await recordPurchase(product, true);
-      if (!success) continue;
-
-      remainingBudget -= productPrice;
     }
 
     // Now process all batched transactions using pre-fetched account data
