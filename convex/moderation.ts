@@ -2,13 +2,47 @@ import { mutation, query, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 
-// Check if a user is banned
+// Check if a user is banned (by email - for admin use)
 export const checkIfBanned = query({
   args: { email: v.string() },
   handler: async (ctx, args) => {
     const ban = await ctx.db
       .query("userBans")
       .withIndex("by_email", (q) => q.eq("email", args.email.toLowerCase()))
+      .first();
+
+    if (ban) {
+      return {
+        isBanned: true,
+        reason: ban.reason,
+        bannedAt: ban.bannedAt,
+      };
+    }
+
+    return {
+      isBanned: false,
+    };
+  },
+});
+
+// Check if the current authenticated user is banned
+export const checkCurrentUserBan = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { isBanned: false };
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.subject))
+      .unique();
+
+    if (!user || !user.email) return { isBanned: false };
+
+    const userEmail = user.email.toLowerCase();
+    const ban = await ctx.db
+      .query("userBans")
+      .withIndex("by_email", (q) => q.eq("email", userEmail))
       .first();
 
     if (ban) {

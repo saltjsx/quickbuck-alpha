@@ -3,37 +3,27 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
 
 export function BanCheckComponent() {
-  const [isBanned, setIsBanned] = useState(false);
-  const [banReason, setBanReason] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
+  const banStatus = useQuery(api.moderation.checkCurrentUserBan);
 
+  // Debug logging
   useEffect(() => {
-    const checkBanStatus = async () => {
-      try {
-        // Check if user is banned via a public check endpoint
-        // This will need to be called after auth is set up
-        const userEmail = localStorage.getItem("userEmail");
-
-        if (userEmail) {
-          // Query will be set up once API types are regenerated
-          setIsLoading(false);
-        } else {
-          setIsLoading(false);
-        }
-      } catch (error) {
-        console.error("Error checking ban status:", error);
-        setIsLoading(false);
+    if (banStatus !== undefined) {
+      console.log("[BanCheck] Ban status loaded:", banStatus);
+      if (banStatus.isBanned) {
+        console.log("[BanCheck] ⛔ USER IS BANNED - Reason:", banStatus.reason);
+      } else {
+        console.log("[BanCheck] ✅ User is not banned");
       }
-    };
+    }
+  }, [banStatus]);
 
-    checkBanStatus();
-  }, []);
-
-  if (isLoading) {
+  // Loading state
+  if (banStatus === undefined) {
     return null;
   }
 
-  if (isBanned) {
+  // Check if banned
+  if (banStatus.isBanned) {
     return (
       <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
         <div className="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full mx-4">
@@ -47,7 +37,8 @@ export function BanCheckComponent() {
             </p>
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
               <p className="text-sm text-gray-700">
-                <span className="font-semibold">Reason:</span> {banReason}
+                <span className="font-semibold">Reason:</span>{" "}
+                {banStatus.reason}
               </p>
             </div>
             <p className="text-sm text-gray-500 mb-6">
