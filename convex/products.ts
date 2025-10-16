@@ -469,36 +469,38 @@ export const automaticPurchase = internalMutation({
       // Patch account balance
       await ctx.db.patch(tx.accountId, { balance: currentBalance });
 
-      // BANDWIDTH OPTIMIZATION: Batch all ledger inserts and product patches
-      const ledgerInserts: any[] = [];
+      // CRITICAL BANDWIDTH FIX: Write 2 ledger entries per COMPANY (not per product)
+      // This reduces write bandwidth by ~90% compared to 2 entries per product
+      // For example: 30 companies with 150 products = 60 writes instead of 300 writes
+      const totalProductsSold = Array.from(tx.productSales.values())
+        .reduce((sum, sales) => sum + sales.count, 0);
+
+      // One entry for total revenue from all products
+      await ctx.db.insert("ledger", {
+        fromAccountId: systemAccount._id,
+        toAccountId: tx.accountId,
+        amount: tx.totalRevenue,
+        type: "marketplace_batch" as const,
+        description: `Marketplace batch: ${totalProductsSold} items sold across ${tx.productSales.size} products`,
+        createdAt: Date.now(),
+      });
+
+      // One entry for total production costs from all products
+      await ctx.db.insert("ledger", {
+        fromAccountId: tx.accountId,
+        toAccountId: systemAccount._id,
+        amount: tx.totalCost,
+        type: "marketplace_batch" as const,
+        description: `Marketplace batch: Production costs for ${totalProductsSold} items`,
+        createdAt: Date.now(),
+      });
+
+      // Batch all product patches
       const productPatches: Array<{ id: any; updates: any }> = [];
-      
+
       for (const [productIdStr, salesData] of tx.productSales) {
         const product = productMap.get(productIdStr);
         if (!product) continue;
-
-        // Queue ledger entries for batch insert
-        ledgerInserts.push({
-          fromAccountId: systemAccount._id,
-          toAccountId: tx.accountId,
-          amount: salesData.totalRevenue,
-          type: "marketplace_batch" as const,
-          productId: product._id,
-          batchCount: salesData.count,
-          description: `Batch purchase of ${salesData.count}x ${product.name}`,
-          createdAt: Date.now(),
-        });
-
-        ledgerInserts.push({
-          fromAccountId: tx.accountId,
-          toAccountId: systemAccount._id,
-          amount: salesData.totalCost,
-          type: "marketplace_batch" as const,
-          productId: product._id,
-          batchCount: salesData.count,
-          description: `Batch production cost for ${salesData.count}x ${product.name}`,
-          createdAt: Date.now(),
-        });
 
         if ("totalSales" in product) {
           const updatedTotals = {
@@ -515,12 +517,11 @@ export const automaticPurchase = internalMutation({
           productPatches.push({ id: product._id, updates: updatedTotals });
         }
       }
-      
-      // Execute all batched operations
-      await Promise.all([
-        ...ledgerInserts.map(entry => ctx.db.insert("ledger", entry)),
-        ...productPatches.map(({ id, updates }) => ctx.db.patch(id, updates))
-      ]);
+
+      // Execute all product patches in parallel
+      await Promise.all(
+        productPatches.map(({ id, updates }) => ctx.db.patch(id, updates))
+      );
     }
 
     // After all purchases, check which companies should be made public using cached balances

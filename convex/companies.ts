@@ -96,20 +96,20 @@ export const updateCompanyMetrics = internalMutation({
       lastUpdated: Date.now(),
     };
 
-    // OPTIMIZATION: Only write if values have actually changed (skip redundant writes)
+    // BANDWIDTH FIX: Only write if values have actually changed
+    // Don't update timestamp if no data changed - this eliminates wasteful writes
     if (existing30d) {
-      const hasChanged = 
+      const hasChanged =
         existing30d.totalRevenue !== metrics30d.totalRevenue ||
         existing30d.totalCosts !== metrics30d.totalCosts ||
         existing30d.totalExpenses !== metrics30d.totalExpenses ||
         existing30d.transactionCount !== metrics30d.transactionCount;
-      
+
       if (hasChanged) {
         await ctx.db.patch(existing30d._id, metrics30d);
-      } else {
-        // Just update timestamp if no data changed
-        await ctx.db.patch(existing30d._id, { lastUpdated: Date.now() });
       }
+      // CRITICAL FIX: Don't write at all if nothing changed
+      // The cacheAge check at line 35-42 already prevents frequent updates
     } else {
       await ctx.db.insert("companyMetrics", metrics30d);
     }
