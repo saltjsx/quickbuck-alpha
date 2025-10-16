@@ -46,7 +46,17 @@ export const getAllCompanies = query({
     // BANDWIDTH OPTIMIZATION: Reduced from 200 to 100 by default, max 150
     // Most users only view top 10-20 companies on leaderboards
     const limit = Math.min(args.limit || 100, 150);
-    const companies = await ctx.db.query("companies").take(limit);
+    const allCompanies = await ctx.db.query("companies").take(limit);
+    
+    // Batch fetch owners to filter out system companies
+    const ownerIds = allCompanies.map(c => c.ownerId);
+    const owners = await Promise.all(ownerIds.map(id => ctx.db.get(id)));
+    
+    // Filter out companies owned by system accounts
+    const companies = allCompanies.filter((company: any, index: number) => {
+      const owner = owners[index];
+      return owner && owner.name !== "System" && owner.name !== "QuickBuck Casino";
+    });
     
     // Batch fetch all accounts
     const accountIds = companies.map(c => c.accountId);
@@ -60,15 +70,14 @@ export const getAllCompanies = query({
       }
     });
     
-    // Batch fetch owners
-    const ownerIds = companies.map(c => c.ownerId);
-    const owners = await Promise.all(ownerIds.map(id => ctx.db.get(id)));
-    
-    // Create owner map
+    // Create owner map from already-fetched owners
     const ownerMap = new Map();
-    owners.forEach((owner: any, index) => {
+    companies.forEach((company: any, index: number) => {
+      // Find the owner from the filtered companies
+      const originalIndex = allCompanies.findIndex(c => c._id === company._id);
+      const owner = owners[originalIndex];
       if (owner) {
-        ownerMap.set(ownerIds[index], owner.name || "Unknown");
+        ownerMap.set(company.ownerId, owner.name || "Unknown");
       }
     });
 
@@ -138,7 +147,12 @@ export const getAllPlayers = query({
     // BANDWIDTH OPTIMIZATION: Reduced from 200 to 100 by default, max 150
     // Most users only view top 10-20 players on leaderboards
     const limit = Math.min(args.limit || 100, 150);
-    const users = await ctx.db.query("users").take(limit);
+    const allUsers = await ctx.db.query("users").take(limit);
+    
+    // Filter out system accounts (System and QuickBuck Casino)
+    const users = allUsers.filter(
+      (user: any) => user.name !== "System" && user.name !== "QuickBuck Casino"
+    );
     
     // Batch fetch personal accounts
     const userIds = users.map(u => u._id);
@@ -329,23 +343,32 @@ export const getLeaderboard = query({
       userMap.set(id, (users[index] as UserDoc | null) ?? null);
     });
 
-    const highestBalancePlayers = personalAccounts.slice(0, limit).map((account) => {
-      const user = userMap.get(account.ownerId) ?? null;
-      const { displayName, username } = formatPlayerName(user);
-      const avatarUrl = normalizeImageUrl(user?.image ?? null);
-      return {
-        accountId: account._id,
-        userId: account.ownerId,
-        name: displayName,
-        username,
-        avatarUrl,
-        balance: account.balance ?? 0,
-      };
+    // Filter out system accounts
+    const filteredUserIds = userIds.filter((id) => {
+      const user = userMap.get(id);
+      return user && user.name !== "System" && user.name !== "QuickBuck Casino";
     });
+
+    const highestBalancePlayers = personalAccounts
+      .filter((account) => filteredUserIds.includes(account.ownerId))
+      .slice(0, limit)
+      .map((account) => {
+        const user = userMap.get(account.ownerId) ?? null;
+        const { displayName, username } = formatPlayerName(user);
+        const avatarUrl = normalizeImageUrl(user?.image ?? null);
+        return {
+          accountId: account._id,
+          userId: account.ownerId,
+          name: displayName,
+          username,
+          avatarUrl,
+          balance: account.balance ?? 0,
+        };
+      });
 
     // --- Net worth ranking -------------------------------------------------
     // OPTIMIZED: Limit candidate set to avoid excessive processing
-    const candidateUserIds = new Set<Id<"users">>(userIds);
+    const candidateUserIds = new Set<Id<"users">>(filteredUserIds);
 
     // Only consider top stockholders (limit to 50 to avoid excessive queries)
     const topHoldings = await ctx.db
@@ -523,8 +546,40 @@ export const getLeaderboard = query({
       }
     }
 
+    // Fetch owners to filter out system companies
+    const companyIdsForOwnerFetch = companyAccounts
+      .map(acc => acc.companyId)
+      .filter((id): id is Id<"companies"> => id !== undefined);
+    
+    const companiesForOwnerFetch = await Promise.all(
+      companyIdsForOwnerFetch.map(id => companyCache.get(id))
+    );
+    
+    const ownerIdsForCompanies = companiesForOwnerFetch
+      .filter((company): company is CompanyDoc => company !== null && company !== undefined)
+      .map(c => c.ownerId);
+    
+    const companyOwnersForFilter = await Promise.all(
+      ownerIdsForCompanies.map(id => ctx.db.get(id))
+    );
+    
+    // Create a set of company IDs that should be filtered out
+    const systemOwnedCompanyIds = new Set<string>();
+    companiesForOwnerFetch.forEach((company, index) => {
+      if (!company) return;
+      const owner = companyOwnersForFilter[index];
+      if (owner && (owner.name === "System" || owner.name === "QuickBuck Casino")) {
+        systemOwnedCompanyIds.add(company._id);
+      }
+    });
+
+    // Filter out company accounts owned by system
+    const filteredCompanyAccounts = companyAccounts.filter(
+      (account) => account.companyId && !systemOwnedCompanyIds.has(account.companyId)
+    );
+
     // Batch fetch company stock holdings
-    const companyIds = companyAccounts
+    const companyIds = filteredCompanyAccounts
       .map(acc => acc.companyId)
       .filter((id): id is Id<"companies"> => id !== undefined);
     
@@ -543,7 +598,7 @@ export const getLeaderboard = query({
       companyHoldingsMap.set(companyId, companyHoldingsResults[index] as StockDoc[]);
     });
 
-    const mostCashCompanies = companyAccounts
+    const mostCashCompanies = filteredCompanyAccounts
       .filter((account) => account.companyId && companyCache.get(account.companyId))
       .slice(0, limit)
       .map((account) => {
@@ -597,7 +652,7 @@ export const getLeaderboard = query({
       }
     };
 
-    for (const account of companyAccounts) {
+    for (const account of filteredCompanyAccounts) {
       if (!account.companyId) continue;
       addCompanyCandidate(companyCache.get(account.companyId) ?? null);
     }
@@ -608,8 +663,16 @@ export const getLeaderboard = query({
       addCompanyCandidate(company);
     }
 
+    // Filter out system-owned companies from candidates
+    const filteredCompanyCandidates = new Map<Id<"companies">, CompanyDoc>();
+    for (const [companyId, company] of companyCandidates) {
+      if (!systemOwnedCompanyIds.has(companyId)) {
+        filteredCompanyCandidates.set(companyId, company);
+      }
+    }
+
     // Fetch holdings for companies not already in companyHoldingsMap
-    const additionalCompanyIds = Array.from(companyCandidates.keys())
+    const additionalCompanyIds = Array.from(filteredCompanyCandidates.keys())
       .filter(id => !companyHoldingsMap.has(id));
     
     if (additionalCompanyIds.length > 0) {
@@ -628,7 +691,7 @@ export const getLeaderboard = query({
       });
     }
 
-    const mostValuableCompanies = Array.from(companyCandidates.values())
+    const mostValuableCompanies = Array.from(filteredCompanyCandidates.values())
       .map((company) => {
         const holdings = companyHoldingsMap.get(company._id) ?? [];
         

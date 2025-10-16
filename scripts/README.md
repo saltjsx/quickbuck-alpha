@@ -191,6 +191,38 @@ The original code had a bug where the first user to trigger account creation wou
 - If you notice a player's account balance changing during casino games
 - After any economy reset
 
+## Manual Bot Purchase (CLI Tool)
+
+Interactive CLI tool to manually purchase products as the QuickBuck bot:
+
+```bash
+npm run bot-buy
+```
+
+You'll be prompted for:
+1. Your Convex admin key
+
+The script provides an interactive menu:
+- **List products**: Type `list` to see all available products with IDs, prices, and sales
+- **Purchase**: Enter product ID and quantity (1-100,000)
+- **Confirmation**: Reviews purchase before executing
+- **Multiple purchases**: Can make multiple purchases in one session
+- **Exit**: Type `exit` or answer 'no' to quit
+
+**Features:**
+- 🔍 Browse products with details (ID, name, company, price, sales)
+- 💰 Manually purchase any quantity from 1 to 100,000
+- ✅ Confirmation before each purchase
+- 📊 Shows results (total spent, items purchased, companies affected)
+- 🔄 Continuous loop for multiple purchases
+- ⚡ Uses the System account (unlimited funds)
+
+**Use Cases:**
+- Testing specific product purchases
+- Manually boosting specific products
+- Debugging purchase logic
+- Simulating targeted market activity
+
 ## AI Market Simulation
 
 Simulate realistic market demand by having an AI agent purchase products based on their appeal, quality, and pricing:
