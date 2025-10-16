@@ -15,6 +15,7 @@ export default [
     route("dashboard/leaderboard", "routes/dashboard/leaderboard.tsx"),
     route("dashboard/companies/:companyId", "routes/dashboard/companies.$companyId.tsx"),
     route("dashboard/companies", "routes/dashboard/companies.tsx"),
+    route("dashboard/company-sales", "routes/dashboard/company-sales.tsx"),
     route("dashboard/marketplace", "routes/dashboard/marketplace.tsx"),
     route("dashboard/stocks/:companyId", "routes/dashboard/stocks.$companyId.tsx"),
     route("dashboard/stocks", "routes/dashboard/stocks.tsx"),
