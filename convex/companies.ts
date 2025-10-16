@@ -96,20 +96,20 @@ export const updateCompanyMetrics = internalMutation({
       lastUpdated: Date.now(),
     };
 
-    // OPTIMIZATION: Only write if values have actually changed (skip redundant writes)
+    // ULTRA-OPTIMIZATION: Only write if values have actually changed (skip ALL redundant writes)
+    // Don't even update timestamp if data hasn't changed - reduces unnecessary writes
     if (existing30d) {
-      const hasChanged = 
+      const hasChanged =
         existing30d.totalRevenue !== metrics30d.totalRevenue ||
         existing30d.totalCosts !== metrics30d.totalCosts ||
         existing30d.totalExpenses !== metrics30d.totalExpenses ||
         existing30d.transactionCount !== metrics30d.transactionCount;
-      
+
       if (hasChanged) {
         await ctx.db.patch(existing30d._id, metrics30d);
-      } else {
-        // Just update timestamp if no data changed
-        await ctx.db.patch(existing30d._id, { lastUpdated: Date.now() });
       }
+      // REMOVED: Timestamp-only updates - they waste bandwidth with no benefit
+      // The cron runs frequently enough that timestamp staleness doesn't matter
     } else {
       await ctx.db.insert("companyMetrics", metrics30d);
     }

@@ -469,36 +469,19 @@ export const automaticPurchase = internalMutation({
       // Patch account balance
       await ctx.db.patch(tx.accountId, { balance: currentBalance });
 
-      // BANDWIDTH OPTIMIZATION: Batch all ledger inserts and product patches
-      const ledgerInserts: any[] = [];
+      // ULTRA-BANDWIDTH OPTIMIZATION: Consolidate ledger entries per company instead of per product
+      // This reduces 600+ ledger writes per cron run to just 2 writes per company
       const productPatches: Array<{ id: any; updates: any }> = [];
-      
+      const productNames: string[] = [];
+      let totalProductCount = 0;
+
       for (const [productIdStr, salesData] of tx.productSales) {
         const product = productMap.get(productIdStr);
         if (!product) continue;
 
-        // Queue ledger entries for batch insert
-        ledgerInserts.push({
-          fromAccountId: systemAccount._id,
-          toAccountId: tx.accountId,
-          amount: salesData.totalRevenue,
-          type: "marketplace_batch" as const,
-          productId: product._id,
-          batchCount: salesData.count,
-          description: `Batch purchase of ${salesData.count}x ${product.name}`,
-          createdAt: Date.now(),
-        });
-
-        ledgerInserts.push({
-          fromAccountId: tx.accountId,
-          toAccountId: systemAccount._id,
-          amount: salesData.totalCost,
-          type: "marketplace_batch" as const,
-          productId: product._id,
-          batchCount: salesData.count,
-          description: `Batch production cost for ${salesData.count}x ${product.name}`,
-          createdAt: Date.now(),
-        });
+        // Track product names for consolidated description
+        productNames.push(`${salesData.count}x ${product.name}`);
+        totalProductCount += salesData.count;
 
         if ("totalSales" in product) {
           const updatedTotals = {
@@ -515,12 +498,39 @@ export const automaticPurchase = internalMutation({
           productPatches.push({ id: product._id, updates: updatedTotals });
         }
       }
-      
-      // Execute all batched operations
-      await Promise.all([
-        ...ledgerInserts.map(entry => ctx.db.insert("ledger", entry)),
-        ...productPatches.map(({ id, updates }) => ctx.db.patch(id, updates))
-      ]);
+
+      // Create ONE consolidated revenue ledger entry per company
+      const revenueDescription = productNames.length <= 3
+        ? `Marketplace sales: ${productNames.join(", ")}`
+        : `Marketplace sales: ${totalProductCount} items across ${productNames.length} products`;
+
+      await ctx.db.insert("ledger", {
+        fromAccountId: systemAccount._id,
+        toAccountId: tx.accountId,
+        amount: tx.totalRevenue,
+        type: "marketplace_batch" as const,
+        description: revenueDescription,
+        createdAt: Date.now(),
+      });
+
+      // Create ONE consolidated cost ledger entry per company
+      const costDescription = productNames.length <= 3
+        ? `Production costs: ${productNames.join(", ")}`
+        : `Production costs: ${totalProductCount} items across ${productNames.length} products`;
+
+      await ctx.db.insert("ledger", {
+        fromAccountId: tx.accountId,
+        toAccountId: systemAccount._id,
+        amount: tx.totalCost,
+        type: "marketplace_batch" as const,
+        description: costDescription,
+        createdAt: Date.now(),
+      });
+
+      // Execute all product patches in parallel
+      await Promise.all(
+        productPatches.map(({ id, updates }) => ctx.db.patch(id, updates))
+      );
     }
 
     // After all purchases, check which companies should be made public using cached balances
