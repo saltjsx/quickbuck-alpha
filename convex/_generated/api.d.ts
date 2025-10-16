@@ -24,6 +24,7 @@ import type * as gamble from "../gamble.js";
 import type * as http from "../http.js";
 import type * as leaderboard from "../leaderboard.js";
 import type * as loans from "../loans.js";
+import type * as moderation from "../moderation.js";
 import type * as products from "../products.js";
 import type * as queries from "../queries.js";
 import type * as stocks from "../stocks.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   leaderboard: typeof leaderboard;
   loans: typeof loans;
+  moderation: typeof moderation;
   products: typeof products;
   queries: typeof queries;
   stocks: typeof stocks;
