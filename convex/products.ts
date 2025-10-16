@@ -469,36 +469,27 @@ export const automaticPurchase = internalMutation({
       // Patch account balance
       await ctx.db.patch(tx.accountId, { balance: currentBalance });
 
-      // BANDWIDTH OPTIMIZATION: Batch all ledger inserts and product patches
+      // BANDWIDTH OPTIMIZATION: Create single ledger entry per company instead of per product
+      // Use minimal description to reduce bytes written
+      const productCount = tx.productSales.size;
+
       const ledgerInserts: any[] = [];
       const productPatches: Array<{ id: any; updates: any }> = [];
-      
+
+      // Single entry with total revenue (incoming to company)
+      ledgerInserts.push({
+        fromAccountId: systemAccount._id,
+        toAccountId: tx.accountId,
+        amount: tx.totalRevenue,
+        type: "marketplace_batch" as const,
+        batchCount: productCount,
+        description: `Batch (${productCount})`,
+        createdAt: Date.now(),
+      });
+
       for (const [productIdStr, salesData] of tx.productSales) {
         const product = productMap.get(productIdStr);
         if (!product) continue;
-
-        // Queue ledger entries for batch insert
-        ledgerInserts.push({
-          fromAccountId: systemAccount._id,
-          toAccountId: tx.accountId,
-          amount: salesData.totalRevenue,
-          type: "marketplace_batch" as const,
-          productId: product._id,
-          batchCount: salesData.count,
-          description: `Batch purchase of ${salesData.count}x ${product.name}`,
-          createdAt: Date.now(),
-        });
-
-        ledgerInserts.push({
-          fromAccountId: tx.accountId,
-          toAccountId: systemAccount._id,
-          amount: salesData.totalCost,
-          type: "marketplace_batch" as const,
-          productId: product._id,
-          batchCount: salesData.count,
-          description: `Batch production cost for ${salesData.count}x ${product.name}`,
-          createdAt: Date.now(),
-        });
 
         if ("totalSales" in product) {
           const updatedTotals = {
