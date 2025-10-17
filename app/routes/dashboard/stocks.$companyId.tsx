@@ -95,19 +95,19 @@ export default function StockDetailPage() {
     [accounts, selectedAccount]
   );
 
-  const derivedBuyerType: "user" | "company" = selectedAccountObj?.companyId
-    ? "company"
-    : "user";
-
-  const companyHolderParams = useMemo(() => {
-    if (derivedBuyerType === "company" && selectedAccountObj?.companyId) {
-      return {
-        holderId: selectedAccountObj.companyId as Id<"companies">,
-        holderType: "company" as const,
-      };
-    }
-    return null;
-  }, [derivedBuyerType, selectedAccountObj?.companyId]);
+  const { derivedBuyerType, companyHolderParams } = useMemo(() => {
+    const buyerType: "user" | "company" = selectedAccountObj?.companyId
+      ? "company"
+      : "user";
+    const params =
+      buyerType === "company" && selectedAccountObj?.companyId
+        ? {
+            holderId: selectedAccountObj.companyId as Id<"companies">,
+            holderType: "company" as const,
+          }
+        : null;
+    return { derivedBuyerType: buyerType, companyHolderParams: params };
+  }, [selectedAccountObj?.companyId]);
 
   const holderPortfolio = useQuery(
     api.stocks.getHolderPortfolio,
