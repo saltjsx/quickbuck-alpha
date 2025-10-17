@@ -12,6 +12,13 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { MultiSelect } from "~/components/ui/multi-select";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
+import {
   ShoppingBag,
   ShoppingCart,
   Search,
@@ -43,9 +50,6 @@ export default function MarketplacePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
-  const [priceRange, setPriceRange] = useState<
-    "all" | "low" | "medium" | "high"
-  >("all");
   const [sortBy, setSortBy] = useState<
     "name" | "price-low" | "price-high" | "sales"
   >("name");
@@ -95,7 +99,7 @@ export default function MarketplacePage() {
     };
   }, [products]);
 
-  // Filter and sort products
+  // Filter and sort products (price range removed, replaced by simpler filters)
   const filteredProducts = useMemo(() => {
     if (!products) return [];
 
@@ -117,14 +121,7 @@ export default function MarketplacePage() {
         selectedTags.size === 0 ||
         product.tags?.some((tag: string) => selectedTags.has(tag));
 
-      // Price range filter
-      let matchesPrice = true;
-      if (priceRange === "low") matchesPrice = product.price < 50;
-      else if (priceRange === "medium")
-        matchesPrice = product.price >= 50 && product.price < 200;
-      else if (priceRange === "high") matchesPrice = product.price >= 200;
-
-      return matchesSearch && matchesCompany && matchesTags && matchesPrice;
+      return matchesSearch && matchesCompany && matchesTags;
     });
 
     // Sort products
@@ -148,7 +145,6 @@ export default function MarketplacePage() {
     searchQuery,
     selectedCompany,
     selectedTags,
-    priceRange,
     sortBy,
   ]);
 
@@ -168,16 +164,11 @@ export default function MarketplacePage() {
     setSearchQuery("");
     setSelectedCompany(null);
     setSelectedTags(new Set());
-    setPriceRange("all");
     setSortBy("name");
   };
 
   const hasActiveFilters =
-    searchQuery ||
-    selectedCompany ||
-    selectedTags.size > 0 ||
-    priceRange !== "all" ||
-    sortBy !== "name";
+    searchQuery || selectedCompany || selectedTags.size > 0 || sortBy !== "name";
 
   if (products === undefined) {
     return (
@@ -228,147 +219,74 @@ export default function MarketplacePage() {
               </CardContent>
             </Card>
 
-            {/* Filters */}
+            {/* Filters - redesigned toolbar */}
             <Card>
-              <CardHeader>
+              <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <SlidersHorizontal className="h-5 w-5" />
                   Filters & Sorting
                 </CardTitle>
+                <CardDescription>Refine the catalog with dropdown filters</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Company Filter */}
-                <div>
-                  <label className="text-sm font-medium mb-2 block">
-                    Company
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant={selectedCompany === null ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setSelectedCompany(null)}
+              <CardContent>
+                <div className="grid gap-3 md:grid-cols-3">
+                  {/* Company Dropdown */}
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">Company</label>
+                    <Select
+                      value={selectedCompany ?? "__all"}
+                      onValueChange={(v) => setSelectedCompany(v === "__all" ? null : v)}
                     >
-                      All Companies
-                    </Button>
-                    {companies.map((company) => (
-                      <Button
-                        key={company.name}
-                        variant={
-                          selectedCompany === company.name
-                            ? "default"
-                            : "outline"
-                        }
-                        size="sm"
-                        onClick={() =>
-                          setSelectedCompany(
-                            company.name === selectedCompany
-                              ? null
-                              : company.name
-                          )
-                        }
-                        className="flex items-center gap-2"
-                      >
-                        {company.logo && (
-                          <img
-                            src={company.logo}
-                            alt={company.name}
-                            className="h-4 w-4 object-contain rounded"
-                          />
-                        )}
-                        {company.name}
-                      </Button>
-                    ))}
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Companies" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-64">
+                        <SelectItem value="__all">All Companies</SelectItem>
+                        {companies.map((company) => (
+                          <SelectItem key={company.name} value={company.name}>
+                            {company.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                </div>
 
-                {/* Tags Filter */}
-                {allTags.length > 0 && (
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">
-                      Tags
-                    </label>
+                  {/* Tags Multi-select (dropdown) */}
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">Tags</label>
                     <MultiSelect
                       options={allTags}
                       selected={selectedTags}
                       onChange={setSelectedTags}
-                      placeholder="Select tags to filter..."
+                      placeholder="Select tags..."
                     />
                   </div>
+
+                  {/* Sort By Dropdown */}
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">Sort By</label>
+                    <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sort by" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="name">Name A-Z</SelectItem>
+                        <SelectItem value="price-low">Price: Low to High</SelectItem>
+                        <SelectItem value="price-high">Price: High to Low</SelectItem>
+                        <SelectItem value="sales">Most Popular</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {hasActiveFilters && (
+                  <div className="flex justify-end pt-3">
+                    <Button variant="outline" size="sm" onClick={clearFilters}>
+                      <X className="h-4 w-4 mr-2" />
+                      Clear Filters
+                    </Button>
+                  </div>
                 )}
-
-                {/* Price Range Filter */}
-                <div>
-                  <label className="text-sm font-medium mb-2 block">
-                    Price Range
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant={priceRange === "all" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setPriceRange("all")}
-                    >
-                      All Prices
-                    </Button>
-                    <Button
-                      variant={priceRange === "low" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setPriceRange("low")}
-                    >
-                      Under $50
-                    </Button>
-                    <Button
-                      variant={priceRange === "medium" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setPriceRange("medium")}
-                    >
-                      $50 - $200
-                    </Button>
-                    <Button
-                      variant={priceRange === "high" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setPriceRange("high")}
-                    >
-                      $200+
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Sort By */}
-                <div>
-                  <label className="text-sm font-medium mb-2 block">
-                    Sort By
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant={sortBy === "name" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setSortBy("name")}
-                    >
-                      Name A-Z
-                    </Button>
-                    <Button
-                      variant={sortBy === "price-low" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setSortBy("price-low")}
-                    >
-                      Price: Low to High
-                    </Button>
-                    <Button
-                      variant={sortBy === "price-high" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setSortBy("price-high")}
-                    >
-                      Price: High to Low
-                    </Button>
-                    <Button
-                      variant={sortBy === "sales" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setSortBy("sales")}
-                    >
-                      Most Popular
-                    </Button>
-                  </div>
-                </div>
               </CardContent>
             </Card>
 
@@ -403,22 +321,24 @@ export default function MarketplacePage() {
                 ) : (
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {filteredProducts.map((product: any) => (
-                      <div
-                        key={product._id}
-                        className="border rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
-                      >
+                      <Card key={product._id} className="overflow-hidden">
                         {product.imageUrl && (
                           <img
                             src={product.imageUrl}
                             alt={product.name}
-                            className="w-full h-48 object-cover"
+                            className="w-full h-44 object-cover"
                           />
                         )}
-                        <div className="p-4">
-                          <h3 className="font-semibold text-lg mb-1">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-base leading-tight">
                             {product.name}
-                          </h3>
-                          <div className="flex items-center gap-2 mb-2">
+                          </CardTitle>
+                          <CardDescription className="line-clamp-2">
+                            {product.description}
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div className="flex items-center gap-2">
                             {product.companyLogoUrl && (
                               <img
                                 src={product.companyLogoUrl}
@@ -430,27 +350,21 @@ export default function MarketplacePage() {
                               by {product.companyName}
                             </p>
                             {product.companyTicker && (
-                              <Badge
-                                variant="outline"
-                                className="text-xs font-mono"
-                              >
+                              <Badge variant="outline" className="text-xs font-mono">
                                 {product.companyTicker}
                               </Badge>
                             )}
                           </div>
-                          <p className="text-sm mb-3 line-clamp-2">
-                            {product.description}
-                          </p>
-                          <div className="flex items-center justify-between mb-3">
-                            <span className="text-2xl font-bold text-green-600">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xl font-semibold text-green-600">
                               ${product.price.toFixed(2)}
                             </span>
                             <span className="text-xs text-muted-foreground">
                               {product.totalSales} sales
                             </span>
                           </div>
-                          {product.tags.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mb-3">
+                          {!!product.tags?.length && (
+                            <div className="flex flex-wrap gap-1">
                               {product.tags.map((tag: string, i: number) => (
                                 <Badge
                                   key={i}
@@ -484,8 +398,8 @@ export default function MarketplacePage() {
                               ? "Insufficient Funds"
                               : "Purchase"}
                           </Button>
-                        </div>
-                      </div>
+                        </CardContent>
+                      </Card>
                     ))}
                   </div>
                 )}
