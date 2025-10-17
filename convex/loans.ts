@@ -1,7 +1,7 @@
 import { mutation, query, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 
-const MAX_LOAN_AMOUNT = 500_000;
+const MAX_LOAN_AMOUNT = 500_000_000;
 const DAILY_INTEREST_RATE = 0.05; // 5% daily
 const LOAN_DURATION_DAYS = 7;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;

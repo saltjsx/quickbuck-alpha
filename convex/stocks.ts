@@ -537,15 +537,9 @@ export const sellStock = mutation({
 
     const proceeds = args.shares * newPrice;
 
-    if (companyBalance < proceeds) {
-      throw new Error(
-        "Company does not have enough liquidity to complete this sale"
-      );
-    }
-
     const toBalance = toAccount.balance ?? 0;
 
-    // Update company balance
+    // Update company balance (can go negative/into debt)
     await ctx.db.patch(company.accountId, {
       balance: companyBalance - proceeds,
     });
