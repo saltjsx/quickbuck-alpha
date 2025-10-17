@@ -10,7 +10,7 @@
 import { api } from "../convex/_generated/api";
 import { ConvexHttpClient } from "convex/browser";
 
-const CONVEX_URL = process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL;
+const CONVEX_URL = process.env.VITE_CONVEX_URL || process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL;
 
 if (!CONVEX_URL) {
   console.error("CONVEX_URL environment variable not found");

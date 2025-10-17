@@ -9,25 +9,25 @@ The **Upgrades** feature introduces strategic power-ups that players can purchas
 ### 1. Revenue Boost
 Instantly increase a company's product revenue by a percentage.
 
-- **Low Tier**: 10% boost - $500,000
-- **Medium Tier**: 20% boost - $1,500,000
-- **High Tier**: 30% boost - $3,000,000
+- **Low Tier**: 10% boost - $5,000,000
+- **Medium Tier**: 20% boost - $15,000,000
+- **High Tier**: 30% boost - $30,000,000
 
 **Usage**: Can only be used on companies you own. Applies to all active products.
 
 ### 2. Stock Price Boost
 Increase any public company's stock price by a percentage.
 
-- **Low Tier**: 5% boost - $750,000
-- **High Tier**: 10% boost - $2,000,000
+- **Low Tier**: 5% boost - $10,000,000
+- **High Tier**: 10% boost - $25,000,000
 
 **Usage**: Can be used on any public company, including competitors.
 
 ### 3. Stock Price Lower
 Decrease any public company's stock price by a percentage.
 
-- **Low Tier**: 5% decrease - $1,000,000
-- **High Tier**: 10% decrease - $2,500,000
+- **Low Tier**: 5% decrease - $12,000,000
+- **High Tier**: 10% decrease - $30,000,000
 
 **Usage**: Can be used on any public company. Strategic for market manipulation.
 
@@ -157,11 +157,15 @@ This will populate the `upgrades` table with the 7 default upgrade packs.
 
 ## Pricing Strategy
 
-Upgrades are intentionally expensive to:
-1. Be aspirational goals for players
-2. Reward active gameplay and company building
-3. Create meaningful strategic decisions
-4. Prevent market manipulation spam
+Upgrades are intentionally **very expensive**:
+- Cheapest: $5,000,000 (Revenue Boost Low)
+- Most expensive: $30,000,000 (Revenue Boost High & Stock Price Lower High)
+
+This creates:
+1. Aspirational goals for players
+2. Rewards for active gameplay and company building
+3. Meaningful strategic decisions
+4. Prevention of market manipulation spam
 
 ## Performance Optimizations
 

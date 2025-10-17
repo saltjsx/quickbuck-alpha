@@ -38,7 +38,7 @@ export const initializeUpgrades = mutation({
       type: "revenue_boost",
       tier: "low",
       effectPercentage: 10,
-      price: 500000, // $500,000
+      price: 5000000, // $5,000,000
       isActive: true,
       createdAt: Date.now(),
     });
@@ -49,7 +49,7 @@ export const initializeUpgrades = mutation({
       type: "revenue_boost",
       tier: "medium",
       effectPercentage: 20,
-      price: 1500000, // $1,500,000
+      price: 15000000, // $15,000,000
       isActive: true,
       createdAt: Date.now(),
     });
@@ -60,7 +60,7 @@ export const initializeUpgrades = mutation({
       type: "revenue_boost",
       tier: "high",
       effectPercentage: 30,
-      price: 3000000, // $3,000,000
+      price: 30000000, // $30,000,000
       isActive: true,
       createdAt: Date.now(),
     });
@@ -72,7 +72,7 @@ export const initializeUpgrades = mutation({
       type: "stock_price_boost",
       tier: "low",
       effectPercentage: 5,
-      price: 750000, // $750,000
+      price: 10000000, // $10,000,000
       isActive: true,
       createdAt: Date.now(),
     });
@@ -83,7 +83,7 @@ export const initializeUpgrades = mutation({
       type: "stock_price_boost",
       tier: "high",
       effectPercentage: 10,
-      price: 2000000, // $2,000,000
+      price: 25000000, // $25,000,000
       isActive: true,
       createdAt: Date.now(),
     });
@@ -95,7 +95,7 @@ export const initializeUpgrades = mutation({
       type: "stock_price_lower",
       tier: "low",
       effectPercentage: 5,
-      price: 1000000, // $1,000,000
+      price: 12000000, // $12,000,000
       isActive: true,
       createdAt: Date.now(),
     });
@@ -106,7 +106,7 @@ export const initializeUpgrades = mutation({
       type: "stock_price_lower",
       tier: "high",
       effectPercentage: 10,
-      price: 2500000, // $2,500,000
+      price: 30000000, // $30,000,000
       isActive: true,
       createdAt: Date.now(),
     });
