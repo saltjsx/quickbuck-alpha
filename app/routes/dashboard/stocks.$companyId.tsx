@@ -9,7 +9,6 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  CardAction,
 } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -22,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import {
   TrendingUp,
   TrendingDown,
@@ -30,17 +30,9 @@ import {
   Users,
   Activity,
   BarChart3,
-  Clock,
 } from "lucide-react";
-import { useState } from "react";
-import {
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { useMemo, useState } from "react";
+import { Line, LineChart, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import {
   ChartContainer,
   ChartTooltip,
@@ -65,19 +57,18 @@ export default function StockDetailPage() {
   const navigate = useNavigate();
   const [shareAmount, setShareAmount] = useState("");
   const [selectedAccount, setSelectedAccount] = useState("");
-  const [buyerType, setBuyerType] = useState<"user" | "company">("user");
   const [timeRange, setTimeRange] = useState("7d");
+  const [mode, setMode] = useState<"buy" | "sell">("buy");
+  const { toast } = useToast();
 
   const formatTimestamp = (timestamp: number) => {
     const date = new Date(timestamp);
-
     if (timeRange === "1h" || timeRange === "6h") {
       return date.toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
       });
     }
-
     if (timeRange === "24h") {
       return date.toLocaleString([], {
         month: "short",
@@ -86,11 +77,7 @@ export default function StockDetailPage() {
         minute: "2-digit",
       });
     }
-
-    return date.toLocaleDateString([], {
-      month: "short",
-      day: "numeric",
-    });
+    return date.toLocaleDateString([], { month: "short", day: "numeric" });
   };
 
   const stockDetails = useQuery(
@@ -103,37 +90,37 @@ export default function StockDetailPage() {
   );
   const portfolio = useQuery(api.stocks.getPortfolio);
   const accounts = useQuery(api.accounts.getUserAccounts);
+  const selectedAccountObj = useMemo(
+    () => accounts?.find((a: any) => a._id === selectedAccount),
+    [accounts, selectedAccount]
+  );
 
-  // Determine holder for selected account
-  const getSelectedHolder = () => {
-    if (!selectedAccount || !accounts) return null;
-    const account = accounts.find((a: any) => a._id === selectedAccount);
-    if (!account) return null;
+  const derivedBuyerType: "user" | "company" = selectedAccountObj?.companyId
+    ? "company"
+    : "user";
 
-    if (buyerType === "user") {
-      // For personal accounts, we need to get the user ID
-      // Since portfolio is user-specific, we can use the portfolio query
-      return null; // Use portfolio for user holdings
-    } else if (buyerType === "company" && account.companyId) {
-      return { holderId: account.companyId, holderType: "company" as const };
+  const companyHolderParams = useMemo(() => {
+    if (derivedBuyerType === "company" && selectedAccountObj?.companyId) {
+      return {
+        holderId: selectedAccountObj.companyId as Id<"companies">,
+        holderType: "company" as const,
+      };
     }
     return null;
-  };
+  }, [derivedBuyerType, selectedAccountObj?.companyId]);
 
-  const selectedHolder = getSelectedHolder();
   const holderPortfolio = useQuery(
     api.stocks.getHolderPortfolio,
-    selectedHolder || "skip"
+    companyHolderParams || "skip"
   );
 
   const currentHolding =
-    buyerType === "user"
-      ? portfolio?.find((p: any) => p && p.companyId === companyId)
-      : holderPortfolio?.find((p: any) => p && p.companyId === companyId);
+    derivedBuyerType === "company"
+      ? holderPortfolio?.find((p: any) => p && p.companyId === companyId)
+      : portfolio?.find((p: any) => p && p.companyId === companyId);
 
   const buyStock = useMutation(api.stocks.buyStock);
   const sellStock = useMutation(api.stocks.sellStock);
-  const { toast } = useToast();
 
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -154,308 +141,374 @@ export default function StockDetailPage() {
   }
 
   const { company, stats, priceHistory, recentTransactions } = stockDetails;
-  const myHolding = portfolio.find((p) => p && p.companyId === companyId);
-
-  const handleBuy = async () => {
-    if (!selectedAccount || !shareAmount || isNaN(parseFloat(shareAmount))) {
-      toast({
-        title: "Invalid Input",
-        description: "Please enter a valid share amount and select an account",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      setIsProcessing(true);
-      const result = await buyStock({
-        companyId: companyId as Id<"companies">,
-        shares: parseFloat(shareAmount),
-        fromAccountId: selectedAccount as Id<"accounts">,
-        buyerType,
-      });
-      toast({
-        title: "Purchase Successful",
-        description: `Bought ${shareAmount} shares! Price moved from $${result.oldPrice.toFixed(
-          2
-        )} to $${result.newPrice.toFixed(2)} (${
-          result.priceChangePercent > 0 ? "+" : ""
-        }${result.priceChangePercent.toFixed(2)}%)`,
-      });
-      setShareAmount("");
-    } catch (error: any) {
-      toast({
-        title: "Purchase Failed",
-        description: error.message || "Failed to buy stock",
-        variant: "destructive",
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleSell = async () => {
-    if (!selectedAccount || !shareAmount || isNaN(parseFloat(shareAmount))) {
-      toast({
-        title: "Invalid Input",
-        description: "Please enter a valid share amount and select an account",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      setIsProcessing(true);
-      const result = await sellStock({
-        companyId: companyId as Id<"companies">,
-        shares: parseFloat(shareAmount),
-        toAccountId: selectedAccount as Id<"accounts">,
-        sellerType: buyerType,
-      });
-      toast({
-        title: "Sale Successful",
-        description: `Sold ${shareAmount} shares! Price moved from $${result.oldPrice.toFixed(
-          2
-        )} to $${result.newPrice.toFixed(2)} (${
-          result.priceChangePercent < 0 ? "" : "+"
-        }${result.priceChangePercent.toFixed(2)}%)`,
-      });
-      setShareAmount("");
-    } catch (error: any) {
-      toast({
-        title: "Sale Failed",
-        description: error.message || "Failed to sell stock",
-        variant: "destructive",
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
 
   const chartData = (
     priceHistory.length > 0
       ? priceHistory
       : [{ timestamp: Date.now(), price: stats.currentPrice }]
-  ).map((h) => ({
-    timestamp: h.timestamp,
-    price: h.price,
-  }));
+  ).map((h) => ({ timestamp: h.timestamp, price: h.price }));
 
   const isPositive = stats.priceChange24h >= 0;
 
+  const minTradeSize =
+    stats.totalShares > 1000 ? Math.ceil(stats.totalShares * 0.0001) : 1;
+  const accountBalance = (selectedAccountObj?.balance as number) ?? 0;
+  const currentPrice = stats.currentPrice;
+  const totalCost =
+    shareAmount && !isNaN(parseFloat(shareAmount))
+      ? parseFloat(shareAmount) * currentPrice
+      : 0;
+  const maxBuyShares = Math.max(
+    0,
+    Math.floor(accountBalance / Math.max(0.01, currentPrice))
+  );
+  const maxSellShares = Math.max(0, currentHolding?.shares ?? 0);
+
+  const setQuickShares = (kind: "min" | "10" | "100" | "1000" | "max") => {
+    if (kind === "min") return setShareAmount(String(minTradeSize));
+    if (kind === "max")
+      return setShareAmount(
+        String(mode === "buy" ? maxBuyShares : maxSellShares)
+      );
+    const val = Number(kind);
+    setShareAmount(String(val));
+  };
+
+  const onSubmitTrade = async () => {
+    if (!selectedAccount || !shareAmount || isNaN(parseFloat(shareAmount))) {
+      toast({
+        title: "Invalid input",
+        description: "Enter a valid share amount and select an account",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsProcessing(true);
+      if (mode === "buy") {
+        const result = await buyStock({
+          companyId: companyId as Id<"companies">,
+          shares: parseFloat(shareAmount),
+          fromAccountId: selectedAccount as Id<"accounts">,
+          buyerType: derivedBuyerType,
+        });
+        toast({
+          title: "Purchase successful",
+          description: `Bought ${shareAmount} shares. $${result.oldPrice.toFixed(
+            2
+          )} → $${result.newPrice.toFixed(2)} (${
+            result.priceChangePercent > 0 ? "+" : ""
+          }${result.priceChangePercent.toFixed(2)}%)`,
+        });
+      } else {
+        const result = await sellStock({
+          companyId: companyId as Id<"companies">,
+          shares: parseFloat(shareAmount),
+          toAccountId: selectedAccount as Id<"accounts">,
+          sellerType: derivedBuyerType,
+        });
+        toast({
+          title: "Sale successful",
+          description: `Sold ${shareAmount} shares. $${result.oldPrice.toFixed(
+            2
+          )} → $${result.newPrice.toFixed(2)} (${
+            result.priceChangePercent < 0 ? "" : "+"
+          }${result.priceChangePercent.toFixed(2)}%)`,
+        });
+      }
+      setShareAmount("");
+    } catch (error: any) {
+      toast({
+        title: "Trade failed",
+        description: error.message || "Try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <div className="flex flex-1 flex-col">
-      <div className="@container/main flex flex-1 flex-col gap-2">
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-          <div className="px-4 lg:px-6">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate("/dashboard/stocks")}
-              className="mb-4"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Market
-            </Button>
-
-            <div className="flex items-start justify-between mb-6">
-              <div className="flex items-center gap-4">
-                {company.logoUrl && (
-                  <img
-                    src={company.logoUrl}
-                    alt={company.name}
-                    className="h-16 w-16 object-contain rounded border"
-                  />
-                )}
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h1 className="text-3xl font-bold">{company.name}</h1>
-                    <Badge variant="outline" className="font-mono">
-                      {company.ticker}
-                    </Badge>
-                  </div>
-                  <p className="text-muted-foreground mt-1">
-                    Founded by {company.ownerName}
-                  </p>
+      <div className="@container/main flex flex-1 flex-col gap-6 py-6">
+        <div className="px-4 lg:px-8">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/dashboard/stocks")}
+            className="mb-4"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" /> Back to Market
+          </Button>
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-4">
+              {company.logoUrl && (
+                <img
+                  src={company.logoUrl}
+                  alt={company.name}
+                  className="h-16 w-16 object-contain rounded border"
+                />
+              )}
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-3xl font-semibold tracking-tight">
+                    {company.name}
+                  </h1>
+                  <Badge variant="outline" className="font-mono">
+                    {company.ticker}
+                  </Badge>
                 </div>
-              </div>
-              <div className="text-right">
-                <p className="text-3xl font-bold">
-                  ${stats.currentPrice.toFixed(2)}
+                <p className="text-muted-foreground mt-1">
+                  Founded by {company.ownerName}
                 </p>
-                <div
-                  className={`flex items-center gap-1 justify-end ${
-                    isPositive ? "text-green-600" : "text-red-600"
-                  }`}
-                >
-                  {isPositive ? (
-                    <TrendingUp className="h-4 w-4" />
-                  ) : (
-                    <TrendingDown className="h-4 w-4" />
-                  )}
-                  <span>
-                    ${Math.abs(stats.priceChange24h).toFixed(2)} (
-                    {stats.priceChangePercent24h > 0 ? "+" : ""}
-                    {stats.priceChangePercent24h.toFixed(2)}%)
-                  </span>
-                </div>
               </div>
             </div>
-
-            {/* Stats Grid */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    Market Cap
-                  </CardTitle>
-                  <DollarSign className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    $
-                    {stats.marketCap.toLocaleString("en-US", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    24h Volume
-                  </CardTitle>
-                  <Activity className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {stats.volume24h.toLocaleString()}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">7d High</CardTitle>
-                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    ${stats.highPrice.toFixed(2)}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">7d Low</CardTitle>
-                  <TrendingDown className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    ${stats.lowPrice.toFixed(2)}
-                  </div>
-                </CardContent>
-              </Card>
+            <div className="text-right">
+              <div className="text-3xl font-semibold">
+                ${stats.currentPrice.toFixed(2)}
+              </div>
+              <div
+                className={`mt-1 inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm ${
+                  isPositive
+                    ? "bg-emerald-500/10 text-emerald-600"
+                    : "bg-red-500/10 text-red-600"
+                }`}
+              >
+                {isPositive ? (
+                  <TrendingUp className="h-4 w-4" />
+                ) : (
+                  <TrendingDown className="h-4 w-4" />
+                )}
+                <span>
+                  {stats.priceChangePercent24h > 0 ? "+" : ""}
+                  {stats.priceChangePercent24h.toFixed(2)}% • $
+                  {Math.abs(stats.priceChange24h).toFixed(2)}
+                </span>
+              </div>
             </div>
+          </div>
+        </div>
 
-            {/* Price Chart */}
-            <Card className="mb-6">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5" />
-                  Price History
-                </CardTitle>
-                <CardDescription>
-                  Every price update captured during the selected time period
-                </CardDescription>
-                <CardAction>
-                  <Select value={timeRange} onValueChange={setTimeRange}>
-                    <SelectTrigger className="w-32">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1h">1 Hour</SelectItem>
-                      <SelectItem value="6h">6 Hours</SelectItem>
-                      <SelectItem value="24h">24 Hours</SelectItem>
-                      <SelectItem value="7d">7 Days</SelectItem>
-                      <SelectItem value="30d">30 Days</SelectItem>
-                      <SelectItem value="all">All Time</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </CardAction>
-              </CardHeader>
-              <CardContent>
-                <ChartContainer
-                  config={{
-                    price: {
-                      label: "Price",
-                      color: "hsl(var(--chart-1))",
-                    },
-                  }}
-                  className="h-[500px] w-full"
-                >
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData}>
-                      <XAxis
-                        dataKey="timestamp"
-                        type="number"
-                        domain={["dataMin", "dataMax"]}
-                        stroke="#888888"
-                        fontSize={12}
-                        tickLine={false}
-                        axisLine={false}
-                        tickFormatter={(value) =>
-                          typeof value === "number"
-                            ? formatTimestamp(value)
-                            : value
-                        }
-                        minTickGap={24}
-                      />
-                      <YAxis
-                        stroke="#888888"
-                        fontSize={12}
-                        tickLine={false}
-                        axisLine={false}
-                        domain={[
-                          (dataMin: number) => dataMin * 0.995,
-                          (dataMax: number) => dataMax * 1.005,
-                        ]}
-                        tickFormatter={(value) => `$${value.toFixed(2)}`}
-                      />
-                      <ChartTooltip
-                        content={
-                          <ChartTooltipContent
-                            labelFormatter={(value) =>
-                              typeof value === "number"
-                                ? formatTimestamp(value)
-                                : value
-                            }
-                          />
-                        }
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="price"
-                        stroke="#3b82f6"
-                        strokeWidth={3}
-                        dot={false}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </ChartContainer>
-              </CardContent>
-            </Card>
+        <div className="px-4 lg:px-8">
+          <div className="grid gap-6 lg:grid-cols-12">
+            {/* Left content */}
+            <div className="lg:col-span-8 space-y-6">
+              {/* Stats */}
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      Market Cap
+                    </CardTitle>
+                    <DollarSign className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      $
+                      {stats.marketCap.toLocaleString("en-US", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      24h Volume
+                    </CardTitle>
+                    <Activity className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {stats.volume24h.toLocaleString()}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      7d High
+                    </CardTitle>
+                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      ${stats.highPrice.toFixed(2)}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">
+                      7d Low
+                    </CardTitle>
+                    <TrendingDown className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      ${stats.lowPrice.toFixed(2)}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
-              {/* Trading */}
+              {/* Chart */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Trade {company.ticker}</CardTitle>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <BarChart3 className="h-5 w-5" />
+                      <CardTitle>Price History</CardTitle>
+                    </div>
+                    <Tabs
+                      value={timeRange}
+                      onValueChange={(v) => setTimeRange(v)}
+                    >
+                      <TabsList>
+                        <TabsTrigger value="1h">1h</TabsTrigger>
+                        <TabsTrigger value="6h">6h</TabsTrigger>
+                        <TabsTrigger value="24h">24h</TabsTrigger>
+                        <TabsTrigger value="7d">7d</TabsTrigger>
+                        <TabsTrigger value="30d">30d</TabsTrigger>
+                        <TabsTrigger value="all">All</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                  </div>
                   <CardDescription>
-                    Buy or sell shares of {company.name}
+                    Price updates during the selected time period
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ChartContainer
+                    config={{
+                      price: { label: "Price", color: "hsl(var(--chart-1))" },
+                    }}
+                    className="h-[420px] w-full"
+                  >
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={chartData}>
+                        <XAxis
+                          dataKey="timestamp"
+                          type="number"
+                          domain={["dataMin", "dataMax"]}
+                          stroke="#888888"
+                          fontSize={12}
+                          tickLine={false}
+                          axisLine={false}
+                          tickFormatter={(value) =>
+                            typeof value === "number"
+                              ? formatTimestamp(value)
+                              : String(value)
+                          }
+                          minTickGap={24}
+                        />
+                        <YAxis
+                          stroke="#888888"
+                          fontSize={12}
+                          tickLine={false}
+                          axisLine={false}
+                          domain={[
+                            (dataMin: number) => dataMin * 0.995,
+                            (dataMax: number) => dataMax * 1.005,
+                          ]}
+                          tickFormatter={(value) =>
+                            `$${Number(value).toFixed(2)}`
+                          }
+                        />
+                        <ChartTooltip
+                          content={
+                            <ChartTooltipContent
+                              labelFormatter={(value) =>
+                                typeof value === "number"
+                                  ? formatTimestamp(value)
+                                  : String(value)
+                              }
+                            />
+                          }
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="price"
+                          stroke="#3b82f6"
+                          strokeWidth={3}
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </ChartContainer>
+                </CardContent>
+              </Card>
+
+              {/* Recent transactions */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Recent Transactions</CardTitle>
+                  <CardDescription>Latest trading activity</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {recentTransactions.length === 0 ? (
+                      <p className="text-center py-8 text-muted-foreground">
+                        No transactions yet
+                      </p>
+                    ) : (
+                      recentTransactions.slice(0, 10).map((tx: any) => (
+                        <div
+                          key={tx._id}
+                          className="flex items-center justify-between p-3 border rounded-lg"
+                        >
+                          <div>
+                            <Badge
+                              variant={
+                                tx.transactionType === "buy"
+                                  ? "default"
+                                  : tx.transactionType === "sell"
+                                  ? "destructive"
+                                  : "secondary"
+                              }
+                            >
+                              {tx.transactionType}
+                            </Badge>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {new Date(tx.timestamp).toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-semibold">
+                              {tx.shares} shares @ $
+                              {tx.pricePerShare.toFixed(2)}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              Total: ${tx.totalAmount.toFixed(2)}
+                            </p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Right trade panel */}
+            <div className="lg:col-span-4">
+              <Card className="sticky top-16">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>Trade {company.ticker}</CardTitle>
+                    <Tabs value={mode} onValueChange={(v) => setMode(v as any)}>
+                      <TabsList>
+                        <TabsTrigger value="buy">Buy</TabsTrigger>
+                        <TabsTrigger value="sell">Sell</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                  </div>
+                  <CardDescription>
+                    {mode === "buy"
+                      ? "Purchase shares using your selected account"
+                      : "Sell shares to your selected account"}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -469,17 +522,6 @@ export default function StockDetailPage() {
                       </p>
                       <p className="text-sm">
                         Value: ${currentHolding.currentValue.toFixed(2)}
-                        <span
-                          className={
-                            currentHolding.gainLoss >= 0
-                              ? "text-green-600"
-                              : "text-red-600"
-                          }
-                        >
-                          {" "}
-                          ({currentHolding.gainLoss >= 0 ? "+" : ""}$
-                          {currentHolding.gainLoss.toFixed(2)})
-                        </span>
                       </p>
                     </div>
                   )}
@@ -505,24 +547,6 @@ export default function StockDetailPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="buyerType">Trading As</Label>
-                    <Select
-                      value={buyerType}
-                      onValueChange={(v) =>
-                        setBuyerType(v as "user" | "company")
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="user">Personal</SelectItem>
-                        <SelectItem value="company">Company</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
                     <Label htmlFor="shares">Number of Shares</Label>
                     <Input
                       id="shares"
@@ -530,51 +554,86 @@ export default function StockDetailPage() {
                       placeholder="0"
                       value={shareAmount}
                       onChange={(e) => setShareAmount(e.target.value)}
+                      min={minTradeSize}
                     />
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setQuickShares("min")}
+                      >
+                        Min
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setQuickShares("10")}
+                      >
+                        10
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setQuickShares("100")}
+                      >
+                        100
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setQuickShares("1000")}
+                      >
+                        1k
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setQuickShares("max")}
+                      >
+                        Max
+                      </Button>
+                    </div>
                     {shareAmount && !isNaN(parseFloat(shareAmount)) && (
-                      <p className="text-sm text-muted-foreground">
-                        Total cost: $
-                        {(parseFloat(shareAmount) * stats.currentPrice).toFixed(
-                          2
+                      <div className="text-sm text-muted-foreground">
+                        {mode === "buy" ? (
+                          <>Total cost: ${totalCost.toFixed(2)}</>
+                        ) : (
+                          <>
+                            Estimated proceeds: $
+                            {(parseFloat(shareAmount) * currentPrice).toFixed(
+                              2
+                            )}
+                          </>
                         )}
-                      </p>
+                      </div>
                     )}
                   </div>
 
-                  <div className="flex gap-2">
-                    <Button
-                      className="flex-1"
-                      onClick={handleBuy}
-                      disabled={isProcessing}
-                    >
-                      Buy
-                    </Button>
-                    <Button
-                      className="flex-1"
-                      variant="destructive"
-                      onClick={handleSell}
-                      disabled={
-                        isProcessing || !selectedAccount || !shareAmount
-                      }
-                    >
-                      Sell
-                    </Button>
+                  <Button
+                    className="w-full h-11"
+                    onClick={onSubmitTrade}
+                    disabled={isProcessing || !selectedAccount || !shareAmount}
+                  >
+                    {mode === "buy" ? "Buy" : "Sell"}
+                  </Button>
+
+                  <div className="text-xs text-muted-foreground">
+                    Min trade size: {minTradeSize.toLocaleString()} shares.
+                    Price may move on execution due to market impact.
                   </div>
                 </CardContent>
               </Card>
 
               {/* Ownership */}
-              <Card>
+              <Card className="mt-6">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Users className="h-5 w-5" />
-                    Ownership Structure
+                    <Users className="h-5 w-5" /> Ownership Structure
                   </CardTitle>
                   <CardDescription>Who owns {company.name}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {/* Founder */}
                     <div className="flex items-center justify-between p-3 bg-primary/10 rounded-lg border border-primary/20">
                       <div>
                         <p className="font-medium">
@@ -592,7 +651,6 @@ export default function StockDetailPage() {
                       </div>
                     </div>
 
-                    {/* Other Shareholders */}
                     {shareholders.shareholders.slice(0, 5).map((sh: any) => (
                       <div
                         key={sh.holderId}
@@ -639,55 +697,6 @@ export default function StockDetailPage() {
                 </CardContent>
               </Card>
             </div>
-
-            {/* Recent Transactions */}
-            <Card className="mt-6">
-              <CardHeader>
-                <CardTitle>Recent Transactions</CardTitle>
-                <CardDescription>Latest trading activity</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {recentTransactions.length === 0 ? (
-                    <p className="text-center py-8 text-muted-foreground">
-                      No transactions yet
-                    </p>
-                  ) : (
-                    recentTransactions.slice(0, 10).map((tx: any) => (
-                      <div
-                        key={tx._id}
-                        className="flex items-center justify-between p-3 border rounded-lg"
-                      >
-                        <div>
-                          <Badge
-                            variant={
-                              tx.transactionType === "buy"
-                                ? "default"
-                                : tx.transactionType === "sell"
-                                ? "destructive"
-                                : "secondary"
-                            }
-                          >
-                            {tx.transactionType}
-                          </Badge>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {new Date(tx.timestamp).toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-semibold">
-                            {tx.shares} shares @ ${tx.pricePerShare.toFixed(2)}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            Total: ${tx.totalAmount.toFixed(2)}
-                          </p>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </div>
       </div>

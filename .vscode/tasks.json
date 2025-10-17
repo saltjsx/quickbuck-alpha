@@ -18,6 +18,22 @@
 				"$tsc"
 			],
 			"group": "build"
+		},
+		{
+			"label": "Typecheck project",
+			"type": "shell",
+			"command": "pnpm -s run typecheck",
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build project",
+			"type": "shell",
+			"command": "pnpm -s run build",
+			"problemMatcher": [],
+			"group": "build"
 		}
 	]
 }
