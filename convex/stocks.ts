@@ -3,26 +3,28 @@ import { mutation, query, internalMutation } from "./_generated/server";
 import { computeOwnerMetricsFromHoldings } from "./utils/stocks";
 
 // ============================================================================
-// STOCK PRICING SYSTEM - Balance-Based Model
+// STOCK PRICING SYSTEM - Balance-Based Model with High Volatility
 // ============================================================================
 //
 // This system uses two primary mechanisms:
 //
 // 1. AUTOMATIC ADJUSTMENT (Every 10 minutes via cron)
-//    - Gradually moves prices toward target based on company balance
+//    - HIGHLY VOLATILE with random swings and market sentiment
 //    - Target Price = (Company Balance × 10) / 1,000,000 shares
-//    - Adjustment = 3% of the difference between current and target
+//    - Adjustment = Multiple random factors creating chaotic movement
 //
 // 2. PLAYER TRADE IMPACT (Immediate)
 //    - Price changes instantly when players buy/sell
 //    - Impact = (Transaction Value / Market Cap) × Impact Multiplier
-//    - Creates short-term volatility around the balance-based baseline
+//    - Creates dramatic volatility around the balance-based baseline
 //
 // ============================================================================
 
-// Configuration constants
-const ADJUSTMENT_FACTOR = 0.03;  // 3% of gap closed per 10-minute update
-const IMPACT_MULTIPLIER = 0.15;  // Player trade impact sensitivity
+// Configuration constants - HIGHLY VOLATILE
+const BASE_ADJUSTMENT_FACTOR = 0.02;  // 2% base adjustment
+const VOLATILITY_MULTIPLIER = 0.4;    // 40% random volatility
+const IMPACT_MULTIPLIER = 0.25;       // 25% player trade impact (increased from 0.15)
+const MAX_SWING_PERCENT = 0.15;       // Extreme swings up to 15% per update
 
 // ============================================================================
 // Helper Functions
@@ -65,11 +67,15 @@ function calculatePlayerTradeImpact(
   const priceChangePercent =
     (transactionValue / totalMarketCap) * IMPACT_MULTIPLIER;
 
+  // Add random volatility to trades (±25% variation on impact)
+  const volatilityFactor = 1 + (Math.random() - 0.5) * 0.5;
+  const volatileChangePercent = priceChangePercent * volatilityFactor;
+
   let newPrice: number;
   if (isBuying) {
-    newPrice = currentPrice * (1 + priceChangePercent);
+    newPrice = currentPrice * (1 + volatileChangePercent);
   } else {
-    newPrice = currentPrice * (1 - priceChangePercent);
+    newPrice = currentPrice * (1 - volatileChangePercent);
   }
 
   return Math.max(0.01, newPrice);
@@ -1218,7 +1224,7 @@ export const updateStockPrices = internalMutation({
   args: {},
   handler: async (ctx) => {
     // AUTOMATIC PRICE ADJUSTMENT: Runs every 10 minutes
-    // Gradually moves stock prices toward target based on company balance
+    // HIGHLY VOLATILE - creates extreme swings with market sentiment and random chaos
 
     const now = Date.now();
 
@@ -1242,7 +1248,17 @@ export const updateStockPrices = internalMutation({
       }
     });
 
-    // Update each company's stock price
+    // Generate global market sentiment (affects all stocks)
+    const globalSentiment = (Math.random() - 0.5) * 2; // -1 to 1
+    const marketMood = globalSentiment > 0.5 ? "bullish" : 
+                       globalSentiment < -0.5 ? "bearish" : 
+                       "neutral";
+    
+    // Market shock event (10% chance of major volatility event)
+    const hasShockEvent = Math.random() < 0.1;
+    const shockIntensity = hasShockEvent ? (Math.random() < 0.5 ? -1 : 1) : 0;
+
+    // Update each company's stock price with HIGH VOLATILITY
     for (const company of publicCompanies) {
       const companyBalance = balanceMap.get(company.accountId) ?? 0;
       const currentPrice = company.sharePrice;
@@ -1250,17 +1266,66 @@ export const updateStockPrices = internalMutation({
       // Calculate target price: (Balance × 10) / Total Shares
       const targetPrice = calculateTargetPrice(companyBalance, company.totalShares);
 
-      // Calculate adjustment: 3% of the difference
+      // Generate random walk (extreme volatility)
+      const randomWalk = (Math.random() - 0.5) * 2; // -1 to 1
+      const randomVolatility = randomWalk * VOLATILITY_MULTIPLIER;
+
+      // Company-specific momentum (use price history for more chaos)
+      const recentHistory = await ctx.db
+        .query("stockPriceHistory")
+        .withIndex("by_company_timestamp", (q: any) =>
+          q.eq("companyId", company._id).gt("timestamp", now - 60 * 60 * 1000)
+        )
+        .order("desc")
+        .take(3);
+
+      let momentum = 0;
+      if (recentHistory.length >= 2) {
+        const recentPrice = recentHistory[0].price;
+        const oldPrice = recentHistory[recentHistory.length - 1].price;
+        momentum = ((recentPrice - oldPrice) / oldPrice) * 0.5; // Momentum amplifies swings
+      }
+
+      // Calculate multi-factor adjustment
       const priceDifference = targetPrice - currentPrice;
-      const adjustment = priceDifference * ADJUSTMENT_FACTOR;
-      const newPrice = Math.max(0.01, currentPrice + adjustment);
+      
+      // Base adjustment (always pulls somewhat toward target)
+      const baseAdjustment = priceDifference * BASE_ADJUSTMENT_FACTOR;
+      
+      // Random volatility component (creates chaos)
+      const volatilityComponent = randomVolatility * currentPrice;
+      
+      // Market sentiment component (global mood affects all stocks)
+      const sentimentComponent = globalSentiment * currentPrice * 0.05;
+      
+      // Momentum component (recent price trends amplified)
+      const momentumComponent = momentum * currentPrice;
+      
+      // Shock event component (occasional market crashes/booms)
+      const shockComponent = shockIntensity * currentPrice * MAX_SWING_PERCENT;
+
+      // Combine all factors
+      const totalAdjustment = 
+        baseAdjustment + 
+        volatilityComponent + 
+        sentimentComponent + 
+        momentumComponent + 
+        shockComponent;
+
+      let newPrice = currentPrice + totalAdjustment;
+
+      // Price floor and ceiling for sanity
+      newPrice = Math.max(0.01, newPrice);
+      // Cap extreme moves (prevent $1 → $100 in one update)
+      const maxMove = currentPrice * MAX_SWING_PERCENT * 2;
+      newPrice = Math.max(currentPrice - maxMove, Math.min(currentPrice + maxMove, newPrice));
 
       // Update price
       await ctx.db.patch(company._id, {
         sharePrice: newPrice,
       });
 
-      // Record in history
+      // Record in history with market conditions
       const marketCap = newPrice * company.totalShares;
       await ctx.db.insert("stockPriceHistory", {
         companyId: company._id,
@@ -1271,7 +1336,11 @@ export const updateStockPrices = internalMutation({
       });
     }
 
-    return { updated: publicCompanies.length };
+    return { 
+      updated: publicCompanies.length,
+      marketSentiment: marketMood,
+      shockEvent: hasShockEvent,
+    };
   },
 });
 
