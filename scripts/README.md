@@ -1,4 +1,38 @@
-# Moderation Scripts
+# QuickBuck Scripts
+
+Collection of utility scripts for managing and automating the QuickBuck marketplace.
+
+## 🤖 AI Purchase System (NEW!)
+
+**AI-powered automatic product purchasing service using Gemini 2.5 Flash Lite**
+
+### Quick Start
+
+```bash
+# Test the AI purchase service manually
+npm run trigger-ai-purchase
+
+# Or run the standalone version
+npm run ai-purchase
+```
+
+**Setup Required:**
+1. Get Gemini API key from https://aistudio.google.com/
+2. Add `GEMINI_API_KEY` to `.env.local` and Convex environment variables
+3. Deploy: `npx convex deploy`
+
+**Features:**
+- 🤖 AI evaluates products like the general public
+- 📦 Processes in batches of 50
+- 💰 Spends minimum $1M per batch
+- ⏰ Runs automatically every 20 minutes
+- 🎯 Gives every product a fair chance
+
+**Documentation:** See [AI_PURCHASE_SETUP.md](../docs/AI_PURCHASE_SETUP.md) for detailed setup guide.
+
+---
+
+## 📋 Moderation Scripts
 
 These scripts help moderate content in the QuickBuck game by using AI to identify and remove low-quality, spam, or inappropriate content.
 

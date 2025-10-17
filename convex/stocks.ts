@@ -3,28 +3,28 @@ import { mutation, query, internalMutation } from "./_generated/server";
 import { computeOwnerMetricsFromHoldings } from "./utils/stocks";
 
 // ============================================================================
-// STOCK PRICING SYSTEM - Balance-Based Model with High Volatility
+// STOCK PRICING SYSTEM - Balance-Based Model with REDUCED Volatility
 // ============================================================================
 //
 // This system uses two primary mechanisms:
 //
-// 1. AUTOMATIC ADJUSTMENT (Every 10 minutes via cron)
-//    - HIGHLY VOLATILE with random swings and market sentiment
+// 1. AUTOMATIC ADJUSTMENT (Every 5 minutes via cron)
+//    - SMOOTH gradual adjustments toward company balance
 //    - Target Price = (Company Balance × 10) / 1,000,000 shares
-//    - Adjustment = Multiple random factors creating chaotic movement
+//    - Adjustment = Gentle factors creating stable movement
 //
 // 2. PLAYER TRADE IMPACT (Immediate)
-//    - Price changes instantly when players buy/sell
+//    - Price changes gradually when players buy/sell
 //    - Impact = (Transaction Value / Market Cap) × Impact Multiplier
-//    - Creates dramatic volatility around the balance-based baseline
+//    - Creates minor fluctuations around the balance-based baseline
 //
 // ============================================================================
 
-// Configuration constants - HIGHLY VOLATILE
-const BASE_ADJUSTMENT_FACTOR = 0.02;  // 2% base adjustment
-const VOLATILITY_MULTIPLIER = 0.4;    // 40% random volatility
-const IMPACT_MULTIPLIER = 0.25;       // 25% player trade impact (increased from 0.15)
-const MAX_SWING_PERCENT = 0.15;       // Extreme swings up to 15% per update
+// Configuration constants - LOW VOLATILITY
+const BASE_ADJUSTMENT_FACTOR = 0.005; // 0.5% base adjustment (reduced from 2%)
+const VOLATILITY_MULTIPLIER = 0.05;   // 5% random volatility (reduced from 40%)
+const IMPACT_MULTIPLIER = 0.08;       // 8% player trade impact (reduced from 25%)
+const MAX_SWING_PERCENT = 0.03;       // Max swing 3% per update (reduced from 15%)
 
 // ============================================================================
 // Helper Functions
@@ -67,8 +67,8 @@ function calculatePlayerTradeImpact(
   const priceChangePercent =
     (transactionValue / totalMarketCap) * IMPACT_MULTIPLIER;
 
-  // Add random volatility to trades (±25% variation on impact)
-  const volatilityFactor = 1 + (Math.random() - 0.5) * 0.5;
+  // Add minimal random volatility to trades (±10% variation on impact)
+  const volatilityFactor = 1 + (Math.random() - 0.5) * 0.2;
   const volatileChangePercent = priceChangePercent * volatilityFactor;
 
   let newPrice: number;
@@ -1223,8 +1223,8 @@ export const getAllPublicStocks = query({
 export const updateStockPrices = internalMutation({
   args: {},
   handler: async (ctx) => {
-    // AUTOMATIC PRICE ADJUSTMENT: Runs every 10 minutes
-    // HIGHLY VOLATILE - creates extreme swings with market sentiment and random chaos
+    // AUTOMATIC PRICE ADJUSTMENT: Runs every 5 minutes
+    // LOW VOLATILITY - smooth, gradual adjustments toward company balance
 
     const now = Date.now();
 
@@ -1248,17 +1248,17 @@ export const updateStockPrices = internalMutation({
       }
     });
 
-    // Generate global market sentiment (affects all stocks)
-    const globalSentiment = (Math.random() - 0.5) * 2; // -1 to 1
-    const marketMood = globalSentiment > 0.5 ? "bullish" : 
-                       globalSentiment < -0.5 ? "bearish" : 
-                       "neutral";
+    // Generate very mild global market sentiment (affects all stocks slightly)
+    const globalSentiment = (Math.random() - 0.5) * 0.2; // -0.1 to 0.1 (reduced from -1 to 1)
+    const marketMood = globalSentiment > 0.03 ? "slightly bullish" : 
+                       globalSentiment < -0.03 ? "slightly bearish" : 
+                       "stable";
     
-    // Market shock event (10% chance of major volatility event)
-    const hasShockEvent = Math.random() < 0.1;
-    const shockIntensity = hasShockEvent ? (Math.random() < 0.5 ? -1 : 1) : 0;
+    // Market shock events disabled for stability
+    const hasShockEvent = false;
+    const shockIntensity = 0;
 
-    // Update each company's stock price with HIGH VOLATILITY
+    // Update each company's stock price with LOW VOLATILITY
     for (const company of publicCompanies) {
       const companyBalance = balanceMap.get(company.accountId) ?? 0;
       const currentPrice = company.sharePrice;
@@ -1266,11 +1266,11 @@ export const updateStockPrices = internalMutation({
       // Calculate target price: (Balance × 10) / Total Shares
       const targetPrice = calculateTargetPrice(companyBalance, company.totalShares);
 
-      // Generate random walk (extreme volatility)
-      const randomWalk = (Math.random() - 0.5) * 2; // -1 to 1
+      // Generate very small random walk (minimal volatility)
+      const randomWalk = (Math.random() - 0.5) * 0.2; // -0.1 to 0.1 (reduced from -1 to 1)
       const randomVolatility = randomWalk * VOLATILITY_MULTIPLIER;
 
-      // Company-specific momentum (use price history for more chaos)
+      // Company-specific momentum (dampened for stability)
       const recentHistory = await ctx.db
         .query("stockPriceHistory")
         .withIndex("by_company_timestamp", (q: any) =>
@@ -1283,26 +1283,26 @@ export const updateStockPrices = internalMutation({
       if (recentHistory.length >= 2) {
         const recentPrice = recentHistory[0].price;
         const oldPrice = recentHistory[recentHistory.length - 1].price;
-        momentum = ((recentPrice - oldPrice) / oldPrice) * 0.5; // Momentum amplifies swings
+        momentum = ((recentPrice - oldPrice) / oldPrice) * 0.05; // Momentum dampened (reduced from 0.5)
       }
 
       // Calculate multi-factor adjustment
       const priceDifference = targetPrice - currentPrice;
       
-      // Base adjustment (always pulls somewhat toward target)
+      // Base adjustment (gentle pull toward target)
       const baseAdjustment = priceDifference * BASE_ADJUSTMENT_FACTOR;
       
-      // Random volatility component (creates chaos)
+      // Random volatility component (minimal noise)
       const volatilityComponent = randomVolatility * currentPrice;
       
-      // Market sentiment component (global mood affects all stocks)
-      const sentimentComponent = globalSentiment * currentPrice * 0.05;
+      // Market sentiment component (very minor global effect)
+      const sentimentComponent = globalSentiment * currentPrice * 0.01; // Reduced from 0.05
       
-      // Momentum component (recent price trends amplified)
+      // Momentum component (dampened price trends)
       const momentumComponent = momentum * currentPrice;
       
-      // Shock event component (occasional market crashes/booms)
-      const shockComponent = shockIntensity * currentPrice * MAX_SWING_PERCENT;
+      // Shock event component (disabled)
+      const shockComponent = 0;
 
       // Combine all factors
       const totalAdjustment = 
@@ -1316,8 +1316,8 @@ export const updateStockPrices = internalMutation({
 
       // Price floor and ceiling for sanity
       newPrice = Math.max(0.01, newPrice);
-      // Cap extreme moves (prevent $1 → $100 in one update)
-      const maxMove = currentPrice * MAX_SWING_PERCENT * 2;
+      // Cap moves to prevent sudden jumps
+      const maxMove = currentPrice * MAX_SWING_PERCENT;
       newPrice = Math.max(currentPrice - maxMove, Math.min(currentPrice + maxMove, newPrice));
 
       // Update price

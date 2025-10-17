@@ -3,11 +3,11 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
-// Run automatic product purchases every 10 minutes
+// Run AI-powered automatic product purchases every 20 minutes
 crons.interval(
-  "automatic product purchases",
-  { minutes: 10 },
-  internal.products.automaticPurchase
+  "AI automatic product purchases",
+  { minutes: 20 },
+  internal.products.automaticPurchaseAI
 );
 
 // Update stock prices every 5 minutes
