@@ -30,6 +30,8 @@ import {
   Users,
   Activity,
   BarChart3,
+  ShoppingCart,
+  TrendingDownIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Line, LineChart, ResponsiveContainer, XAxis, YAxis } from "recharts";
@@ -259,6 +261,11 @@ export default function StockDetailPage() {
                 <p className="text-muted-foreground mt-1">
                   Founded by {company.ownerName}
                 </p>
+                {company.description && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                    Trading as: {company.description}
+                  </p>
+                )}
               </div>
             </div>
             <div className="text-right">
@@ -491,21 +498,33 @@ export default function StockDetailPage() {
 
             {/* Right trade panel */}
             <div className="lg:col-span-4">
-              <Card className="sticky top-16">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle>Trade {company.ticker}</CardTitle>
+              <Card className="border-2">
+                <CardHeader className="pb-3">
+                  <div className="space-y-3">
+                    <CardTitle className="text-xl">
+                      Trade {company.ticker}
+                    </CardTitle>
                     <Tabs value={mode} onValueChange={(v) => setMode(v as any)}>
-                      <TabsList>
-                        <TabsTrigger value="buy">Buy</TabsTrigger>
-                        <TabsTrigger value="sell">Sell</TabsTrigger>
+                      <TabsList className="grid w-full grid-cols-2 h-10">
+                        <TabsTrigger
+                          value="buy"
+                          className="text-base font-semibold data-[state=active]:bg-emerald-500 data-[state=active]:text-white"
+                        >
+                          <ShoppingCart className="w-4 h-4 mr-2" /> BUY
+                        </TabsTrigger>
+                        <TabsTrigger
+                          value="sell"
+                          className="text-base font-semibold data-[state=active]:bg-red-500 data-[state=active]:text-white"
+                        >
+                          <TrendingDownIcon className="w-4 h-4 mr-2" /> SELL
+                        </TabsTrigger>
                       </TabsList>
                     </Tabs>
                   </div>
-                  <CardDescription>
+                  <CardDescription className="pt-2">
                     {mode === "buy"
                       ? "Purchase shares using your selected account"
-                      : "Sell shares to your selected account"}
+                      : "Sell shares from your holdings"}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -536,11 +555,22 @@ export default function StockDetailPage() {
                         {accounts.map((account: any) => (
                           <SelectItem key={account._id} value={account._id}>
                             {account.name} - $
-                            {account.balance?.toFixed(2) || "0.00"}
+                            {account.balance?.toFixed(2) || "0.00"} (
+                            {account.type})
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    {selectedAccountObj && (
+                      <div className="text-xs text-muted-foreground pt-2 px-1">
+                        Buying as:{" "}
+                        <span className="font-semibold capitalize">
+                          {derivedBuyerType === "company"
+                            ? "Company"
+                            : "Personal"}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -607,11 +637,24 @@ export default function StockDetailPage() {
                   </div>
 
                   <Button
-                    className="w-full h-11"
+                    className={`w-full h-12 font-bold text-base ${
+                      mode === "buy"
+                        ? "bg-emerald-600 hover:bg-emerald-700"
+                        : "bg-red-600 hover:bg-red-700"
+                    }`}
                     onClick={onSubmitTrade}
                     disabled={isProcessing || !selectedAccount || !shareAmount}
                   >
-                    {mode === "buy" ? "Buy" : "Sell"}
+                    {mode === "buy" ? (
+                      <>
+                        <ShoppingCart className="w-4 h-4 mr-2" /> Buy Shares
+                      </>
+                    ) : (
+                      <>
+                        <TrendingDownIcon className="w-4 h-4 mr-2" /> Sell
+                        Shares
+                      </>
+                    )}
                   </Button>
 
                   <div className="text-xs text-muted-foreground">

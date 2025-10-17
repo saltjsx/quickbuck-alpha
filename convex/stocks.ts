@@ -1197,6 +1197,7 @@ export const getAllPublicStocks = query({
         name: company.name,
         ticker: company.ticker,
         logoUrl: company.logoUrl,
+        description: company.description,
         currentPrice: company.sharePrice,
         priceChange24h,
         priceChangePercent24h,

@@ -51,18 +51,8 @@ export default function StocksPage() {
   >("marketCapDesc");
   const [view, setView] = useState<"grid" | "compact">("grid");
 
-  if (publicStocks === undefined) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <Spinner size="xl" className="text-gray-900 mx-auto" />
-          <p className="mt-4 text-gray-600">Loading stock market...</p>
-        </div>
-      </div>
-    );
-  }
-
   const filteredSorted = useMemo<StockListItem[]>(() => {
+    if (!publicStocks) return [];
     const q = (query || "").trim().toLowerCase();
     let arr = (publicStocks as StockListItem[]) || [];
     if (q) {
@@ -97,6 +87,17 @@ export default function StocksPage() {
     }
     return arr;
   }, [publicStocks, query, sort]);
+
+  if (publicStocks === undefined) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <Spinner size="xl" className="text-gray-900 mx-auto" />
+          <p className="mt-4 text-gray-600">Loading stock market...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-1 flex-col">

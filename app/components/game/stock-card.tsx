@@ -17,6 +17,7 @@ export interface StockListItem {
   priceChangePercent24h: number;
   marketCap: number;
   priceHistory: PricePoint[];
+  description?: string;
 }
 
 function formatCurrency(n: number) {
@@ -82,6 +83,11 @@ export const StockCard = memo(function StockCard({
                 {stock.ticker}
               </Badge>
             </div>
+            {stock.description && (
+              <p className="text-xs text-muted-foreground truncate mt-0.5">
+                Trading as: {stock.description}
+              </p>
+            )}
             <div className="mt-1 flex items-center gap-2 text-sm">
               <span className="font-semibold">
                 {formatCurrency(stock.currentPrice)}
