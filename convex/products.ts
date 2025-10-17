@@ -399,7 +399,8 @@ export const automaticPurchase = internalMutation({
       [productScores[i], productScores[j]] = [productScores[j], productScores[i]];
     }
 
-    // Phase 1: GUARANTEED MINIMUM - Every product gets 2-5 purchases
+    // Phase 1: GUARANTEED MINIMUM - Every product gets purchases based on price
+    // Cheaper products get MORE units to balance revenue
     // Allocate 40% of budget to ensure everyone gets decent baseline
     const guaranteedBudget = totalSpend * 0.40;
     let guaranteedSpent = 0;
@@ -407,8 +408,11 @@ export const automaticPurchase = internalMutation({
     console.log(`Phase 1: Guaranteeing minimum purchases for ${productScores.length} products`);
     
     for (const score of productScores) {
-      // Random quantity between 2-5 units for variety
-      const quantity = 2 + Math.floor(Math.random() * 4);
+      // DEMAND MULTIPLIER: Calculate inverse of price to give cheap products more volume
+      // Price $100 → 10 units, Price $1000 → 3 units, Price $10 → 50 units
+      const priceElasticity = Math.pow(score.revenuePerUnit, -0.4); // Inverse power law
+      const baseQuantity = Math.max(2, Math.round(priceElasticity * 15)); // Scale to reasonable numbers
+      const quantity = baseQuantity + Math.floor(Math.random() * 3); // Add 0-2 random units
       const cost = score.revenuePerUnit * quantity;
       
       if (guaranteedSpent + cost <= guaranteedBudget) {
@@ -418,13 +422,14 @@ export const automaticPurchase = internalMutation({
           guaranteedSpent += cost;
         }
       } else {
-        // If we can't afford random quantity, try just 1 unit
-        const singleCost = score.revenuePerUnit;
-        if (guaranteedSpent + singleCost <= guaranteedBudget) {
-          const success = await recordPurchase(score.product, 1);
+        // If we can't afford calculated quantity, try with lower quantity
+        const tryQuantity = Math.max(1, Math.floor(quantity / 2));
+        const tryCost = score.revenuePerUnit * tryQuantity;
+        if (guaranteedSpent + tryCost <= guaranteedBudget) {
+          const success = await recordPurchase(score.product, tryQuantity);
           if (success) {
-            score.minPurchases = 1;
-            guaranteedSpent += singleCost;
+            score.minPurchases = tryQuantity;
+            guaranteedSpent += tryCost;
           }
         }
       }
@@ -432,21 +437,32 @@ export const automaticPurchase = internalMutation({
 
     console.log(`Phase 1 complete: Spent $${guaranteedSpent.toFixed(2)} on minimum purchases`);
 
-    // Phase 2: BALANCED DISTRIBUTION with randomness
-    // Use 50% of budget, distributed by balanced score (sqrt pricing)
+    // Phase 2: BALANCED DISTRIBUTION with quality weighting
+    // Use 50% of budget, distributed to reward all products fairly regardless of price
+    // Cheap products get advantage: more budget allocation per product
     const mainBudget = totalSpend * 0.50;
-    const totalBalancedScore = productScores.reduce((sum, s) => s.balancedScore * s.randomBonus + sum, 0);
+    
+    // NEW METRIC: Inverse price weighting for fairer distribution
+    // High quality products get bonus, but cheap products get advantage on volume
+    const totalFairnessScore = productScores.reduce((sum, s) => {
+      // Fairness score = quality * (1 / sqrt(price))
+      // This rewards quality and gives cheap products more volume opportunities
+      const inversePrice = 1 / Math.sqrt(s.revenuePerUnit);
+      const fairnessScore = s.qualityWeight * inversePrice;
+      return fairnessScore + sum;
+    }, 0);
 
-    console.log(`Phase 2: Distributing $${mainBudget.toFixed(2)} with balanced weighting`);
+    console.log(`Phase 2: Distributing $${mainBudget.toFixed(2)} with fairness weighting`);
 
     // Calculate each product's budget allocation
     for (const score of productScores) {
-      const weightedScore = score.balancedScore * score.randomBonus;
-      const proportion = weightedScore / totalBalancedScore;
+      const inversePrice = 1 / Math.sqrt(score.revenuePerUnit);
+      const fairnessScore = score.qualityWeight * inversePrice;
+      const proportion = fairnessScore / totalFairnessScore;
       score.bonusBudget = mainBudget * proportion;
     }
 
-    // Execute balanced purchases
+    // Execute balanced purchases with dynamic quantity based on price tier
     let phase2Spent = 0;
     for (const score of productScores) {
       if (score.bonusBudget < score.revenuePerUnit) {
@@ -456,9 +472,20 @@ export const automaticPurchase = internalMutation({
       // Calculate how many units to buy based on allocated budget
       const maxQuantity = Math.floor(score.bonusBudget / score.revenuePerUnit);
       
-      // Add randomness to quantity (50% to 150% of calculated amount)
-      const randomFactor = 0.5 + Math.random();
-      const quantity = Math.max(1, Math.min(Math.floor(maxQuantity * randomFactor), 500)); // Cap at 500 units
+      // Add randomness PLUS price tier bonus for cheaper products
+      // Cheap products (under $100) get 1.2-1.8x multiplier
+      // Mid-range ($100-$1000) get 0.8-1.2x multiplier
+      // Expensive ($1000+) get 0.5-0.9x multiplier
+      let multiplier: number;
+      if (score.revenuePerUnit < 100) {
+        multiplier = 1.2 + Math.random() * 0.6; // 1.2 to 1.8
+      } else if (score.revenuePerUnit < 1000) {
+        multiplier = 0.8 + Math.random() * 0.4; // 0.8 to 1.2
+      } else {
+        multiplier = 0.5 + Math.random() * 0.4; // 0.5 to 0.9
+      }
+      
+      const quantity = Math.max(1, Math.min(Math.floor(maxQuantity * multiplier), 500)); // Cap at 500 units
 
       if (quantity > 0) {
         const success = await recordPurchase(score.product, quantity);
@@ -473,20 +500,48 @@ export const automaticPurchase = internalMutation({
 
     remainingBudget = totalSpend - guaranteedSpent - phase2Spent;
 
-    // Phase 3: LUCKY PRODUCTS - Pick 20-30 random products for bonus sales
+    // Phase 3: UNDERDOG BOOST - Pick struggling/cheap products for bonus sales
+    // Remaining budget goes to products that need it most:
+    // - Very cheap products that haven't sold much
+    // - Products with quality issues
+    // - Random variety boosters
     if (remainingBudget > 100) {
-      console.log(`Phase 3: Distributing remaining $${remainingBudget.toFixed(2)} to lucky products`);
+      console.log(`Phase 3: Distributing remaining $${remainingBudget.toFixed(2)} to underdogs`);
       
-      // Shuffle again and pick 20-30 random products
-      const shuffled = [...productScores].sort(() => Math.random() - 0.5);
-      const luckyCount = 20 + Math.floor(Math.random() * 11); // 20-30 products
-      const luckyProducts = shuffled.slice(0, luckyCount);
+      // Calculate underdog score for each product:
+      // Products with low revenue per unit (cheap) get bonus
+      // Products with low sales count get bonus
+      // Products with quality issues get bonus
+      interface UnderdogScore {
+        score: ProductScore;
+        underdogRating: number; // 0-1, higher = more deserving of bonus
+      }
+      
+      const underdogScores: UnderdogScore[] = productScores.map(score => ({
+        score,
+        underdogRating: 
+          (0.4 * (1 / Math.sqrt(score.revenuePerUnit))) + // Cheap products get boost
+          (0.3 * (1 - (score.qualityWeight))) + // Lower quality gets boost
+          (0.3 * Math.random()), // Random luck factor
+      }));
 
-      for (const score of luckyProducts) {
-        if (remainingBudget < score.revenuePerUnit) continue;
+      // Sort by underdog rating (highest first - most deserving)
+      underdogScores.sort((a, b) => b.underdogRating - a.underdogRating);
 
-        // Give each lucky product 10-50 extra units (capped by remaining budget)
-        const bonusQuantity = 10 + Math.floor(Math.random() * 41);
+      // Give bonus to top underdogs until budget runs out
+      for (const { score } of underdogScores) {
+        if (remainingBudget < score.revenuePerUnit * 5) continue; // Need at least 5 units worth
+
+        // Bonus purchases: 20-80 units based on how cheap the product is
+        let bonusQuantity: number;
+        if (score.revenuePerUnit < 50) {
+          bonusQuantity = 50 + Math.floor(Math.random() * 31); // 50-80 units for cheap
+        } else if (score.revenuePerUnit < 200) {
+          bonusQuantity = 30 + Math.floor(Math.random() * 21); // 30-50 units for mid
+        } else {
+          bonusQuantity = 10 + Math.floor(Math.random() * 11); // 10-20 units for expensive
+        }
+
         const maxAffordable = Math.floor(remainingBudget / score.revenuePerUnit);
         const quantity = Math.min(bonusQuantity, maxAffordable);
 
