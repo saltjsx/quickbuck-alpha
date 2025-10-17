@@ -176,18 +176,16 @@ export const updateProduct = mutation({
 export const automaticPurchase = internalMutation({
   args: {},
   handler: async (ctx) => {
-    // Get active products
-    // We want to consider up to 150 products per run for fairness and bandwidth
-    const MAX_PRODUCTS_TO_CONSIDER = 150;
+    // Get ALL active products (up to 1000) to ensure fair distribution
     const products = await ctx.db
       .query("products")
       .withIndex("by_active", (q) => q.eq("isActive", true))
-      .take(MAX_PRODUCTS_TO_CONSIDER);
+      .take(1000); // Increased to handle 350+ products
 
     if (products.length === 0) return { message: "No products available" };
 
-  // Random spend between $1,000,000 and $1,500,000
-  const totalSpend = Math.floor(Math.random() * 500000) + 1000000;
+    // Fixed minimum spend of $5,000,000 as requested
+    const totalSpend = 5000000;
 
     // Get or create system account (buyer)
     // OPTIMIZED: Use by_name index for system account lookup
@@ -228,10 +226,9 @@ export const automaticPurchase = internalMutation({
       throw new Error("Failed to create or retrieve system account");
     }
 
-  let remainingBudget = totalSpend;
-  const purchases: any[] = [];
-  const companySpend = new Map<string, number>();
-  const maxCompanySpend = totalSpend * 0.15; // Cap spend per company at 15%
+    let remainingBudget = totalSpend;
+    const purchases: any[] = [];
+    const companySpend = new Map<string, number>();
 
     const idToKey = (id: any) =>
       typeof id === "string" ? id : id?.toString?.() ?? String(id);
@@ -242,8 +239,7 @@ export const automaticPurchase = internalMutation({
     }
 
     // OPTIMIZATION: Pre-fetch all unique companies at once to avoid N repeated reads
-  const uniqueCompanyIds = [...new Set(products.map(p => p.companyId))];
-  const totalActiveCompanies = uniqueCompanyIds.length;
+    const uniqueCompanyIds = [...new Set(products.map(p => p.companyId))];
     const allCompanies = await Promise.all(
       uniqueCompanyIds.map(id => ctx.db.get(id))
     );
@@ -290,17 +286,17 @@ export const automaticPurchase = internalMutation({
       }
     >();
 
-    const recordPurchase = async (product: any, flexibleLimit = false) => {
-      if (!product || !Number.isFinite(product.price)) return false;
+    const recordPurchase = async (product: any, quantity: number) => {
+      if (!product || !Number.isFinite(product.price) || quantity <= 0) return false;
 
       const price = Math.max(product.price, 0.01);
+      const totalPrice = price * quantity;
       const costPercentage = 0.23 + Math.random() * 0.44;
-      const productionCost = price * costPercentage;
-      const profit = price - productionCost;
+      const productionCost = totalPrice * costPercentage;
 
       const companyKey = idToKey(product.companyId);
       
-      // OPTIMIZED: Use pre-fetched company cache (fallback to db.get if missing)
+      // OPTIMIZED: Use pre-fetched company cache
       if (!companyCache.has(companyKey)) {
         const companyDoc = await ctx.db.get(product.companyId);
         if (!companyDoc) return false;
@@ -309,11 +305,6 @@ export const automaticPurchase = internalMutation({
 
       const companyDoc = companyCache.get(companyKey);
       if (!companyDoc) return false;
-
-      const currentCompanySpend = companySpend.get(companyKey) ?? 0;
-      if (!flexibleLimit && totalActiveCompanies > 1 && currentCompanySpend + price > maxCompanySpend) {
-        return false;
-      }
 
       if (!companyTransactions.has(companyKey)) {
         companyTransactions.set(companyKey, {
@@ -327,7 +318,7 @@ export const automaticPurchase = internalMutation({
       }
 
       const companyTx = companyTransactions.get(companyKey)!;
-      companyTx.totalRevenue += price;
+      companyTx.totalRevenue += totalPrice;
       companyTx.totalCost += productionCost;
 
       const productKey = idToKey(product._id);
@@ -338,189 +329,151 @@ export const automaticPurchase = internalMutation({
           totalCost: 0,
         };
 
-      existing.count += 1;
-      existing.totalRevenue += price;
+      existing.count += quantity;
+      existing.totalRevenue += totalPrice;
       existing.totalCost += productionCost;
       companyTx.productSales.set(productKey, existing);
 
       purchases.push({
         product: product.name,
         productId: product._id,
-        price,
+        quantity,
+        price: totalPrice,
         cost: productionCost,
-        profit,
+        profit: totalPrice - productionCost,
       });
 
-      companySpend.set(companyKey, currentCompanySpend + price);
+      companySpend.set(companyKey, (companySpend.get(companyKey) || 0) + totalPrice);
 
       return true;
     };
 
-    // IMPROVED: Fairer distribution system ensuring every company gets money
-    // New algorithm:
-    // 1. Group products by company
-    // 2. Ensure EVERY company with active products gets at least some purchases (proportional to their products)
-    // 3. Weight by product quality and sales history for fairness
-    // 4. Use remaining budget for bonus round with weighted lottery
+    // ============================================================
+    // NEW REVENUE-FOCUSED DISTRIBUTION ALGORITHM
+    // ============================================================
+    // Goal: Spend $5M across ALL products, focusing on TOTAL REVENUE generation
+    // Strategy:
+    // 1. Calculate each product's "revenue potential" (price * quality weight)
+    // 2. Allocate budget proportionally to revenue potential
+    // 3. Ensure EVERY product gets at least 1 purchase
+    // 4. Use remaining budget for bonus purchases weighted by revenue potential
+    // ============================================================
 
-    const MAX_PURCHASES_PER_PRODUCT = 50;
-    const MAX_TOTAL_PURCHASES = 200; // Increased from 150 to ensure more companies participate
-
-    // Group products by company with metadata
-    interface CompanyProductGroup {
-      companyId: any;
-      products: any[];
-      totalQuality: number;
-      avgSalesHistory: number;
-      totalSalesValue: number;
+    // Calculate revenue potential for each product
+    interface ProductScore {
+      product: any;
+      revenuePerUnit: number; // Price per item
+      qualityWeight: number; // 0.5 - 1.0 based on quality
+      revenueScore: number; // revenuePerUnit * qualityWeight
+      minPurchases: number; // Guaranteed minimum purchases
+      bonusBudget: number; // Additional budget allocation
     }
 
-    const companyGroups = new Map<string, CompanyProductGroup>();
+    const productScores: ProductScore[] = products.map(product => {
+      const price = Math.max(product.price, 0.01);
+      const quality = Math.max(Math.min(product.quality ?? 100, 100), 0);
+      const qualityWeight = 0.5 + (quality / 100) * 0.5; // Range: 0.5 to 1.0
+      const revenueScore = price * qualityWeight;
+
+      return {
+        product,
+        revenuePerUnit: price,
+        qualityWeight,
+        revenueScore,
+        minPurchases: 0,
+        bonusBudget: 0,
+      };
+    });
+
+    // Sort by revenue score descending
+    productScores.sort((a, b) => b.revenueScore - a.revenueScore);
+
+    // Phase 1: GUARANTEED MINIMUM - Every product gets at least one purchase
+    // Allocate 30% of budget to ensure everyone gets something
+    const guaranteedBudget = totalSpend * 0.30;
+    let guaranteedSpent = 0;
+
+    console.log(`Phase 1: Guaranteeing minimum purchases for ${productScores.length} products`);
     
-    for (const product of products) {
-      const key = idToKey(product.companyId);
-      const existingGroup = companyGroups.get(key);
-      const quality = product.quality ?? 100;
-      const sales = product.totalSales ?? 0;
-      const revenue = product.totalRevenue ?? 0;
-
-      if (existingGroup) {
-        existingGroup.products.push(product);
-        existingGroup.totalQuality += quality;
-        existingGroup.avgSalesHistory += sales;
-        existingGroup.totalSalesValue += revenue;
-      } else {
-        companyGroups.set(key, {
-          companyId: product.companyId,
-          products: [product],
-          totalQuality: quality,
-          avgSalesHistory: sales,
-          totalSalesValue: revenue,
-        });
-      }
-    }
-
-    const companyList = Array.from(companyGroups.values());
-    if (companyList.length === 0) {
-      // No companies, use remaining budget for bonus round
-      remainingBudget = totalSpend;
-    } else {
-      // Phase 1: GUARANTEED MINIMUM - Every company gets at least something
-      // Allocate 60% of budget to ensure minimum presence for all companies
-      const minimumPhaseAllocation = totalSpend * 0.6;
-      const perCompanyMinimum = minimumPhaseAllocation / companyList.length;
-
-      // Randomize company order to avoid bias
-      const shuffledCompanies = [...companyList].sort(() => Math.random() - 0.5);
-
-      for (const companyGroup of shuffledCompanies) {
-        let companyBudget = perCompanyMinimum;
-        const sortedProducts = [...companyGroup.products].sort((a, b) => {
-          const qualityA = a.quality ?? 100;
-          const qualityB = b.quality ?? 100;
-          if (qualityA !== qualityB) return qualityB - qualityA; // Higher quality first
-          return (b.totalRevenue ?? 0) - (a.totalRevenue ?? 0); // Better-selling products second
-        });
-
-        let rotationIndex = 0;
-        let attempts = 0;
-        const maxAttempts = MAX_PURCHASES_PER_PRODUCT * sortedProducts.length;
-
-        // Round-robin through this company's products
-        while (
-          companyBudget >= 0.01 &&
-          attempts < maxAttempts &&
-          purchases.length < MAX_TOTAL_PURCHASES
-        ) {
-          const product = sortedProducts[rotationIndex % sortedProducts.length];
-          const productPrice = Math.max(product.price, 0.01);
-
-          if (productPrice > companyBudget) {
-            rotationIndex++;
-            attempts++;
-            continue;
-          }
-
-          const success = await recordPurchase(product);
-          attempts++;
-          rotationIndex++;
-
-          if (!success) {
-            continue;
-          }
-
-          companyBudget -= productPrice;
-        }
-
-        remainingBudget -= (perCompanyMinimum - companyBudget);
-      }
-
-      // Phase 2: WEIGHTED BONUS ROUND - Use remaining budget with quality/sales weighting
-      // Companies with better products get more weight
-      remainingBudget = Math.max(remainingBudget, 0);
-
-      if (remainingBudget >= 0.01 && purchases.length < MAX_TOTAL_PURCHASES) {
-        // Calculate weights based on product quality and sales history
-        // Higher quality and higher sales = higher probability of getting bonus purchases
-        const weightedCompanies = companyList
-          .map((group) => ({
-            ...group,
-            weight:
-              (group.totalQuality / 100) * // Quality factor (0-100 scale)
-              (1 + Math.log(Math.max(group.avgSalesHistory, 1))) * // Sales history factor (logarithmic)
-              group.products.length, // More products = more chances
-          }))
-          .sort((a, b) => b.weight - a.weight); // Sort descending by weight
-
-        const totalWeight = weightedCompanies.reduce((sum, g) => sum + g.weight, 0);
-
-        for (const companyGroup of weightedCompanies) {
-          if (remainingBudget < 0.01 || purchases.length >= MAX_TOTAL_PURCHASES) break;
-
-          // Allocate budget proportional to this company's weight
-          const companyBonus = (companyGroup.weight / totalWeight) * remainingBudget;
-          let companyBudgetLeft = companyBonus;
-
-          // Randomize product selection for variety
-          const shuffledProducts = [...companyGroup.products].sort(() => Math.random() - 0.5);
-
-          for (const product of shuffledProducts) {
-            if (companyBudgetLeft < 0.01 || purchases.length >= MAX_TOTAL_PURCHASES) break;
-
-            const productPrice = Math.max(product.price, 0.01);
-            if (productPrice > companyBudgetLeft) continue;
-
-            const success = await recordPurchase(product, true);
-            if (!success) continue;
-
-            companyBudgetLeft -= productPrice;
-          }
-
-          remainingBudget -= companyBonus;
-        }
-      }
-
-      remainingBudget = Math.max(remainingBudget, 0);
-    }
-
-    // Phase 3: EMERGENCY BONUS - If still budget left, do random purchases (shouldn't happen often)
-    if (remainingBudget >= 0.01 && purchases.length < MAX_TOTAL_PURCHASES) {
-      const emergencyProducts = [...products].sort(() => Math.random() - 0.5);
+    for (const score of productScores) {
+      const quantity = 1; // Start with 1 unit minimum
+      const cost = score.revenuePerUnit * quantity;
       
-      for (const product of emergencyProducts) {
-        if (purchases.length >= MAX_TOTAL_PURCHASES) break;
-
-        const productPrice = Math.max(product.price, 0.01);
-        if (remainingBudget < productPrice) continue;
-
-        const success = await recordPurchase(product, true);
-        if (!success) continue;
-
-        remainingBudget -= productPrice;
+      if (guaranteedSpent + cost <= guaranteedBudget) {
+        const success = await recordPurchase(score.product, quantity);
+        if (success) {
+          score.minPurchases = quantity;
+          guaranteedSpent += cost;
+        }
       }
     }
 
-    // Now process all batched transactions using pre-fetched account data
+    console.log(`Phase 1 complete: Spent $${guaranteedSpent.toFixed(2)} on minimum purchases`);
+
+    // Phase 2: REVENUE-WEIGHTED DISTRIBUTION
+    // Use remaining 70% of budget, weighted by revenue potential
+    const mainBudget = totalSpend - guaranteedSpent;
+    const totalRevenueScore = productScores.reduce((sum, s) => sum + s.revenueScore, 0);
+
+    console.log(`Phase 2: Distributing $${mainBudget.toFixed(2)} based on revenue potential`);
+
+    // Calculate each product's budget allocation
+    for (const score of productScores) {
+      const proportion = score.revenueScore / totalRevenueScore;
+      score.bonusBudget = mainBudget * proportion;
+    }
+
+    // Execute revenue-weighted purchases
+    let phase2Spent = 0;
+    for (const score of productScores) {
+      if (score.bonusBudget < score.revenuePerUnit) {
+        continue; // Not enough budget for even 1 unit
+      }
+
+      // Calculate how many units to buy based on allocated budget
+      const maxQuantity = Math.floor(score.bonusBudget / score.revenuePerUnit);
+      const quantity = Math.min(maxQuantity, 1000); // Cap at 1000 units per product
+
+      if (quantity > 0) {
+        const success = await recordPurchase(score.product, quantity);
+        if (success) {
+          const actualCost = score.revenuePerUnit * quantity;
+          phase2Spent += actualCost;
+        }
+      }
+    }
+
+    console.log(`Phase 2 complete: Spent $${phase2Spent.toFixed(2)} on revenue-weighted purchases`);
+
+    remainingBudget = totalSpend - guaranteedSpent - phase2Spent;
+
+    // Phase 3: BONUS ROUND - Use any leftover budget for top revenue generators
+    if (remainingBudget > 100) {
+      console.log(`Phase 3: Distributing remaining $${remainingBudget.toFixed(2)}`);
+      
+      // Sort by revenue score again and buy from top performers
+      const topPerformers = productScores
+        .filter(s => s.revenuePerUnit <= remainingBudget)
+        .slice(0, 50); // Top 50 revenue generators
+
+      for (const score of topPerformers) {
+        if (remainingBudget < score.revenuePerUnit) break;
+
+        const maxQuantity = Math.floor(remainingBudget / score.revenuePerUnit);
+        const quantity = Math.min(maxQuantity, 100); // Cap bonus at 100 units
+
+        if (quantity > 0) {
+          const success = await recordPurchase(score.product, quantity);
+          if (success) {
+            const actualCost = score.revenuePerUnit * quantity;
+            remainingBudget -= actualCost;
+          }
+        }
+      }
+    }
+
+    const totalSpent = totalSpend - remainingBudget;
+    console.log(`Purchase complete: Spent $${totalSpent.toFixed(2)} across ${purchases.length} purchases`);    // Now process all batched transactions using pre-fetched account data
     for (const [, tx] of companyTransactions) {
       if (!tx.company || !tx.accountId) continue;
 
@@ -616,9 +569,11 @@ export const automaticPurchase = internalMutation({
     }
 
     return {
-      totalSpent: totalSpend - remainingBudget,
+      totalSpent,
       purchases,
-      productsCount: purchases.length,
+      purchaseCount: purchases.length,
+      productsReached: new Set(purchases.map((p: any) => p.productId)).size,
+      companiesReached: companyTransactions.size,
     };
   },
 });

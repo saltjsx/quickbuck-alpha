@@ -14,6 +14,103 @@ async function getCurrentUserId(ctx: any) {
   return user?._id || null;
 }
 
+// Helper function to calculate total ownership percentage for a holder
+async function calculateTotalOwnership(
+  ctx: any,
+  companyId: any,
+  holderId: any,
+  holderType: "user" | "company",
+  additionalShares: number = 0
+): Promise<{ totalShares: number; ownershipPercent: number; canProceed: boolean }> {
+  const company = await ctx.db.get(companyId);
+  if (!company) {
+    return { totalShares: 0, ownershipPercent: 0, canProceed: false };
+  }
+
+  // Get all holdings for this holder across all their accounts
+  let totalHolderShares = additionalShares;
+
+  if (holderType === "user") {
+    // Direct user holdings
+    const userHoldings = await ctx.db
+      .query("stocks")
+      .withIndex("by_company_holder_holderType", (q: any) =>
+        q.eq("companyId", companyId).eq("holderId", holderId).eq("holderType", "user")
+      )
+      .collect();
+    
+    totalHolderShares += userHoldings.reduce((sum: number, h: any) => sum + h.shares, 0);
+
+    // Check all companies owned by this user
+    const userCompanies = await ctx.db
+      .query("companies")
+      .withIndex("by_owner", (q: any) => q.eq("ownerId", holderId))
+      .collect();
+
+    for (const userCompany of userCompanies) {
+      const companyHoldings = await ctx.db
+        .query("stocks")
+        .withIndex("by_company_holder_holderType", (q: any) =>
+          q.eq("companyId", companyId).eq("holderId", userCompany._id).eq("holderType", "company")
+        )
+        .collect();
+      
+      totalHolderShares += companyHoldings.reduce((sum: number, h: any) => sum + h.shares, 0);
+    }
+  } else {
+    // Company holdings
+    const companyHoldings = await ctx.db
+      .query("stocks")
+      .withIndex("by_company_holder_holderType", (q: any) =>
+        q.eq("companyId", companyId).eq("holderId", holderId).eq("holderType", "company")
+      )
+      .collect();
+    
+    totalHolderShares += companyHoldings.reduce((sum: number, h: any) => sum + h.shares, 0);
+
+    // Check if this company is owned by someone, and add their personal holdings too
+    const holderCompany = await ctx.db.get(holderId as any);
+    if (holderCompany && 'ownerId' in holderCompany) {
+      const ownerHoldings = await ctx.db
+        .query("stocks")
+        .withIndex("by_company_holder_holderType", (q: any) =>
+          q.eq("companyId", companyId).eq("holderId", holderCompany.ownerId).eq("holderType", "user")
+        )
+        .collect();
+      
+      totalHolderShares += ownerHoldings.reduce((sum: number, h: any) => sum + h.shares, 0);
+
+      // Also check other companies owned by the same person
+      const siblingCompanies = await ctx.db
+        .query("companies")
+        .withIndex("by_owner", (q: any) => q.eq("ownerId", holderCompany.ownerId))
+        .collect();
+
+      for (const sibling of siblingCompanies) {
+        if (sibling._id === holderId) continue; // Skip the company we already counted
+
+        const siblingHoldings = await ctx.db
+          .query("stocks")
+          .withIndex("by_company_holder_holderType", (q: any) =>
+            q.eq("companyId", companyId).eq("holderId", sibling._id).eq("holderType", "company")
+          )
+          .collect();
+        
+        totalHolderShares += siblingHoldings.reduce((sum: number, h: any) => sum + h.shares, 0);
+      }
+    }
+  }
+
+  const ownershipPercent = (totalHolderShares / company.totalShares) * 100;
+  const canProceed = ownershipPercent <= 100;
+
+  return {
+    totalShares: totalHolderShares,
+    ownershipPercent,
+    canProceed,
+  };
+}
+
 function calculateNewPrice(
   currentPrice: number,
   sharesTraded: number,
@@ -193,6 +290,23 @@ export const buyStock = mutation({
       if (company.ownerId === buyerId) {
         throw new Error("Company owners already control their equity and cannot buy their own stock");
       }
+    }
+
+    // ANTI-EXPLOIT: Check if this purchase would result in >100% ownership
+    // This prevents users from buying stocks through their companies and then transferring
+    const ownershipCheck = await calculateTotalOwnership(
+      ctx,
+      args.companyId,
+      buyerType === "user" ? userId : fromAccount.companyId!,
+      buyerType,
+      args.shares
+    );
+
+    if (!ownershipCheck.canProceed) {
+      throw new Error(
+        `Cannot complete purchase: This would result in ${ownershipCheck.ownershipPercent.toFixed(2)}% ` +
+        `total ownership across all your accounts. Maximum allowed is 100%.`
+      );
     }
 
     const totalCost = args.shares * company.sharePrice;
@@ -533,6 +647,23 @@ export const transferStock = mutation({
 
     if (!holding || holding.shares < args.shares) {
       throw new Error("Insufficient shares");
+    }
+
+    // ANTI-EXPLOIT: Check if this transfer would result in >100% ownership for the receiver
+    // This prevents users from accumulating >100% by transferring between their accounts
+    const receiverOwnershipCheck = await calculateTotalOwnership(
+      ctx,
+      args.companyId,
+      args.toType === "user" ? args.toId : args.toId,
+      args.toType,
+      args.shares
+    );
+
+    if (!receiverOwnershipCheck.canProceed) {
+      throw new Error(
+        `Cannot complete transfer: The receiver would have ${receiverOwnershipCheck.ownershipPercent.toFixed(2)}% ` +
+        `total ownership across all their accounts. Maximum allowed is 100%.`
+      );
     }
 
     await ctx.db.insert("stockTransactions", {
