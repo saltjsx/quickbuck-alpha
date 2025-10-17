@@ -140,13 +140,7 @@ export default function MarketplacePage() {
     });
 
     return filtered;
-  }, [
-    products,
-    searchQuery,
-    selectedCompany,
-    selectedTags,
-    sortBy,
-  ]);
+  }, [products, searchQuery, selectedCompany, selectedTags, sortBy]);
 
   const toggleTag = (tag: string) => {
     setSelectedTags((prev) => {
@@ -168,7 +162,10 @@ export default function MarketplacePage() {
   };
 
   const hasActiveFilters =
-    searchQuery || selectedCompany || selectedTags.size > 0 || sortBy !== "name";
+    searchQuery ||
+    selectedCompany ||
+    selectedTags.size > 0 ||
+    sortBy !== "name";
 
   if (products === undefined) {
     return (
@@ -226,7 +223,9 @@ export default function MarketplacePage() {
                   <SlidersHorizontal className="h-5 w-5" />
                   Filters & Sorting
                 </CardTitle>
-                <CardDescription>Refine the catalog with dropdown filters</CardDescription>
+                <CardDescription>
+                  Refine the catalog with dropdown filters
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid gap-3 md:grid-cols-3">
@@ -235,7 +234,9 @@ export default function MarketplacePage() {
                     <label className="text-sm font-medium">Company</label>
                     <Select
                       value={selectedCompany ?? "__all"}
-                      onValueChange={(v) => setSelectedCompany(v === "__all" ? null : v)}
+                      onValueChange={(v) =>
+                        setSelectedCompany(v === "__all" ? null : v)
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="All Companies" />
@@ -265,14 +266,21 @@ export default function MarketplacePage() {
                   {/* Sort By Dropdown */}
                   <div className="space-y-1">
                     <label className="text-sm font-medium">Sort By</label>
-                    <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
+                    <Select
+                      value={sortBy}
+                      onValueChange={(v: any) => setSortBy(v)}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Sort by" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="name">Name A-Z</SelectItem>
-                        <SelectItem value="price-low">Price: Low to High</SelectItem>
-                        <SelectItem value="price-high">Price: High to Low</SelectItem>
+                        <SelectItem value="price-low">
+                          Price: Low to High
+                        </SelectItem>
+                        <SelectItem value="price-high">
+                          Price: High to Low
+                        </SelectItem>
                         <SelectItem value="sales">Most Popular</SelectItem>
                       </SelectContent>
                     </Select>
@@ -350,7 +358,10 @@ export default function MarketplacePage() {
                               by {product.companyName}
                             </p>
                             {product.companyTicker && (
-                              <Badge variant="outline" className="text-xs font-mono">
+                              <Badge
+                                variant="outline"
+                                className="text-xs font-mono"
+                              >
                                 {product.companyTicker}
                               </Badge>
                             )}
