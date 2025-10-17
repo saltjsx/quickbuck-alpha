@@ -1,6 +1,7 @@
 import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";
 import { SidebarTrigger } from "~/components/ui/sidebar";
+import { DarkModeToggle } from "~/components/dark-mode-toggle";
 
 export function SiteHeader() {
   return (
@@ -11,7 +12,9 @@ export function SiteHeader() {
           orientation="vertical"
           className="mx-2 data-[orientation=vertical]:h-4"
         />
-        <div className="ml-auto flex items-center gap-2"></div>
+        <div className="ml-auto flex items-center gap-2">
+          <DarkModeToggle />
+        </div>
       </div>
     </header>
   );
