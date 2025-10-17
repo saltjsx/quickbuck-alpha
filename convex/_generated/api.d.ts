@@ -28,6 +28,7 @@ import type * as moderation from "../moderation.js";
 import type * as products from "../products.js";
 import type * as queries from "../queries.js";
 import type * as stocks from "../stocks.js";
+import type * as upgrades from "../upgrades.js";
 import type * as users from "../users.js";
 import type * as utils_stocks from "../utils/stocks.js";
 
@@ -55,6 +56,7 @@ declare const fullApi: ApiFromModules<{
   products: typeof products;
   queries: typeof queries;
   stocks: typeof stocks;
+  upgrades: typeof upgrades;
   users: typeof users;
   "utils/stocks": typeof utils_stocks;
 }>;

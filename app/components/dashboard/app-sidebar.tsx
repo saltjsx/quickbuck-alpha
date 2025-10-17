@@ -11,6 +11,7 @@ import {
   IconWallet,
   IconDice5,
   IconCurrencyDollar,
+  IconBolt,
 } from "@tabler/icons-react";
 import { Link } from "react-router";
 import { UserButton } from "@clerk/react-router";
@@ -86,6 +87,11 @@ const data = {
       title: "Loans",
       url: "/dashboard/loans",
       icon: IconCurrencyDollar,
+    },
+    {
+      title: "Upgrades",
+      url: "/dashboard/upgrades",
+      icon: IconBolt,
     },
   ],
 };

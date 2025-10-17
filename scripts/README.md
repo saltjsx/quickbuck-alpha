@@ -274,6 +274,37 @@ The script will:
 - Bootstrap new deployments
 - Simulate market activity for demos
 
+## Initialize Upgrades
+
+**IMPORTANT: Run this ONCE after deploying the upgrades feature!**
+
+This script populates the upgrades table with the default upgrade packs:
+
+```bash
+npx tsx scripts/init-upgrades.ts
+```
+
+The script will:
+1. Check if upgrades already exist (to prevent duplicates)
+2. Create 7 upgrade packs:
+   - Revenue Boost (Low, Medium, High) - $500K, $1.5M, $3M
+   - Stock Price Boost (Low, High) - $750K, $2M
+   - Stock Price Lower (Low, High) - $1M, $2.5M
+
+**When to run:**
+- ⚠️ **Once** after deploying the schema changes
+- Only needs to be run once per deployment
+- Will return an error if upgrades already exist (this is normal!)
+
+**What it creates:**
+All upgrades are created in the `upgrades` table with:
+- Name and description
+- Type (revenue_boost, stock_price_boost, stock_price_lower)
+- Tier (low, medium, high)
+- Effect percentage (5%, 10%, 20%, 30%)
+- Price (very expensive by design)
+- Active status (true)
+
 ## Future Improvements
 
 - [ ] Add dry-run mode (show what would be deleted without actually deleting)
@@ -283,5 +314,6 @@ The script will:
 - [ ] Auto-fix orphaned products after company deletion
 - [ ] Add configurable budget limits for AI purchases
 - [ ] Support for multiple AI models (OpenAI, Anthropic, etc.)
+
 
 ````

@@ -357,5 +357,47 @@ export default defineSchema({
   })
     .index("by_email", ["email"])
     .index("by_user", ["userId"]),
+
+  upgrades: defineTable({
+    name: v.string(),
+    description: v.string(),
+    type: v.union(
+      v.literal("revenue_boost"),
+      v.literal("stock_price_boost"),
+      v.literal("stock_price_lower")
+    ),
+    tier: v.union(
+      v.literal("low"),
+      v.literal("medium"),
+      v.literal("high")
+    ),
+    effectPercentage: v.number(), // 10, 20, 30 for revenue; 5, 10 for stocks
+    price: v.number(),
+    isActive: v.boolean(),
+    createdAt: v.number(),
+  })
+    .index("by_type", ["type"])
+    .index("by_tier", ["tier"])
+    .index("by_active", ["isActive"])
+    .index("by_type_tier", ["type", "tier"])
+    .index("by_active_type", ["isActive", "type"]),
+
+  userUpgrades: defineTable({
+    userId: v.id("users"),
+    upgradeId: v.id("upgrades"),
+    purchasePrice: v.number(),
+    isUsed: v.boolean(),
+    usedAt: v.optional(v.number()),
+    targetId: v.optional(v.union(v.id("companies"), v.id("stocks"))),
+    targetType: v.optional(v.union(v.literal("company"), v.literal("stock"))),
+    effectApplied: v.optional(v.number()), // The actual effect value applied
+    purchasedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_upgrade", ["upgradeId"])
+    .index("by_user_used", ["userId", "isUsed"])
+    .index("by_user_purchased", ["userId", "purchasedAt"])
+    .index("by_target", ["targetId"])
+    .index("by_used", ["isUsed"]),
 });
 
