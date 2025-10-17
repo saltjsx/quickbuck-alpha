@@ -629,26 +629,26 @@ export const checkAndUpdatePublicStatus = mutation({
     const balance = account?.balance ?? 0;
 
     if (balance > 50000 && !company.isPublic) {
-      // Calculate fair IPO price based on company fundamentals
-      // Use neutral sentiment (1.0) for IPO
-      const fairValue = (balance / company.totalShares) * 5.0; // 5x book value multiplier
+      // IPO PRICING: Total market value = 10x company balance
+      // Initial share price = (Balance * 10) / 1,000,000 shares
+      const ipoPrice = (balance * 10) / company.totalShares;
       
       await ctx.db.patch(args.companyId, {
         isPublic: true,
-        sharePrice: fairValue,
+        sharePrice: ipoPrice,
         marketSentiment: 1.0,
       });
       
       // Record initial public price in history
       await ctx.db.insert("stockPriceHistory", {
         companyId: args.companyId,
-        price: fairValue,
-        marketCap: fairValue * company.totalShares,
+        price: ipoPrice,
+        marketCap: ipoPrice * company.totalShares,
         volume: 0,
         timestamp: Date.now(),
       });
       
-      return { madePublic: true, balance, ipoPrice: fairValue };
+      return { madePublic: true, balance, ipoPrice };
     }
 
     return { madePublic: false, balance };

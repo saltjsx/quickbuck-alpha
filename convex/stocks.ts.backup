@@ -5,40 +5,34 @@ import { computeOwnerMetricsFromHoldings } from "./utils/stocks";
 // ============================================================================
 // STOCK PRICING SYSTEM - Balance-Based Model
 // ============================================================================
-//
+// 
 // This system uses two primary mechanisms:
-//
+// 
 // 1. AUTOMATIC ADJUSTMENT (Every 10 minutes via cron)
 //    - Gradually moves prices toward target based on company balance
 //    - Target Price = (Company Balance × 10) / 1,000,000 shares
 //    - Adjustment = 3% of the difference between current and target
-//
+// 
 // 2. PLAYER TRADE IMPACT (Immediate)
 //    - Price changes instantly when players buy/sell
 //    - Impact = (Transaction Value / Market Cap) × Impact Multiplier
 //    - Creates short-term volatility around the balance-based baseline
-//
+// 
 // ============================================================================
 
 // Configuration constants
 const ADJUSTMENT_FACTOR = 0.03;  // 3% of gap closed per 10-minute update
 const IMPACT_MULTIPLIER = 0.15;  // Player trade impact sensitivity
 
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
 async function getCurrentUserId(ctx: any) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) return null;
-
+  
   const user = await ctx.db
     .query("users")
-    .withIndex("by_token", (q: any) =>
-      q.eq("tokenIdentifier", identity.subject)
-    )
+    .withIndex("by_token", (q: any) => q.eq("tokenIdentifier", identity.subject))
     .unique();
-
+  
   return user?._id || null;
 }
 
@@ -51,27 +45,32 @@ function calculateTargetPrice(balance: number, totalShares: number): number {
 }
 
 // Calculate immediate price impact from a player trade
+// This creates short-term fluctuations around the balance-based baseline
 function calculatePlayerTradeImpact(
   currentPrice: number,
   sharesTraded: number,
   totalShares: number,
   isBuying: boolean
 ): number {
+  // Calculate transaction value and market cap
   const transactionValue = sharesTraded * currentPrice;
   const totalMarketCap = currentPrice * totalShares;
-
+  
+  // Prevent division by zero
   if (totalMarketCap === 0) return currentPrice;
-
-  const priceChangePercent =
-    (transactionValue / totalMarketCap) * IMPACT_MULTIPLIER;
-
+  
+  // Calculate price change as percentage of transaction value to market cap
+  const priceChangePercent = (transactionValue / totalMarketCap) * IMPACT_MULTIPLIER;
+  
+  // Apply the change based on buy/sell direction
   let newPrice: number;
   if (isBuying) {
     newPrice = currentPrice * (1 + priceChangePercent);
   } else {
     newPrice = currentPrice * (1 - priceChangePercent);
   }
-
+  
+  // Ensure price never goes below $0.01
   return Math.max(0.01, newPrice);
 }
 
@@ -82,16 +81,13 @@ async function calculateTotalOwnership(
   holderId: any,
   holderType: "user" | "company",
   additionalShares: number = 0
-): Promise<{
-  totalShares: number;
-  ownershipPercent: number;
-  canProceed: boolean;
-}> {
+): Promise<{ totalShares: number; ownershipPercent: number; canProceed: boolean }> {
   const company = await ctx.db.get(companyId);
   if (!company) {
     return { totalShares: 0, ownershipPercent: 0, canProceed: false };
   }
 
+  // Get all holdings for this holder across all their accounts
   let totalHolderShares = additionalShares;
 
   if (holderType === "user") {
@@ -99,17 +95,11 @@ async function calculateTotalOwnership(
     const userHoldings = await ctx.db
       .query("stocks")
       .withIndex("by_company_holder_holderType", (q: any) =>
-        q
-          .eq("companyId", companyId)
-          .eq("holderId", holderId)
-          .eq("holderType", "user")
+        q.eq("companyId", companyId).eq("holderId", holderId).eq("holderType", "user")
       )
       .collect();
-
-    totalHolderShares += userHoldings.reduce(
-      (sum: number, h: any) => sum + h.shares,
-      0
-    );
+    
+    totalHolderShares += userHoldings.reduce((sum: number, h: any) => sum + h.shares, 0);
 
     // Check all companies owned by this user
     const userCompanies = await ctx.db
@@ -121,76 +111,52 @@ async function calculateTotalOwnership(
       const companyHoldings = await ctx.db
         .query("stocks")
         .withIndex("by_company_holder_holderType", (q: any) =>
-          q
-            .eq("companyId", companyId)
-            .eq("holderId", userCompany._id)
-            .eq("holderType", "company")
+          q.eq("companyId", companyId).eq("holderId", userCompany._id).eq("holderType", "company")
         )
         .collect();
-
-      totalHolderShares += companyHoldings.reduce(
-        (sum: number, h: any) => sum + h.shares,
-        0
-      );
+      
+      totalHolderShares += companyHoldings.reduce((sum: number, h: any) => sum + h.shares, 0);
     }
   } else {
     // Company holdings
     const companyHoldings = await ctx.db
       .query("stocks")
       .withIndex("by_company_holder_holderType", (q: any) =>
-        q
-          .eq("companyId", companyId)
-          .eq("holderId", holderId)
-          .eq("holderType", "company")
+        q.eq("companyId", companyId).eq("holderId", holderId).eq("holderType", "company")
       )
       .collect();
+    
+    totalHolderShares += companyHoldings.reduce((sum: number, h: any) => sum + h.shares, 0);
 
-    totalHolderShares += companyHoldings.reduce(
-      (sum: number, h: any) => sum + h.shares,
-      0
-    );
-
-    // Check if this company is owned by someone
+    // Check if this company is owned by someone, and add their personal holdings too
     const holderCompany = await ctx.db.get(holderId as any);
-    if (holderCompany && "ownerId" in holderCompany) {
+    if (holderCompany && 'ownerId' in holderCompany) {
       const ownerHoldings = await ctx.db
         .query("stocks")
         .withIndex("by_company_holder_holderType", (q: any) =>
-          q
-            .eq("companyId", companyId)
-            .eq("holderId", holderCompany.ownerId)
-            .eq("holderType", "user")
+          q.eq("companyId", companyId).eq("holderId", holderCompany.ownerId).eq("holderType", "user")
         )
         .collect();
+      
+      totalHolderShares += ownerHoldings.reduce((sum: number, h: any) => sum + h.shares, 0);
 
-      totalHolderShares += ownerHoldings.reduce(
-        (sum: number, h: any) => sum + h.shares,
-        0
-      );
-
-      // Check other companies owned by the same person
+      // Also check other companies owned by the same person
       const siblingCompanies = await ctx.db
         .query("companies")
         .withIndex("by_owner", (q: any) => q.eq("ownerId", holderCompany.ownerId))
         .collect();
 
       for (const sibling of siblingCompanies) {
-        if (sibling._id === holderId) continue;
+        if (sibling._id === holderId) continue; // Skip the company we already counted
 
         const siblingHoldings = await ctx.db
           .query("stocks")
           .withIndex("by_company_holder_holderType", (q: any) =>
-            q
-              .eq("companyId", companyId)
-              .eq("holderId", sibling._id)
-              .eq("holderType", "company")
+            q.eq("companyId", companyId).eq("holderId", sibling._id).eq("holderType", "company")
           )
           .collect();
-
-        totalHolderShares += siblingHoldings.reduce(
-          (sum: number, h: any) => sum + h.shares,
-          0
-        );
+        
+        totalHolderShares += siblingHoldings.reduce((sum: number, h: any) => sum + h.shares, 0);
       }
     }
   }
@@ -205,9 +171,43 @@ async function calculateTotalOwnership(
   };
 }
 
-// ============================================================================
-// Stock Trading Mutations
-// ============================================================================
+// Calculate price impact from a player trade
+// This creates immediate short-term fluctuations around the balance-based baseline
+function calculatePlayerTradeImpact(
+  currentPrice: number,
+  sharesTraded: number,
+  totalShares: number,
+  isBuying: boolean
+): number {
+  // IMPACT_MULTIPLIER: Controls how sensitive prices are to trades (configurable)
+  // Higher = bigger swings, Lower = more stable
+  const IMPACT_MULTIPLIER = 0.15;
+  
+  // Calculate transaction value and market cap
+  const transactionValue = sharesTraded * currentPrice;
+  const totalMarketCap = currentPrice * totalShares;
+  
+  // Prevent division by zero
+  if (totalMarketCap === 0) return currentPrice;
+  
+  // Calculate price change as percentage of transaction value to market cap
+  const priceChangePercent = (transactionValue / totalMarketCap) * IMPACT_MULTIPLIER;
+  
+  // Apply the change based on buy/sell direction
+  let newPrice: number;
+  if (isBuying) {
+    // Buying increases price
+    newPrice = currentPrice + (currentPrice * priceChangePercent);
+  } else {
+    // Selling decreases price
+    newPrice = currentPrice - (currentPrice * priceChangePercent);
+  }
+  
+  // Ensure price never goes below $0.01
+  return Math.max(0.01, newPrice);
+}
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 export const buyStock = mutation({
   args: {
@@ -219,51 +219,43 @@ export const buyStock = mutation({
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx);
     if (!userId) throw new Error("Not authenticated");
-
     if (!Number.isInteger(args.shares) || args.shares <= 0) {
       throw new Error("Share amount must be a positive whole number");
     }
     if (args.shares > 1_000_000) {
-      throw new Error(
-        "Cannot purchase more than 1,000,000 shares in a single trade"
-      );
+      throw new Error("Cannot purchase more than 1,000,000 shares in a single trade");
     }
 
     const company = await ctx.db.get(args.companyId);
     if (!company) throw new Error("Company not found");
     if (!company.isPublic) throw new Error("Company is not publicly traded");
-
-    // ANTI-EXPLOIT: Rate limiting
-    const fiveSecondsAgo = Date.now() - 5 * 1000;
+    
+    // ANTI-EXPLOIT: Rate limiting - prevent rapid-fire small trades
+    const fiveSecondsAgo = Date.now() - (5 * 1000);
     const recentBuys = await ctx.db
       .query("stockTransactions")
-      .withIndex("by_company_timestamp", (q) =>
+      .withIndex("by_company_timestamp", (q) => 
         q.eq("companyId", args.companyId).gt("timestamp", fiveSecondsAgo)
       )
       .filter((q) => q.eq(q.field("transactionType"), "buy"))
       .collect();
-
-    const buyerRecentBuys = recentBuys.filter((tx) => tx.buyerId === userId);
+    
+    const buyerRecentBuys = recentBuys.filter(tx => tx.buyerId === userId);
     if (buyerRecentBuys.length >= 3) {
-      throw new Error(
-        "Rate limit exceeded: Please wait a few seconds between trades"
-      );
+      throw new Error("Rate limit exceeded: Please wait a few seconds between trades");
     }
-
-    // ANTI-EXPLOIT: Minimum trade size
-    const minTradeSize = Math.max(1, Math.ceil(company.totalShares * 0.0001));
+    
+    // ANTI-EXPLOIT: Minimum trade size relative to total shares
+    const minTradeSize = Math.max(1, Math.ceil(company.totalShares * 0.0001)); // 0.01% minimum
     if (args.shares < minTradeSize && company.totalShares > 1000) {
-      throw new Error(
-        `Minimum trade size is ${minTradeSize} shares (0.01% of total shares)`
-      );
+      throw new Error(`Minimum trade size is ${minTradeSize} shares (0.01% of total shares)`);
     }
 
     const fromAccount = await ctx.db.get(args.fromAccountId);
     if (!fromAccount) throw new Error("Account not found");
 
     const accountIsCompany = !!fromAccount.companyId;
-    const buyerPreference =
-      args.buyerType ?? (accountIsCompany ? "company" : "user");
+    const buyerPreference = args.buyerType ?? (accountIsCompany ? "company" : "user");
 
     let buyerId: any;
     let buyerType: "user" | "company";
@@ -281,9 +273,7 @@ export const buyStock = mutation({
       if (!access) throw new Error("No access to this company");
 
       if (buyerId === company._id) {
-        throw new Error(
-          "Companies cannot buy back their own shares through the public market"
-        );
+        throw new Error("Companies cannot buy back their own shares through the public market");
       }
     } else {
       if (buyerPreference === "company") {
@@ -294,13 +284,12 @@ export const buyStock = mutation({
       buyerId = userId;
 
       if (company.ownerId === buyerId) {
-        throw new Error(
-          "Company owners already control their equity and cannot buy their own stock"
-        );
+        throw new Error("Company owners already control their equity and cannot buy their own stock");
       }
     }
 
-    // ANTI-EXPLOIT: Check ownership cap
+    // ANTI-EXPLOIT: Check if this purchase would result in >100% ownership
+    // This prevents users from buying stocks through their companies and then transferring
     const ownershipCheck = await calculateTotalOwnership(
       ctx,
       args.companyId,
@@ -311,14 +300,11 @@ export const buyStock = mutation({
 
     if (!ownershipCheck.canProceed) {
       throw new Error(
-        `Cannot complete purchase: This would result in ${ownershipCheck.ownershipPercent.toFixed(
-          2
-        )}% ` +
-          `total ownership across all your accounts. Maximum allowed is 100%.`
+        `Cannot complete purchase: This would result in ${ownershipCheck.ownershipPercent.toFixed(2)}% ` +
+        `total ownership across all your accounts. Maximum allowed is 100%.`
       );
     }
 
-    // Calculate costs
     const totalCost = args.shares * company.sharePrice;
     const fromBalance = fromAccount.balance ?? 0;
 
@@ -340,7 +326,7 @@ export const buyStock = mutation({
       balance: companyBalance + totalCost,
     });
 
-    // Record transaction in ledger
+    // Record transaction in ledger (for record-keeping)
     await ctx.db.insert("ledger", {
       fromAccountId: args.fromAccountId,
       toAccountId: company.accountId,
@@ -350,7 +336,6 @@ export const buyStock = mutation({
       createdAt: Date.now(),
     });
 
-    // Record stock transaction
     await ctx.db.insert("stockTransactions", {
       companyId: args.companyId,
       buyerId,
@@ -362,25 +347,19 @@ export const buyStock = mutation({
       timestamp: Date.now(),
     });
 
-    // Update or create holding
     const holding = await ctx.db
       .query("stocks")
-      .withIndex("by_company_holder_holderType", (q: any) =>
-        q
-          .eq("companyId", args.companyId)
-          .eq("holderId", buyerId)
-          .eq("holderType", buyerType)
+      .withIndex("by_company_holder_holderType", (q) =>
+        q.eq("companyId", args.companyId).eq("holderId", buyerId).eq("holderType", buyerType)
       )
       .first();
 
     if (holding) {
       if (holding.shares + args.shares > 1_000_000) {
-        throw new Error(
-          "Holding limit exceeded: cannot own more than 1,000,000 shares of a single company"
-        );
+        throw new Error("Holding limit exceeded: cannot own more than 1,000,000 shares of a single company");
       }
       const newTotalShares = holding.shares + args.shares;
-      const newAveragePrice =
+      const newAveragePrice = 
         (holding.shares * holding.averagePurchasePrice + totalCost) /
         newTotalShares;
 
@@ -401,19 +380,18 @@ export const buyStock = mutation({
       });
     }
 
-    // PLAYER IMPACT: Calculate new price based on this trade
+    // PLAYER IMPACT: Calculate immediate price change from this purchase
     const newPrice = calculatePlayerTradeImpact(
       company.sharePrice,
       args.shares,
       company.totalShares,
-      true
+      true // isBuying = true
     );
 
     await ctx.db.patch(args.companyId, {
       sharePrice: newPrice,
     });
 
-    // Record price history
     await ctx.db.insert("stockPriceHistory", {
       companyId: args.companyId,
       price: newPrice,
@@ -422,14 +400,13 @@ export const buyStock = mutation({
       timestamp: Date.now(),
     });
 
-    return {
-      success: true,
+    return { 
+      success: true, 
       totalCost,
       oldPrice: company.sharePrice,
       newPrice,
       priceChange: newPrice - company.sharePrice,
-      priceChangePercent:
-        ((newPrice - company.sharePrice) / company.sharePrice) * 100,
+      priceChangePercent: ((newPrice - company.sharePrice) / company.sharePrice) * 100
     };
   },
 });
@@ -444,45 +421,42 @@ export const sellStock = mutation({
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx);
     if (!userId) throw new Error("Not authenticated");
-
     if (!Number.isInteger(args.shares) || args.shares <= 0) {
       throw new Error("Share amount must be a positive whole number");
     }
 
     const company = await ctx.db.get(args.companyId);
     if (!company) throw new Error("Company not found");
-
-    // ANTI-EXPLOIT: Rate limiting
-    const fiveSecondsAgo = Date.now() - 5 * 1000;
+    
+    // ANTI-EXPLOIT: Rate limiting - prevent rapid-fire small trades
+    // Check recent transactions from this user/company for this stock
+    const fiveSecondsAgo = Date.now() - (5 * 1000);
     const recentSells = await ctx.db
       .query("stockTransactions")
-      .withIndex("by_company_timestamp", (q) =>
+      .withIndex("by_company_timestamp", (q) => 
         q.eq("companyId", args.companyId).gt("timestamp", fiveSecondsAgo)
       )
       .filter((q) => q.eq(q.field("transactionType"), "sell"))
       .collect();
-
-    const sellerRecentSells = recentSells.filter((tx) => tx.buyerId === userId);
+    
+    // Check if this seller has made recent sells
+    const sellerRecentSells = recentSells.filter(tx => tx.buyerId === userId);
     if (sellerRecentSells.length >= 3) {
-      throw new Error(
-        "Rate limit exceeded: Please wait a few seconds between trades"
-      );
+      throw new Error("Rate limit exceeded: Please wait a few seconds between trades");
     }
-
-    // ANTI-EXPLOIT: Minimum trade size
-    const minTradeSize = Math.max(1, Math.ceil(company.totalShares * 0.0001));
+    
+    // ANTI-EXPLOIT: Minimum trade size relative to total shares
+    // Prevent microtrading to manipulate prices
+    const minTradeSize = Math.max(1, Math.ceil(company.totalShares * 0.0001)); // 0.01% minimum
     if (args.shares < minTradeSize && company.totalShares > 1000) {
-      throw new Error(
-        `Minimum trade size is ${minTradeSize} shares (0.01% of total shares)`
-      );
+      throw new Error(`Minimum trade size is ${minTradeSize} shares (0.01% of total shares)`);
     }
 
     const toAccount = await ctx.db.get(args.toAccountId);
     if (!toAccount) throw new Error("Destination account not found");
 
     const accountIsCompany = !!toAccount.companyId;
-    const sellerPreference =
-      args.sellerType ?? (accountIsCompany ? "company" : "user");
+    const sellerPreference = args.sellerType ?? (accountIsCompany ? "company" : "user");
 
     let sellerId: any;
     let sellerType: "user" | "company";
@@ -507,14 +481,11 @@ export const sellStock = mutation({
       sellerId = userId;
     }
 
-    // Get holding
+    // OPTIMIZED: Use compound index to avoid filter after withIndex
     const holding = await ctx.db
       .query("stocks")
-      .withIndex("by_company_holder_holderType", (q: any) =>
-        q
-          .eq("companyId", args.companyId)
-          .eq("holderId", sellerId)
-          .eq("holderType", sellerType)
+      .withIndex("by_company_holder_holderType", (q) =>
+        q.eq("companyId", args.companyId).eq("holderId", sellerId).eq("holderType", sellerType)
       )
       .first();
 
@@ -522,27 +493,26 @@ export const sellStock = mutation({
       throw new Error("Insufficient shares");
     }
 
-    // Get company account
+    // Get company account and balance for liquidity check
     const companyAccount = await ctx.db.get(company.accountId);
     if (!companyAccount) throw new Error("Company account not found");
     const companyBalance = companyAccount.balance ?? 0;
-
-    // PLAYER IMPACT: Calculate new price based on this sale
+    
+    // PLAYER IMPACT: Calculate immediate price change from this sale
     const newPrice = calculatePlayerTradeImpact(
       company.sharePrice,
       args.shares,
       company.totalShares,
-      false
+      false // isBuying = false (selling)
     );
 
     const proceeds = args.shares * newPrice;
 
     if (companyBalance < proceeds) {
-      throw new Error(
-        "Company does not have enough liquidity to complete this sale"
-      );
+      throw new Error("Company does not have enough liquidity to complete this sale");
     }
 
+    // Get cached balances
     const toBalance = toAccount.balance ?? 0;
 
     // Update company balance
@@ -555,7 +525,7 @@ export const sellStock = mutation({
       balance: toBalance + proceeds,
     });
 
-    // Record transaction in ledger
+    // Record transaction in ledger (for record-keeping)
     await ctx.db.insert("ledger", {
       fromAccountId: company.accountId,
       toAccountId: args.toAccountId,
@@ -565,7 +535,6 @@ export const sellStock = mutation({
       createdAt: Date.now(),
     });
 
-    // Record stock transaction
     await ctx.db.insert("stockTransactions", {
       companyId: args.companyId,
       buyerId: sellerId,
@@ -577,7 +546,6 @@ export const sellStock = mutation({
       timestamp: Date.now(),
     });
 
-    // Update holding
     const newShares = holding.shares - args.shares;
     if (newShares === 0) {
       await ctx.db.delete(holding._id);
@@ -588,12 +556,10 @@ export const sellStock = mutation({
       });
     }
 
-    // Update price
     await ctx.db.patch(args.companyId, {
       sharePrice: newPrice,
     });
 
-    // Record price history
     await ctx.db.insert("stockPriceHistory", {
       companyId: args.companyId,
       price: newPrice,
@@ -602,14 +568,13 @@ export const sellStock = mutation({
       timestamp: Date.now(),
     });
 
-    return {
-      success: true,
+    return { 
+      success: true, 
       proceeds,
       oldPrice: company.sharePrice,
       newPrice,
       priceChange: newPrice - company.sharePrice,
-      priceChangePercent:
-        ((newPrice - company.sharePrice) / company.sharePrice) * 100,
+      priceChangePercent: ((newPrice - company.sharePrice) / company.sharePrice) * 100
     };
   },
 });
@@ -621,9 +586,7 @@ export const transferStock = mutation({
     toId: v.union(v.id("users"), v.id("companies")),
     toType: v.union(v.literal("user"), v.literal("company")),
     fromHolderId: v.optional(v.union(v.id("users"), v.id("companies"))),
-    fromHolderType: v.optional(
-      v.union(v.literal("user"), v.literal("company"))
-    ),
+    fromHolderType: v.optional(v.union(v.literal("user"), v.literal("company"))),
   },
   handler: async (ctx, args) => {
     const userId = await getCurrentUserId(ctx);
@@ -633,11 +596,13 @@ export const transferStock = mutation({
     const company = await ctx.db.get(args.companyId);
     if (!company) throw new Error("Company not found");
 
+    // Determine the actual holder (default to current user if not specified)
     const fromHolderId = args.fromHolderId || userId;
     const fromHolderType = args.fromHolderType || "user";
 
-    // Check permissions
+    // Check if user has permission to transfer from this holder
     if (fromHolderType === "company") {
+      // User must have access to the company to transfer its stocks
       const access = await ctx.db
         .query("companyAccess")
         .withIndex("by_company_user", (q) =>
@@ -646,21 +611,17 @@ export const transferStock = mutation({
         .first();
 
       if (!access) {
-        throw new Error(
-          "You don't have permission to transfer stocks from this company"
-        );
+        throw new Error("You don't have permission to transfer stocks from this company");
       }
     } else if (fromHolderId !== userId) {
+      // Can't transfer from another user's account
       throw new Error("You can only transfer your own stocks");
     }
 
     const holding = await ctx.db
       .query("stocks")
-      .withIndex("by_company_holder_holderType", (q: any) =>
-        q
-          .eq("companyId", args.companyId)
-          .eq("holderId", fromHolderId)
-          .eq("holderType", fromHolderType)
+      .withIndex("by_company_holder_holderType", (q) =>
+        q.eq("companyId", args.companyId).eq("holderId", fromHolderId).eq("holderType", fromHolderType)
       )
       .first();
 
@@ -668,25 +629,23 @@ export const transferStock = mutation({
       throw new Error("Insufficient shares");
     }
 
-    // ANTI-EXPLOIT: Check receiver ownership cap
+    // ANTI-EXPLOIT: Check if this transfer would result in >100% ownership for the receiver
+    // This prevents users from accumulating >100% by transferring between their accounts
     const receiverOwnershipCheck = await calculateTotalOwnership(
       ctx,
       args.companyId,
-      args.toId,
+      args.toType === "user" ? args.toId : args.toId,
       args.toType,
       args.shares
     );
 
     if (!receiverOwnershipCheck.canProceed) {
       throw new Error(
-        `Cannot complete transfer: The receiver would have ${receiverOwnershipCheck.ownershipPercent.toFixed(
-          2
-        )}% ` +
-          `total ownership across all their accounts. Maximum allowed is 100%.`
+        `Cannot complete transfer: The receiver would have ${receiverOwnershipCheck.ownershipPercent.toFixed(2)}% ` +
+        `total ownership across all their accounts. Maximum allowed is 100%.`
       );
     }
 
-    // Record transaction
     await ctx.db.insert("stockTransactions", {
       companyId: args.companyId,
       buyerId: args.toId,
@@ -700,7 +659,6 @@ export const transferStock = mutation({
       timestamp: Date.now(),
     });
 
-    // Update sender holding
     const newShares = holding.shares - args.shares;
     if (newShares === 0) {
       await ctx.db.delete(holding._id);
@@ -711,14 +669,10 @@ export const transferStock = mutation({
       });
     }
 
-    // Update receiver holding
     const receiverHolding = await ctx.db
       .query("stocks")
-      .withIndex("by_company_holder_holderType", (q: any) =>
-        q
-          .eq("companyId", args.companyId)
-          .eq("holderId", args.toId)
-          .eq("holderType", args.toType)
+      .withIndex("by_company_holder_holderType", (q) =>
+        q.eq("companyId", args.companyId).eq("holderId", args.toId).eq("holderType", args.toType)
       )
       .first();
 
@@ -743,25 +697,22 @@ export const transferStock = mutation({
   },
 });
 
-// ============================================================================
-// Stock Query Functions
-// ============================================================================
-
 export const getPortfolio = query({
   args: {},
   handler: async (ctx) => {
     const userId = await getCurrentUserId(ctx);
     if (!userId) return [];
 
+    // BANDWIDTH OPTIMIZATION: Limit holdings to 100 per user
+    // OPTIMIZED: Use compound index to avoid filter after withIndex
     const holdings = await ctx.db
       .query("stocks")
-      .withIndex("by_holder_holderType", (q: any) =>
-        q.eq("holderId", userId).eq("holderType", "user")
-      )
+      .withIndex("by_holder_holderType", (q) => q.eq("holderId", userId).eq("holderType", "user"))
       .take(100);
 
-    const companyIds = [...new Set(holdings.map((h) => h.companyId))];
-    const companies = await Promise.all(companyIds.map((id) => ctx.db.get(id)));
+    // BANDWIDTH OPTIMIZATION: Batch fetch all companies
+    const companyIds = [...new Set(holdings.map(h => h.companyId))];
+    const companies = await Promise.all(companyIds.map(id => ctx.db.get(id)));
     const companyMap = new Map();
     companies.forEach((company: any) => {
       if (company) {
@@ -769,66 +720,64 @@ export const getPortfolio = query({
       }
     });
 
-    const portfolio = holdings
-      .map((holding) => {
-        const company = companyMap.get(holding.companyId);
-        if (!company) return null;
+    // BANDWIDTH OPTIMIZATION: Skip 24h price history for portfolio listing
+    // Can be fetched separately when viewing individual stock details
+    const portfolio = holdings.map((holding) => {
+      const company = companyMap.get(holding.companyId);
+      if (!company) return null;
 
-        const currentValue = holding.shares * company.sharePrice;
-        const costBasis = holding.shares * holding.averagePurchasePrice;
-        const gainLoss = currentValue - costBasis;
-        const gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
+      const currentValue = holding.shares * company.sharePrice;
+      const costBasis = holding.shares * holding.averagePurchasePrice;
+      const gainLoss = currentValue - costBasis;
+      const gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
 
-        return {
-          ...holding,
-          companyName: company.name,
-          companyTicker: company.ticker,
-          companyLogoUrl: company.logoUrl,
-          currentPrice: company.sharePrice,
-          currentValue,
-          costBasis,
-          gainLoss,
-          gainLossPercent,
-        };
-      })
-      .filter(Boolean);
+      return {
+        ...holding,
+        companyName: company.name,
+        companyTicker: company.ticker,
+        companyLogoUrl: company.logoUrl,
+        currentPrice: company.sharePrice,
+        currentValue,
+        costBasis,
+        gainLoss,
+        gainLossPercent,
+      };
+    }).filter(Boolean);
 
     return portfolio;
   },
 });
 
+// Get portfolios for all companies the user has access to
 export const getCompanyPortfolios = query({
   args: {},
   handler: async (ctx) => {
     const userId = await getCurrentUserId(ctx);
     if (!userId) return [];
 
+    // BANDWIDTH OPTIMIZATION: Reduced from 50 to 20 companies
     const companyAccess = await ctx.db
       .query("companyAccess")
-      .withIndex("by_user", (q: any) => q.eq("userId", userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .take(20);
 
-    const companyIds = companyAccess.map((a) => a.companyId);
-    const companies = await Promise.all(companyIds.map((id) => ctx.db.get(id)));
+    const companyIds = companyAccess.map(a => a.companyId);
+    const companies = await Promise.all(companyIds.map(id => ctx.db.get(id)));
     const validCompanies = companies.filter(Boolean) as any[];
 
+    // BANDWIDTH OPTIMIZATION: Limit holdings per company to 50
     const allCompanyHoldings = await Promise.all(
-      validCompanies.map((company) =>
+      validCompanies.map(company =>
         ctx.db
           .query("stocks")
-          .withIndex("by_holder_holderType", (q: any) =>
-            q.eq("holderId", company._id).eq("holderType", "company")
-          )
+          .withIndex("by_holder_holderType", (q) => q.eq("holderId", company._id).eq("holderType", "company"))
           .take(50)
       )
     );
 
-    const stockCompanyIds = [
-      ...new Set(allCompanyHoldings.flat().map((h) => h.companyId)),
-    ];
-    const stockCompanies = await Promise.all(
-      stockCompanyIds.map((id) => ctx.db.get(id))
-    );
+    // Get unique stock companies
+    const stockCompanyIds = [...new Set(allCompanyHoldings.flat().map(h => h.companyId))];
+    const stockCompanies = await Promise.all(stockCompanyIds.map(id => ctx.db.get(id)));
     const stockCompanyMap = new Map();
     stockCompanies.forEach((company: any) => {
       if (company) {
@@ -836,62 +785,56 @@ export const getCompanyPortfolios = query({
       }
     });
 
-    const companyPortfolios = validCompanies
-      .map((company, index) => {
-        const holdings = allCompanyHoldings[index];
-        const enrichedHoldings = holdings
-          .map((holding: any) => {
-            const stockCompany = stockCompanyMap.get(holding.companyId);
-            if (!stockCompany) return null;
+    // Build portfolio structure
+    const companyPortfolios = validCompanies.map((company, index) => {
+      const holdings = allCompanyHoldings[index];
+      const enrichedHoldings = holdings.map((holding: any) => {
+        const stockCompany = stockCompanyMap.get(holding.companyId);
+        if (!stockCompany) return null;
 
-            const currentValue = holding.shares * stockCompany.sharePrice;
-            const costBasis = holding.shares * holding.averagePurchasePrice;
-            const gainLoss = currentValue - costBasis;
-            const gainLossPercent =
-              costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
-
-            return {
-              ...holding,
-              companyName: stockCompany.name,
-              companyTicker: stockCompany.ticker,
-              companyLogoUrl: stockCompany.logoUrl,
-              currentPrice: stockCompany.sharePrice,
-              currentValue,
-              costBasis,
-              gainLoss,
-              gainLossPercent,
-            };
-          })
-          .filter(Boolean);
+        const currentValue = holding.shares * stockCompany.sharePrice;
+        const costBasis = holding.shares * holding.averagePurchasePrice;
+        const gainLoss = currentValue - costBasis;
+        const gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
 
         return {
-          companyId: company._id,
-          companyName: company.name,
-          companyTicker: company.ticker,
-          holdings: enrichedHoldings,
+          ...holding,
+          companyName: stockCompany.name,
+          companyTicker: stockCompany.ticker,
+          companyLogoUrl: stockCompany.logoUrl,
+          currentPrice: stockCompany.sharePrice,
+          currentValue,
+          costBasis,
+          gainLoss,
+          gainLossPercent,
         };
-      })
-      .filter((c) => c.holdings.length > 0);
+      }).filter(Boolean);
+
+      return {
+        companyId: company._id,
+        companyName: company.name,
+        companyTicker: company.ticker,
+        holdings: enrichedHoldings,
+      };
+    }).filter(c => c.holdings.length > 0); // Only return companies with stock holdings
 
     return companyPortfolios;
   },
 });
 
 export const getHolderPortfolio = query({
-  args: {
-    holderId: v.union(v.id("users"), v.id("companies")),
-    holderType: v.union(v.literal("user"), v.literal("company")),
-  },
+  args: { holderId: v.union(v.id("users"), v.id("companies")), holderType: v.union(v.literal("user"), v.literal("company")) },
   handler: async (ctx, args) => {
+    // BANDWIDTH OPTIMIZATION: Limit holdings to 100
+    // OPTIMIZED: Use compound index to avoid filter after withIndex
     const holdings = await ctx.db
       .query("stocks")
-      .withIndex("by_holder_holderType", (q: any) =>
-        q.eq("holderId", args.holderId).eq("holderType", args.holderType)
-      )
+      .withIndex("by_holder_holderType", (q) => q.eq("holderId", args.holderId).eq("holderType", args.holderType))
       .take(100);
 
-    const companyIds = [...new Set(holdings.map((h) => h.companyId))];
-    const companies = await Promise.all(companyIds.map((id) => ctx.db.get(id)));
+    // BANDWIDTH OPTIMIZATION: Batch fetch companies and skip price history
+    const companyIds = [...new Set(holdings.map(h => h.companyId))];
+    const companies = await Promise.all(companyIds.map(id => ctx.db.get(id)));
     const companyMap = new Map();
     companies.forEach((company: any) => {
       if (company) {
@@ -899,29 +842,27 @@ export const getHolderPortfolio = query({
       }
     });
 
-    const portfolio = holdings
-      .map((holding) => {
-        const company = companyMap.get(holding.companyId);
-        if (!company) return null;
+    const portfolio = holdings.map((holding) => {
+      const company = companyMap.get(holding.companyId);
+      if (!company) return null;
 
-        const currentValue = holding.shares * company.sharePrice;
-        const costBasis = holding.shares * holding.averagePurchasePrice;
-        const gainLoss = currentValue - costBasis;
-        const gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
+      const currentValue = holding.shares * company.sharePrice;
+      const costBasis = holding.shares * holding.averagePurchasePrice;
+      const gainLoss = currentValue - costBasis;
+      const gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
 
-        return {
-          ...holding,
-          companyName: company.name,
-          companyTicker: company.ticker,
-          companyLogoUrl: company.logoUrl,
-          currentPrice: company.sharePrice,
-          currentValue,
-          costBasis,
-          gainLoss,
-          gainLossPercent,
-        };
-      })
-      .filter(Boolean);
+      return {
+        ...holding,
+        companyName: company.name,
+        companyTicker: company.ticker,
+        companyLogoUrl: company.logoUrl,
+        currentPrice: company.sharePrice,
+        currentValue,
+        costBasis,
+        gainLoss,
+        gainLossPercent,
+      };
+    }).filter(Boolean);
 
     return portfolio;
   },
@@ -933,40 +874,29 @@ export const getCompanyShareholders = query({
     const company = await ctx.db.get(args.companyId);
     if (!company) throw new Error("Company not found");
 
+    // BANDWIDTH OPTIMIZATION: Limit to top 100 shareholders
     const holdings = await ctx.db
       .query("stocks")
-      .withIndex("by_company", (q: any) => q.eq("companyId", args.companyId))
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
       .take(100);
 
-    const ownershipSnapshot = computeOwnerMetricsFromHoldings(
-      company,
-      holdings,
-      company.ownerId
-    );
-    const totalHeldShares = holdings.reduce((sum, h) => sum + h.shares, 0);
+  const ownershipSnapshot = computeOwnerMetricsFromHoldings(company, holdings, company.ownerId);
+  const totalHeldShares = holdings.reduce((sum, h) => sum + h.shares, 0);
 
-    const userIds = holdings
-      .filter((h) => h.holderType === "user")
-      .map((h) => h.holderId);
-    const companyIds = holdings
-      .filter((h) => h.holderType === "company")
-      .map((h) => h.holderId);
-
-    const users = await Promise.all(userIds.map((id) => ctx.db.get(id as any)));
-    const companies = await Promise.all(
-      companyIds.map((id) => ctx.db.get(id as any))
-    );
-
+    // BANDWIDTH OPTIMIZATION: Batch fetch all holders
+    const userIds = holdings.filter(h => h.holderType === "user").map(h => h.holderId);
+    const companyIds = holdings.filter(h => h.holderType === "company").map(h => h.holderId);
+    
+    const users = await Promise.all(userIds.map(id => ctx.db.get(id as any)));
+    const companies = await Promise.all(companyIds.map(id => ctx.db.get(id as any)));
+    
     const userMap = new Map();
     users.forEach((user: any, index) => {
       if (user) {
-        userMap.set(
-          userIds[index],
-          user.name || user.username || "Unknown User"
-        );
+        userMap.set(userIds[index], user.name || user.username || "Unknown User");
       }
     });
-
+    
     const companyMapLocal = new Map();
     companies.forEach((comp: any, index) => {
       if (comp) {
@@ -975,10 +905,9 @@ export const getCompanyShareholders = query({
     });
 
     const shareholders = holdings.map((holding) => {
-      const name =
-        holding.holderType === "user"
-          ? userMap.get(holding.holderId) || "Unknown"
-          : companyMapLocal.get(holding.holderId) || "Unknown";
+      const name = holding.holderType === "user" 
+        ? userMap.get(holding.holderId) || "Unknown"
+        : companyMapLocal.get(holding.holderId) || "Unknown";
 
       const ownershipPercent = (holding.shares / company.totalShares) * 100;
       const currentValue = holding.shares * company.sharePrice;
@@ -1000,9 +929,7 @@ export const getCompanyShareholders = query({
     const founder = await ctx.db.get(company.ownerId);
 
     return {
-      shareholders: shareholders.sort(
-        (a, b) => b.ownershipPercent - a.ownershipPercent
-      ),
+      shareholders: shareholders.sort((a, b) => b.ownershipPercent - a.ownershipPercent),
       founderShares,
       founderOwnership,
       founderEquityValue: ownershipSnapshot.ownerEquityValue,
@@ -1015,91 +942,91 @@ export const getCompanyShareholders = query({
 });
 
 export const getStockDetails = query({
-  args: {
+  args: { 
     companyId: v.id("companies"),
-    timeRange: v.optional(v.string()),
+    timeRange: v.optional(v.string()) // "1h", "6h", "24h", "7d", "30d", "all"
   },
   handler: async (ctx, args) => {
     const company = await ctx.db.get(args.companyId);
     if (!company) throw new Error("Company not found");
 
+    // Get balance from cached account balance
     const account = await ctx.db.get(company.accountId);
     const balance = account?.balance ?? 0;
 
+    // Calculate time range
     const now = Date.now();
     let startTime = 0;
     const timeRange = args.timeRange || "7d";
-
+    
     switch (timeRange) {
       case "1h":
-        startTime = now - 60 * 60 * 1000;
+        startTime = now - (60 * 60 * 1000);
         break;
       case "6h":
-        startTime = now - 6 * 60 * 60 * 1000;
+        startTime = now - (6 * 60 * 60 * 1000);
         break;
       case "24h":
-        startTime = now - 24 * 60 * 60 * 1000;
+        startTime = now - (24 * 60 * 60 * 1000);
         break;
       case "7d":
-        startTime = now - 7 * 24 * 60 * 60 * 1000;
+        startTime = now - (7 * 24 * 60 * 60 * 1000);
         break;
       case "30d":
-        startTime = now - 30 * 24 * 60 * 60 * 1000;
+        startTime = now - (30 * 24 * 60 * 60 * 1000);
         break;
       case "all":
       default:
-        startTime = now - 90 * 24 * 60 * 60 * 1000;
+        // OPTIMIZED: Limit "all" to last 90 days instead of truly all
+        startTime = now - (90 * 24 * 60 * 60 * 1000);
         break;
     }
 
     const priceHistory = await ctx.db
       .query("stockPriceHistory")
-      .withIndex("by_company_timestamp", (q: any) =>
+      .withIndex("by_company_timestamp", (q) =>
         q.eq("companyId", args.companyId).gt("timestamp", startTime)
       )
       .order("asc")
       .collect();
-
+    
+    // BANDWIDTH OPTIMIZATION: Sample down large history datasets
     let sampledHistory = priceHistory;
     if (priceHistory.length > 100) {
       const step = Math.ceil(priceHistory.length / 100);
       sampledHistory = priceHistory.filter((_, index) => index % step === 0);
     }
 
+    // OPTIMIZED: Only get last 50 transactions instead of all
+    // OPTIMIZED: Use compound index for efficient time-ordered queries
     const recentTransactions = await ctx.db
       .query("stockTransactions")
-      .withIndex("by_company_timestamp", (q: any) =>
-        q.eq("companyId", args.companyId)
-      )
+      .withIndex("by_company_timestamp", (q) => q.eq("companyId", args.companyId))
       .order("desc")
       .take(50);
 
-    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-    const priceOneDayAgo =
-      sampledHistory.find((p) => p.timestamp >= oneDayAgo)?.price ??
-      company.sharePrice;
+    const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+    const priceOneDayAgo = sampledHistory.find(p => p.timestamp >= oneDayAgo)?.price ?? company.sharePrice;
     const priceChange24h = company.sharePrice - priceOneDayAgo;
-    const priceChangePercent24h =
-      priceOneDayAgo !== 0 ? (priceChange24h / priceOneDayAgo) * 100 : 0;
+    const priceChangePercent24h = priceOneDayAgo !== 0 ? (priceChange24h / priceOneDayAgo) * 100 : 0;
 
-    const highPrice =
-      sampledHistory.length > 0
-        ? Math.max(...sampledHistory.map((p) => p.price))
-        : company.sharePrice;
-    const lowPrice =
-      sampledHistory.length > 0
-        ? Math.min(...sampledHistory.map((p) => p.price))
-        : company.sharePrice;
+    const highPrice = sampledHistory.length > 0
+      ? Math.max(...sampledHistory.map(p => p.price))
+      : company.sharePrice;
+    const lowPrice = sampledHistory.length > 0
+      ? Math.min(...sampledHistory.map(p => p.price))
+      : company.sharePrice;
 
     const totalVolume = sampledHistory
-      .filter((p) => p.timestamp >= oneDayAgo)
+      .filter(p => p.timestamp >= oneDayAgo)
       .reduce((sum, p) => sum + (p.volume || 0), 0);
-
+    
+    // BANDWIDTH OPTIMIZATION: Limit holdings to 100
     const holdings = await ctx.db
       .query("stocks")
-      .withIndex("by_company", (q: any) => q.eq("companyId", args.companyId))
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
       .take(100);
-
+    
     const totalHeldShares = holdings.reduce((sum, h) => sum + h.shares, 0);
     const marketCap = company.sharePrice * company.totalShares;
 
@@ -1131,44 +1058,51 @@ export const getStockDetails = query({
 export const getAllPublicStocks = query({
   args: {},
   handler: async (ctx) => {
+    // BANDWIDTH OPTIMIZATION: Limit to top 50 public companies by market cap
     const publicCompanies = await ctx.db
       .query("companies")
-      .withIndex("by_public_sharePrice", (q: any) => q.eq("isPublic", true))
+      .withIndex("by_public_sharePrice", (q) => q.eq("isPublic", true))
       .order("desc")
       .take(50);
 
-    const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
-    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-
+    // OPTIMIZED: Only fetch last 2 hours of history for chart (reduced from 24h)
+    const twoHoursAgo = Date.now() - (2 * 60 * 60 * 1000);
+    const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+    
+    // Get recent price history for chart display (last 2 hours)
     const allRecentHistory = await ctx.db
       .query("stockPriceHistory")
-      .withIndex("by_timestamp", (q: any) => q.gt("timestamp", twoHoursAgo))
+      .withIndex("by_timestamp", (q) => q.gt("timestamp", twoHoursAgo))
       .order("asc")
       .collect();
-
+    
+    // Get single price point from 24h ago for price change calculation
     const allDayAgoHistory = await ctx.db
       .query("stockPriceHistory")
-      .withIndex("by_timestamp", (q: any) => q.gt("timestamp", oneDayAgo))
+      .withIndex("by_timestamp", (q) => q.gt("timestamp", oneDayAgo))
       .order("asc")
-      .take(100);
+      .take(100); // Just need first entry per company
 
+    // Group by company
     const recentHistoryByCompany = new Map<string, any[]>();
     const dayAgoHistoryByCompany = new Map<string, any>();
-
-    allRecentHistory.forEach((entry) => {
+    
+    allRecentHistory.forEach(entry => {
       const arr = recentHistoryByCompany.get(entry.companyId) || [];
       arr.push(entry);
       recentHistoryByCompany.set(entry.companyId, arr);
     });
 
-    allDayAgoHistory.forEach((entry) => {
+    allDayAgoHistory.forEach(entry => {
       if (!dayAgoHistoryByCompany.has(entry.companyId)) {
         dayAgoHistoryByCompany.set(entry.companyId, entry);
       }
     });
 
+    // Sort recent history
     for (const [, entries] of recentHistoryByCompany) {
       entries.sort((a, b) => a.timestamp - b.timestamp);
+      // BANDWIDTH OPTIMIZATION: Sample down to max 20 points per chart
       if (entries.length > 20) {
         const step = Math.floor(entries.length / 20);
         const sampled = [];
@@ -1180,21 +1114,19 @@ export const getAllPublicStocks = query({
       }
     }
 
-    const stocks = publicCompanies.map((company) => {
+    const stocks = publicCompanies.map(company => {
       const recentHistory = recentHistoryByCompany.get(company._id) || [];
-      const chartHistory =
-        recentHistory.length > 0
-          ? recentHistory.map((entry) => ({
-              price: entry.price,
-              timestamp: entry.timestamp,
-            }))
-          : [{ price: company.sharePrice, timestamp: Date.now() }];
-
+      const chartHistory = recentHistory.length > 0
+        ? recentHistory.map(entry => ({
+            price: entry.price,
+            timestamp: entry.timestamp,
+          }))
+        : [{ price: company.sharePrice, timestamp: Date.now() }];
+      
       const dayAgoEntry = dayAgoHistoryByCompany.get(company._id);
       const oldPrice = dayAgoEntry?.price || company.sharePrice;
       const priceChange24h = company.sharePrice - oldPrice;
-      const priceChangePercent24h =
-        oldPrice !== 0 ? (priceChange24h / oldPrice) * 100 : 0;
+      const priceChangePercent24h = oldPrice !== 0 ? (priceChange24h / oldPrice) * 100 : 0;
 
       const marketCap = company.sharePrice * company.totalShares;
 
@@ -1215,28 +1147,29 @@ export const getAllPublicStocks = query({
   },
 });
 
-// ============================================================================
-// Automatic Price Updates (Cron)
-// ============================================================================
-
 export const updateStockPrices = internalMutation({
   args: {},
   handler: async (ctx) => {
     // AUTOMATIC PRICE ADJUSTMENT: Runs every 10 minutes
-    // Gradually moves stock prices toward target based on company balance
-
+    // Gradually moves stock prices toward their target price based on company balance
+    
+    // ADJUSTMENT_FACTOR: Controls how quickly prices adjust (0.01 to 0.05)
+    // 0.03 = 3% of the difference between current and target per update
+    const ADJUSTMENT_FACTOR = 0.03;
+    
     const now = Date.now();
 
+    // Get all public companies
     const publicCompanies = await ctx.db
       .query("companies")
-      .withIndex("by_public_sharePrice", (q: any) => q.eq("isPublic", true))
+      .withIndex("by_public_sharePrice", (q) => q.eq("isPublic", true))
       .collect();
 
     if (publicCompanies.length === 0) {
       return { updated: 0 };
     }
 
-    // Batch fetch all company accounts
+    // Batch fetch all company accounts for balances
     const accountIds = publicCompanies.map((company) => company.accountId);
     const accounts = await Promise.all(accountIds.map((id) => ctx.db.get(id)));
 
@@ -1251,27 +1184,34 @@ export const updateStockPrices = internalMutation({
     for (const company of publicCompanies) {
       const companyBalance = balanceMap.get(company.accountId) ?? 0;
       const currentPrice = company.sharePrice;
-
-      // Calculate target price: (Balance × 10) / Total Shares
-      const targetPrice = calculateTargetPrice(companyBalance, company.totalShares);
-
-      // Calculate adjustment: 3% of the difference
-      const priceDifference = targetPrice - currentPrice;
+      
+      // Calculate target price based on current balance
+      // Target = (Balance * 10) / 1,000,000 shares
+      const targetPrice = (companyBalance * 10) / company.totalShares;
+      
+      // Ensure target price is never below $0.01
+      const validTargetPrice = Math.max(0.01, targetPrice);
+      
+      // Calculate the difference between current and target
+      const priceDifference = validTargetPrice - currentPrice;
+      
+      // Adjust price by a percentage of the difference
+      // New Price = Current + (Difference * Adjustment_Factor)
       const adjustment = priceDifference * ADJUSTMENT_FACTOR;
       const newPrice = Math.max(0.01, currentPrice + adjustment);
-
-      // Update price
+      
+      // Update the company's stock price
       await ctx.db.patch(company._id, {
         sharePrice: newPrice,
       });
 
-      // Record in history
+      // Record price in history
       const marketCap = newPrice * company.totalShares;
       await ctx.db.insert("stockPriceHistory", {
         companyId: company._id,
         price: newPrice,
         marketCap,
-        volume: 0,
+        volume: 0, // Automatic adjustments have no volume
         timestamp: now,
       });
     }
@@ -1280,21 +1220,21 @@ export const updateStockPrices = internalMutation({
   },
 });
 
-// ============================================================================
-// Cleanup
-// ============================================================================
-
+// OPTIMIZATION: Clean up old stock price history to prevent unbounded growth
 export const cleanupOldPriceHistory = internalMutation({
   args: {},
   handler: async (ctx) => {
-    const ninetyDaysAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
-
+    // Keep only last 90 days of price history
+    const ninetyDaysAgo = Date.now() - (90 * 24 * 60 * 60 * 1000);
+    
+    // Get old records in a timestamp-ordered batch
     const oldRecords = await ctx.db
       .query("stockPriceHistory")
-      .withIndex("by_timestamp", (q: any) => q.lt("timestamp", ninetyDaysAgo))
+      .withIndex("by_timestamp", (q) => q.lt("timestamp", ninetyDaysAgo))
       .order("asc")
       .take(1000);
 
+    // Delete in batches to avoid timeout
     let deleted = 0;
     for (const record of oldRecords) {
       await ctx.db.delete(record._id);
