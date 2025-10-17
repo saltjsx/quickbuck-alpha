@@ -42,6 +42,42 @@ export default function Page() {
     personalAccount?._id ? { accountId: personalAccount._id, limit: 8 } : "skip"
   );
 
+  const breakdown = useMemo(() => {
+    if (!overview)
+      return { cashPct: 0, portfolioPct: 0, equityPct: 0, debtPct: 0 };
+    const cash = overview.personalAccount?.balance ?? 0;
+    const portfolioValue = overview.portfolioValue ?? 0;
+    const ownerEquityValue = overview.ownerEquityValue ?? 0;
+    const loanDebt = overview.totalLoanDebt ?? 0;
+    const positive = cash + portfolioValue + ownerEquityValue;
+    const total = positive + loanDebt;
+    const base = positive > 0 ? positive : 1;
+    return {
+      cashPct: (cash / base) * 100,
+      portfolioPct: (portfolioValue / base) * 100,
+      equityPct: (ownerEquityValue / base) * 100,
+      debtPct: total > 0 ? (loanDebt / total) * 100 : 0,
+    };
+  }, [overview]);
+
+  const ownedCompanies = useMemo(() => {
+    if (!overview) return [];
+    return (overview.companies || [])
+      .filter((c: any) => c.ownerId === overview.personalAccount?.ownerId)
+      .sort(
+        (a: any, b: any) =>
+          (b.ownerEquityValue ?? 0) - (a.ownerEquityValue ?? 0)
+      )
+      .slice(0, 5);
+  }, [overview]);
+
+  const topHoldings = useMemo(() => {
+    if (!overview) return [];
+    return (overview.portfolio || [])
+      .sort((a: any, b: any) => (b.currentValue ?? 0) - (a.currentValue ?? 0))
+      .slice(0, 6);
+  }, [overview]);
+
   if (overview === undefined) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -71,38 +107,6 @@ export default function Page() {
   const ownerEquityValue = overview.ownerEquityValue ?? 0;
   const loanDebt = overview.totalLoanDebt ?? 0;
   const netWorth = overview.netWorth ?? 0;
-
-  const breakdown = useMemo(() => {
-    const positive = cash + portfolioValue + ownerEquityValue;
-    const total = positive + loanDebt; // loanDebt is positive number representing debt
-    const base = positive > 0 ? positive : 1;
-    return {
-      cashPct: (cash / base) * 100,
-      portfolioPct: (portfolioValue / base) * 100,
-      equityPct: (ownerEquityValue / base) * 100,
-      debtPct: total > 0 ? (loanDebt / total) * 100 : 0,
-    };
-  }, [cash, portfolioValue, ownerEquityValue, loanDebt]);
-
-  const ownedCompanies = useMemo(
-    () =>
-      (overview.companies || [])
-        .filter((c: any) => c.ownerId === overview.personalAccount?.ownerId)
-        .sort(
-          (a: any, b: any) =>
-            (b.ownerEquityValue ?? 0) - (a.ownerEquityValue ?? 0)
-        )
-        .slice(0, 5),
-    [overview.companies, overview.personalAccount?.ownerId]
-  );
-
-  const topHoldings = useMemo(
-    () =>
-      (overview.portfolio || [])
-        .sort((a: any, b: any) => (b.currentValue ?? 0) - (a.currentValue ?? 0))
-        .slice(0, 6),
-    [overview.portfolio]
-  );
 
   return (
     <div className="flex flex-1 flex-col">
