@@ -162,16 +162,6 @@ export const migrateProductRevenue = mutation({
   },
 });
 
-const TABLE_RESET_CONFIG = [
-  { table: "ledger" as const, metric: "ledgerDeleted" as const, batchSize: 250 },
-  { table: "stocks" as const, metric: "stockHoldingsDeleted" as const, batchSize: 250 },
-  { table: "stockTransactions" as const, metric: "stockTransactionsDeleted" as const, batchSize: 250 },
-  { table: "stockPriceHistory" as const, metric: "stockHistoryDeleted" as const, batchSize: 250 },
-  { table: "collections" as const, metric: "collectionsDeleted" as const, batchSize: 250 },
-  { table: "expenses" as const, metric: "expensesDeleted" as const, batchSize: 250 },
-  { table: "licenses" as const, metric: "licensesDeleted" as const, batchSize: 250 },
-] as const;
-
 type ResetMetrics = {
   ledgerDeleted: number;
   stockHoldingsDeleted: number;
@@ -185,6 +175,20 @@ type ResetMetrics = {
   companiesReset: number;
   productsReset: number;
 };
+
+const TABLE_RESET_CONFIG: Array<{
+  table: "ledger" | "stocks" | "stockTransactions" | "stockPriceHistory" | "collections" | "expenses" | "licenses";
+  metric: keyof ResetMetrics;
+  batchSize: number;
+}> = [
+  { table: "ledger", metric: "ledgerDeleted", batchSize: 250 },
+  { table: "stocks", metric: "stockHoldingsDeleted", batchSize: 250 },
+  { table: "stockTransactions", metric: "stockTransactionsDeleted", batchSize: 250 },
+  { table: "stockPriceHistory", metric: "stockHistoryDeleted", batchSize: 250 },
+  { table: "collections", metric: "collectionsDeleted", batchSize: 250 },
+  { table: "expenses", metric: "expensesDeleted", batchSize: 250 },
+  { table: "licenses", metric: "licensesDeleted", batchSize: 250 },
+];
 
 type ResetPhase =
   | "deleteTables"
@@ -319,7 +323,7 @@ async function performReset(
       const page = await ctx.db
         .query(config.table)
         .paginate({
-          limit: config.batchSize,
+          numItems: config.batchSize,
           cursor: state.tableCursor === null ? undefined : state.tableCursor,
         });
 
@@ -355,7 +359,7 @@ async function performReset(
       const page = await ctx.db
         .query("accounts")
         .paginate({
-          limit: ACCOUNT_BATCH_SIZE,
+          numItems: ACCOUNT_BATCH_SIZE,
           cursor: state.accountCursor === null ? undefined : state.accountCursor,
         });
 
@@ -407,7 +411,7 @@ async function performReset(
       const page = await ctx.db
         .query("companies")
         .paginate({
-          limit: COMPANY_BATCH_SIZE,
+          numItems: COMPANY_BATCH_SIZE,
           cursor: state.companyCursor === null ? undefined : state.companyCursor,
         });
 
@@ -451,7 +455,7 @@ async function performReset(
       const page = await ctx.db
         .query("products")
         .paginate({
-          limit: PRODUCT_BATCH_SIZE,
+          numItems: PRODUCT_BATCH_SIZE,
           cursor: state.productCursor === null ? undefined : state.productCursor,
         });
 
@@ -625,6 +629,111 @@ export const fixOrphanedProducts = mutation({
     return {
       fixed: fixedCount,
       fixedProducts,
+    };
+  },
+});
+
+// Debug query to inspect revenue calculation discrepancies
+export const inspectRevenue = query({
+  args: { 
+    companyId: v.id("companies"),
+  },
+  handler: async (ctx, args) => {
+    const company = await ctx.db.get(args.companyId);
+    if (!company) return { error: "Company not found" };
+
+    // 1. Get cached metrics
+    const cachedMetrics = await ctx.db
+      .query("companyMetrics")
+      .withIndex("by_company_period", (q) => 
+        q.eq("companyId", args.companyId).eq("period", "30d")
+      )
+      .first();
+
+    // 2. Get all transactions (30 days)
+    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    
+    const allIncoming = await ctx.db
+      .query("ledger")
+      .withIndex("by_to_account_created", (q) => 
+        q.eq("toAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
+      )
+      .collect();
+
+    const allOutgoing = await ctx.db
+      .query("ledger")
+      .withIndex("by_from_account_created", (q) => 
+        q.eq("fromAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
+      )
+      .collect();
+
+    // 3. Calculate revenue by type
+    const revenueByType: Record<string, number> = {};
+    const costsByType: Record<string, number> = {};
+
+    for (const tx of allIncoming) {
+      revenueByType[tx.type] = (revenueByType[tx.type] || 0) + (tx.amount || 0);
+    }
+
+    for (const tx of allOutgoing) {
+      costsByType[tx.type] = (costsByType[tx.type] || 0) + (tx.amount || 0);
+    }
+
+    // 4. Get product totals
+    const allProducts = await ctx.db
+      .query("products")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .collect();
+
+    let productTotalRevenue = 0;
+    let productTotalCosts = 0;
+    
+    for (const product of allProducts) {
+      productTotalRevenue += product.totalRevenue || 0;
+      productTotalCosts += product.totalCosts || 0;
+    }
+
+    // 5. Calculate what should be revenue (marketplace_batch + product_purchase)
+    const calculatedRevenue = (revenueByType["marketplace_batch"] || 0) + (revenueByType["product_purchase"] || 0);
+    const calculatedCosts = (costsByType["marketplace_batch"] || 0) + (costsByType["product_cost"] || 0);
+
+    return {
+      company: {
+        _id: company._id,
+        name: company.name,
+        accountId: company.accountId,
+      },
+      cachedMetrics: cachedMetrics ? {
+        totalRevenue: cachedMetrics.totalRevenue,
+        totalCosts: cachedMetrics.totalCosts,
+        totalExpenses: cachedMetrics.totalExpenses,
+        totalProfit: cachedMetrics.totalProfit,
+        lastUpdated: new Date(cachedMetrics.lastUpdated).toISOString(),
+        age: `${Math.round((Date.now() - cachedMetrics.lastUpdated) / 60000)} minutes old`,
+      } : null,
+      ledgerAnalysis: {
+        incomingTransactionCount: allIncoming.length,
+        outgoingTransactionCount: allOutgoing.length,
+        revenueByType,
+        costsByType,
+        calculatedRevenue,
+        calculatedCosts,
+      },
+      productAnalysis: {
+        activeProducts: allProducts.filter(p => p.isActive).length,
+        totalProducts: allProducts.length,
+        productTotalRevenue,
+        productTotalCosts,
+      },
+      discrepancies: {
+        cachedVsCalculatedRevenue: cachedMetrics 
+          ? Math.abs(cachedMetrics.totalRevenue - calculatedRevenue)
+          : "No cached metrics",
+        cachedVsProductsRevenue: cachedMetrics
+          ? Math.abs(cachedMetrics.totalRevenue - productTotalRevenue)
+          : "No cached metrics",
+        productsVsCalculatedRevenue: Math.abs(productTotalRevenue - calculatedRevenue),
+      },
     };
   },
 });

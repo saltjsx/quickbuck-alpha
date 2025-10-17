@@ -155,21 +155,22 @@ export const updateCompanyMetrics = internalMutation({
 
     const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
 
-    // BANDWIDTH OPTIMIZATION: Reduced from 200 to 150 per query
-    // Further reduction since we're now updating less frequently
+    // IMPORTANT: Use collect() to get ALL transactions for accurate metrics
+    // This is critical for revenue/profit calculations - missing transactions = wrong totals
+    // The cache mechanism (30 min updates) prevents this from being called too frequently
     const [incoming30d, outgoing30d] = await Promise.all([
       ctx.db
         .query("ledger")
         .withIndex("by_to_account_created", (q) => 
           q.eq("toAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
         )
-        .take(150), // REDUCED from 200 to 150
+        .collect(), // FIXED: Changed from take(150) to collect() for accurate totals
       ctx.db
         .query("ledger")
         .withIndex("by_from_account_created", (q) => 
           q.eq("fromAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
         )
-        .take(150), // REDUCED from 200 to 150
+        .collect(), // FIXED: Changed from take(150) to collect() for accurate totals
     ]);
 
     // Revenue: incoming transactions for product sales
@@ -959,24 +960,24 @@ export const getCompanyDashboard = query({
         .slice(-7); // Only last 7 days for chart
 
     } else {
-      // FALLBACK PATH: Calculate from ledger (with AGGRESSIVE limits to reduce bandwidth)
+      // FALLBACK PATH: Calculate from ledger when cache is stale/missing
       const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
       
-      // BANDWIDTH OPTIMIZATION: Reduced from 100 to 75 for fallback path
-      // Fallback should rarely be used, so make it even more aggressive
+      // IMPORTANT: Use collect() for accurate totals (same as cache calculation)
+      // This fallback path should rarely execute, but when it does, must be accurate
       const [incomingTx, outgoingTx] = await Promise.all([
         ctx.db
           .query("ledger")
           .withIndex("by_to_account_created", (q) => 
             q.eq("toAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
           )
-          .take(75), // REDUCED from 100 to 75
+          .collect(), // FIXED: Changed from take(75) to collect() for accurate totals
         ctx.db
           .query("ledger")
           .withIndex("by_from_account_created", (q) => 
             q.eq("fromAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
           )
-          .take(75), // REDUCED from 100 to 75
+          .collect(), // FIXED: Changed from take(75) to collect() for accurate totals
       ]);
 
       const revenueTypes = new Set(["product_purchase", "marketplace_batch"]);
