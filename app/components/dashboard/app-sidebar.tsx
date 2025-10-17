@@ -1,7 +1,6 @@
 import {
   IconBuilding,
   IconChartLine,
-  IconCreditCard,
   IconDashboard,
   IconHistory,
   IconMedal,
@@ -14,8 +13,8 @@ import {
   IconBolt,
 } from "@tabler/icons-react";
 import { Link } from "react-router";
-import { UserButton } from "@clerk/react-router";
-import { NavMain } from "./nav-main";
+import { NavGrouped, type NavGroup } from "./nav-grouped";
+import { NavUser } from "./nav-user";
 import {
   Sidebar,
   SidebarContent,
@@ -26,75 +25,53 @@ import {
 } from "~/components/ui/sidebar";
 import { LogoIcon } from "~/components/logo";
 
-const data = {
-  navMain: [
-    {
-      title: "Dashboard",
-      url: "/dashboard",
-      icon: IconDashboard,
-    },
-    {
-      title: "Leaderboard",
-      url: "/dashboard/leaderboard",
-      icon: IconMedal,
-    },
-    {
-      title: "Accounts",
-      url: "/dashboard/accounts",
-      icon: IconWallet,
-    },
-    {
-      title: "Send Money",
-      url: "/dashboard/transactions",
-      icon: IconSend,
-    },
-    {
-      title: "History",
-      url: "/dashboard/history",
-      icon: IconHistory,
-    },
-    {
-      title: "My Companies",
-      url: "/dashboard/companies",
-      icon: IconBuilding,
-    },
-    {
-      title: "Company Sales",
-      url: "/dashboard/company-sales",
-      icon: IconBuilding,
-    },
-    {
-      title: "Marketplace",
-      url: "/dashboard/marketplace",
-      icon: IconShoppingBag,
-    },
-    {
-      title: "Stock Market",
-      url: "/dashboard/stocks",
-      icon: IconChartLine,
-    },
-    {
-      title: "Portfolio",
-      url: "/dashboard/portfolio",
-      icon: IconTrendingUp,
-    },
-    {
-      title: "Gamble",
-      url: "/dashboard/gamble",
-      icon: IconDice5,
-    },
-    {
-      title: "Loans",
-      url: "/dashboard/loans",
-      icon: IconCurrencyDollar,
-    },
-    {
-      title: "Upgrades",
-      url: "/dashboard/upgrades",
-      icon: IconBolt,
-    },
-  ],
-};
+const groupedNav: NavGroup[] = [
+  {
+    label: "Overview",
+    items: [
+      { title: "Dashboard", url: "/dashboard", icon: IconDashboard },
+      { title: "Leaderboard", url: "/dashboard/leaderboard", icon: IconMedal },
+    ],
+  },
+  {
+    label: "Money",
+    items: [
+      { title: "Accounts", url: "/dashboard/accounts", icon: IconWallet },
+      { title: "Send Money", url: "/dashboard/transactions", icon: IconSend },
+      { title: "History", url: "/dashboard/history", icon: IconHistory },
+      { title: "Loans", url: "/dashboard/loans", icon: IconCurrencyDollar },
+    ],
+  },
+  {
+    label: "Companies",
+    items: [
+      {
+        title: "My Companies",
+        url: "/dashboard/companies",
+        icon: IconBuilding,
+      },
+      {
+        title: "Company Sales",
+        url: "/dashboard/company-sales",
+        icon: IconBuilding,
+      },
+    ],
+  },
+  {
+    label: "Market",
+    items: [
+      {
+        title: "Marketplace",
+        url: "/dashboard/marketplace",
+        icon: IconShoppingBag,
+      },
+      { title: "Stock Market", url: "/dashboard/stocks", icon: IconChartLine },
+      { title: "Portfolio", url: "/dashboard/portfolio", icon: IconTrendingUp },
+      { title: "Gamble", url: "/dashboard/gamble", icon: IconDice5 },
+      { title: "Upgrades", url: "/dashboard/upgrades", icon: IconBolt },
+    ],
+  },
+];
 
 export function AppSidebar({
   variant,
@@ -122,21 +99,9 @@ export function AppSidebar({
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
+        <NavGrouped groups={groupedNav} />
       </SidebarContent>
-      <SidebarFooter>
-        {user && (
-          <div className="p-2">
-            <UserButton
-              appearance={{
-                elements: {
-                  avatarBox: "h-10 w-10",
-                },
-              }}
-            />
-          </div>
-        )}
-      </SidebarFooter>
+      <SidebarFooter>{user && <NavUser user={user} />}</SidebarFooter>
     </Sidebar>
   );
 }

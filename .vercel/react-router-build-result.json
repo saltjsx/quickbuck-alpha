@@ -18,11 +18,14 @@
       "routes/dashboard/leaderboard": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/dashboard/companies.$companyId": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/dashboard/companies": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/dashboard/company-sales": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/dashboard/marketplace": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/dashboard/stocks.$companyId": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/dashboard/stocks": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/dashboard/portfolio": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/dashboard/gamble": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/dashboard/loans": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/dashboard/upgrades": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/dashboard/transactions": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/dashboard/history": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0"
     },
@@ -111,6 +114,15 @@
           "runtime": "nodejs"
         }
       },
+      "routes/dashboard/company-sales": {
+        "id": "routes/dashboard/company-sales",
+        "parentId": "routes/dashboard/layout",
+        "file": "app/routes/dashboard/company-sales.tsx",
+        "path": "dashboard/company-sales",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
       "routes/dashboard/marketplace": {
         "id": "routes/dashboard/marketplace",
         "parentId": "routes/dashboard/layout",
@@ -152,6 +164,24 @@
         "parentId": "routes/dashboard/layout",
         "file": "app/routes/dashboard/gamble.tsx",
         "path": "dashboard/gamble",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/dashboard/loans": {
+        "id": "routes/dashboard/loans",
+        "parentId": "routes/dashboard/layout",
+        "file": "app/routes/dashboard/loans.tsx",
+        "path": "dashboard/loans",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/dashboard/upgrades": {
+        "id": "routes/dashboard/upgrades",
+        "parentId": "routes/dashboard/layout",
+        "file": "app/routes/dashboard/upgrades.tsx",
+        "path": "dashboard/upgrades",
         "config": {
           "runtime": "nodejs"
         }
@@ -246,6 +276,12 @@
         "file": "routes/dashboard/companies.tsx",
         "path": "dashboard/companies"
       },
+      "routes/dashboard/company-sales": {
+        "id": "routes/dashboard/company-sales",
+        "parentId": "routes/dashboard/layout",
+        "file": "routes/dashboard/company-sales.tsx",
+        "path": "dashboard/company-sales"
+      },
       "routes/dashboard/marketplace": {
         "id": "routes/dashboard/marketplace",
         "parentId": "routes/dashboard/layout",
@@ -275,6 +311,18 @@
         "parentId": "routes/dashboard/layout",
         "file": "routes/dashboard/gamble.tsx",
         "path": "dashboard/gamble"
+      },
+      "routes/dashboard/loans": {
+        "id": "routes/dashboard/loans",
+        "parentId": "routes/dashboard/layout",
+        "file": "routes/dashboard/loans.tsx",
+        "path": "dashboard/loans"
+      },
+      "routes/dashboard/upgrades": {
+        "id": "routes/dashboard/upgrades",
+        "parentId": "routes/dashboard/layout",
+        "file": "routes/dashboard/upgrades.tsx",
+        "path": "dashboard/upgrades"
       },
       "routes/dashboard/transactions": {
         "id": "routes/dashboard/transactions",

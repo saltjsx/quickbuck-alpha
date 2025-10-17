@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { Id } from "./_generated/dataModel";
+import type { Id } from "./_generated/dataModel";
 
 // Helper function to get the authenticated user ID
 async function getAuthenticatedUserId(ctx: any): Promise<Id<"users">> {
