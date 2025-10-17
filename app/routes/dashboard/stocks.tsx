@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useNavigate } from "react-router";
@@ -8,11 +9,27 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
+import { Input } from "~/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
+import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
-import { TrendingUp, TrendingDown, ArrowRight } from "lucide-react";
-import { Line, LineChart, ResponsiveContainer } from "recharts";
+import { TrendingUp, Search } from "lucide-react";
 import type { Route } from "./+types/stocks";
 import { Spinner } from "~/components/ui/spinner";
+import StockCard, { type StockListItem } from "~/components/game/stock-card";
+
+// Stocks page shows all public companies with:
+// - Search by name or ticker (client-side filter)
+// - Sort options (market cap, price, gainers/losers, alpha)
+// - Toggle view (grid vs compact - currently styling uses grid; compact uses tighter gaps)
+// Data is sourced from api.stocks.getAllPublicStocks which is indexed for efficient reads.
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -25,33 +42,14 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-function MiniChart({ data }: { data: any[] }) {
-  if (!data || data.length === 0) {
-    return (
-      <div className="h-full w-full flex items-center justify-center">
-        <span className="text-xs text-muted-foreground">No data</span>
-      </div>
-    );
-  }
-
-  return (
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={data}>
-        <Line
-          type="monotone"
-          dataKey="price"
-          stroke="#3b82f6"
-          strokeWidth={2}
-          dot={false}
-        />
-      </LineChart>
-    </ResponsiveContainer>
-  );
-}
-
 export default function StocksPage() {
   const navigate = useNavigate();
   const publicStocks = useQuery(api.stocks.getAllPublicStocks);
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<
+    "marketCapDesc" | "priceDesc" | "priceAsc" | "gainers" | "losers" | "alpha"
+  >("marketCapDesc");
+  const [view, setView] = useState<"grid" | "compact">("grid");
 
   if (publicStocks === undefined) {
     return (
@@ -64,137 +62,136 @@ export default function StocksPage() {
     );
   }
 
+  const filteredSorted = useMemo<StockListItem[]>(() => {
+    const q = (query || "").trim().toLowerCase();
+    let arr = (publicStocks as StockListItem[]) || [];
+    if (q) {
+      arr = arr.filter((s) =>
+        [s.name, s.ticker].some((v) => v?.toLowerCase().includes(q))
+      );
+    }
+    switch (sort) {
+      case "alpha":
+        arr = [...arr].sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      case "priceDesc":
+        arr = [...arr].sort((a, b) => b.currentPrice - a.currentPrice);
+        break;
+      case "priceAsc":
+        arr = [...arr].sort((a, b) => a.currentPrice - b.currentPrice);
+        break;
+      case "gainers":
+        arr = [...arr].sort(
+          (a, b) => b.priceChangePercent24h - a.priceChangePercent24h
+        );
+        break;
+      case "losers":
+        arr = [...arr].sort(
+          (a, b) => a.priceChangePercent24h - b.priceChangePercent24h
+        );
+        break;
+      case "marketCapDesc":
+      default:
+        arr = [...arr].sort((a, b) => b.marketCap - a.marketCap);
+        break;
+    }
+    return arr;
+  }, [publicStocks, query, sort]);
+
   return (
     <div className="flex flex-1 flex-col">
-      <div className="@container/main flex flex-1 flex-col gap-2">
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-          <div className="px-4 lg:px-6">
-            <h1 className="text-3xl font-bold flex items-center gap-2">
-              <TrendingUp className="h-8 w-8" />
-              Stock Market
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              Invest in public companies and track your portfolio
-            </p>
+      <div className="@container/main flex flex-1 flex-col gap-4 py-6">
+        {/* Header */}
+        <div className="px-4 lg:px-8">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
+                <TrendingUp className="h-8 w-8" /> Stock Market
+              </h1>
+              <p className="text-muted-foreground mt-1">
+                Browse publicly traded companies and invest smartly.
+              </p>
+            </div>
+            <Tabs value={view} onValueChange={(v) => setView(v as any)}>
+              <TabsList>
+                <TabsTrigger value="grid">Grid</TabsTrigger>
+                <TabsTrigger value="compact">Compact</TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
+        </div>
 
-          <div className="px-4 lg:px-6">
+        {/* Controls */}
+        <div className="px-4 lg:px-8">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="relative w-full md:max-w-md">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search by name or ticker"
+                    className="pl-9"
+                  />
+                </div>
+                <div className="flex items-center gap-3">
+                  <Select value={sort} onValueChange={(v) => setSort(v as any)}>
+                    <SelectTrigger aria-label="Sort by">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="marketCapDesc">
+                        Market Cap (desc)
+                      </SelectItem>
+                      <SelectItem value="gainers">Top Gainers (24h)</SelectItem>
+                      <SelectItem value="losers">Top Losers (24h)</SelectItem>
+                      <SelectItem value="priceDesc">
+                        Price (high → low)
+                      </SelectItem>
+                      <SelectItem value="priceAsc">
+                        Price (low → high)
+                      </SelectItem>
+                      <SelectItem value="alpha">Alphabetical (A→Z)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Results */}
+        <div className="px-4 lg:px-8">
+          {filteredSorted.length === 0 ? (
             <Card>
-              <CardHeader>
-                <CardTitle>Public Companies</CardTitle>
-                <CardDescription>
-                  Companies trading on the public market
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {publicStocks.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-muted-foreground">
-                      No public companies yet
-                    </p>
-                    <p className="text-sm text-muted-foreground mt-2">
-                      Companies become public when they reach $50,000 in balance
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {publicStocks.map((stock: any) => {
-                      const isPositive = stock.priceChange24h >= 0;
-                      return (
-                        <Card
-                          key={stock._id}
-                          className="cursor-pointer hover:bg-accent/50 transition-colors"
-                          onClick={() =>
-                            navigate(`/dashboard/stocks/${stock._id}`)
-                          }
-                        >
-                          <CardContent className="pt-6">
-                            <div className="flex items-start justify-between mb-4">
-                              <div className="flex items-center gap-3">
-                                {stock.logoUrl && (
-                                  <div className="flex-shrink-0">
-                                    <img
-                                      src={stock.logoUrl}
-                                      alt={`${stock.name} logo`}
-                                      className="h-12 w-12 object-contain rounded border"
-                                      onError={(e) => {
-                                        (
-                                          e.target as HTMLImageElement
-                                        ).style.display = "none";
-                                      }}
-                                    />
-                                  </div>
-                                )}
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <h3 className="font-semibold text-lg">
-                                      {stock.name}
-                                    </h3>
-                                  </div>
-                                  <Badge
-                                    variant="outline"
-                                    className="font-mono text-xs mt-1"
-                                  >
-                                    {stock.ticker}
-                                  </Badge>
-                                </div>
-                              </div>
-                              <ArrowRight className="h-5 w-5 text-muted-foreground" />
-                            </div>
-
-                            {/* Mini Chart */}
-                            <div className="mb-4 h-[60px] bg-muted/20 rounded-md p-2">
-                              <MiniChart data={stock.priceHistory} />
-                            </div>
-
-                            <div className="flex items-end justify-between">
-                              <div>
-                                <p className="text-2xl font-bold">
-                                  ${stock.currentPrice.toFixed(2)}
-                                </p>
-                                <div
-                                  className={`flex items-center gap-1 text-sm ${
-                                    isPositive
-                                      ? "text-green-600"
-                                      : "text-red-600"
-                                  }`}
-                                >
-                                  {isPositive ? (
-                                    <TrendingUp className="h-4 w-4" />
-                                  ) : (
-                                    <TrendingDown className="h-4 w-4" />
-                                  )}
-                                  <span>
-                                    ${Math.abs(stock.priceChange24h).toFixed(2)}{" "}
-                                    (
-                                    {stock.priceChangePercent24h > 0 ? "+" : ""}
-                                    {stock.priceChangePercent24h.toFixed(2)}
-                                    %)
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-xs text-muted-foreground">
-                                  Market Cap
-                                </p>
-                                <p className="font-semibold">
-                                  $
-                                  {stock.marketCap.toLocaleString("en-US", {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
-                                </p>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                )}
+              <CardContent className="py-12 text-center">
+                <p className="text-muted-foreground">
+                  No matching public companies
+                </p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Try clearing the search or adjusting sort options.
+                </p>
               </CardContent>
             </Card>
-          </div>
+          ) : (
+            <div
+              className={
+                view === "grid"
+                  ? "grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+                  : "grid gap-2"
+              }
+            >
+              {filteredSorted.map((stock) => (
+                <div key={stock._id}>
+                  <StockCard
+                    stock={stock}
+                    onClick={() => navigate(`/dashboard/stocks/${stock._id}`)}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
