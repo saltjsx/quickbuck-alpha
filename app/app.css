@@ -6,8 +6,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: 'Inter var', sans-serif;
-  --font-mono: 'Fira Code', monospace;
+  --font-sans: "Inter var", sans-serif;
+  --font-mono: "Fira Code", monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -37,12 +37,12 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 12px;
-  --radius-xl: 20px;
-  --font-serif: 'Playfair Display', serif;
-  --radius: 0.5rem;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --font-serif: "Playfair Display", serif;
+  --radius: 0.375rem;
   --tracking-tighter: calc(var(--tracking-normal) - 0.05em);
   --tracking-tight: calc(var(--tracking-normal) - 0.025em);
   --tracking-wide: calc(var(--tracking-normal) + 0.025em);
@@ -70,11 +70,11 @@
 
 :root {
   /* Apple Light Theme Colors */
-  --background: oklch(1.0000 0 0);
+  --background: oklch(1 0 0);
   --foreground: oklch(0.2079 0.0399 265.7275);
-  --card: oklch(1.0000 0 0);
+  --card: oklch(1 0 0);
   --card-foreground: oklch(0.2079 0.0399 265.7275);
-  --popover: oklch(1.0000 0 0);
+  --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.2079 0.0399 265.7275);
   --primary: oklch(0.5957 0.2196 270.6117); /* Apple Blue */
   --primary-foreground: oklch(0.9843 0.0017 247.8393);
@@ -86,11 +86,11 @@
   --accent-foreground: oklch(0.2079 0.0399 265.7275);
   --destructive: oklch(0.6368 0.2078 25.3259); /* Apple Red */
   --destructive-foreground: oklch(0.9843 0.0017 247.8393);
-  --border: oklch(0.9290 0.0126 255.5317); /* Lighter, more subtle border */
-  --input: oklch(0.9290 0.0126 255.5317);
+  --border: oklch(0.929 0.0126 255.5317); /* Lighter, more subtle border */
+  --input: oklch(0.929 0.0126 255.5317);
   --ring: oklch(0.5957 0.2196 270.6117);
   --chart-1: oklch(0.5957 0.2196 270.6117); /* Apple Blue */
-  --chart-2: oklch(0.6533 0.1840 270.0936); /* Apple Green */
+  --chart-2: oklch(0.6533 0.184 270.0936); /* Apple Green */
   --chart-3: oklch(0.7103 0.1502 268.4873); /* Apple Orange */
   --chart-4: oklch(0.7649 0.1193 265.9323); /* Apple Yellow */
   --chart-5: oklch(0.8163 0.0917 262.5289); /* Apple Purple */
@@ -100,26 +100,31 @@
   --sidebar-primary-foreground: oklch(0.9843 0.0017 247.8393);
   --sidebar-accent: oklch(0.9684 0.0068 247.8951);
   --sidebar-accent-foreground: oklch(0.2079 0.0399 265.7275);
-  --sidebar-border: oklch(0.9290 0.0126 255.5317); /* Lighter border */
+  --sidebar-border: oklch(0.929 0.0126 255.5317); /* Lighter border */
   --sidebar-ring: oklch(0.5957 0.2196 270.6117);
   /* Apple Fonts */
   --font-apple-system: -apple-system, BlinkMacSystemFont, "San Francisco",
     "Helvetica Neue", Helvetica, sans-serif;
   --font-sf-mono: "SF Mono", Menlo, monospace;
   --font-logo: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --font-sans: 'Inter var', sans-serif;
-  --font-serif: 'Playfair Display', serif;
-  --font-mono: 'Fira Code', monospace;
+  --font-sans: "Inter var", sans-serif;
+  --font-serif: "Playfair Display", serif;
+  --font-mono: "Fira Code", monospace;
   /* Apple uses more rounded corners */
-  --radius: 0.5rem;
+  --radius: 0.375rem;
   /* Apple-style shadows */
   --shadow-2xs: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.03);
   --shadow-xs: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.03);
-  --shadow-sm: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.05), 0rem 1px 2px -1px hsl(0 0 0 / 0.05);
-  --shadow: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.05), 0rem 1px 2px -1px hsl(0 0 0 / 0.05);
-  --shadow-md: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.05), 0rem 2px 4px -1px hsl(0 0 0 / 0.05);
-  --shadow-lg: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.05), 0rem 4px 6px -1px hsl(0 0 0 / 0.05);
-  --shadow-xl: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.05), 0rem 8px 10px -1px hsl(0 0 0 / 0.05);
+  --shadow-sm: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.05),
+    0rem 1px 2px -1px hsl(0 0 0 / 0.05);
+  --shadow: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.05),
+    0rem 1px 2px -1px hsl(0 0 0 / 0.05);
+  --shadow-md: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.05),
+    0rem 2px 4px -1px hsl(0 0 0 / 0.05);
+  --shadow-lg: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.05),
+    0rem 4px 6px -1px hsl(0 0 0 / 0.05);
+  --shadow-xl: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.05),
+    0rem 8px 10px -1px hsl(0 0 0 / 0.05);
   --shadow-2xl: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.13);
   --shadow-color: 0 0 0;
   --shadow-opacity: 0.05;
@@ -171,9 +176,9 @@
   --sidebar-foreground: oklch(0.9843 0.0017 247.8393);
   --sidebar-primary: oklch(0.5957 0.2196 270.6117);
   --sidebar-primary-foreground: oklch(0.2079 0.0399 265.7275);
-  --sidebar-accent: oklch(0.2800 0.0369 259.9740);
+  --sidebar-accent: oklch(0.28 0.0369 259.974);
   --sidebar-accent-foreground: oklch(0.9843 0.0017 247.8393);
-  --sidebar-border: oklch(0.2800 0.0369 259.9740);
+  --sidebar-border: oklch(0.28 0.0369 259.974);
   --sidebar-ring: oklch(0.5957 0.2196 270.6117);
   --background: oklch(0.2079 0.0399 265.7275);
   --foreground: oklch(0.9843 0.0017 247.8393);
@@ -183,26 +188,26 @@
   --popover-foreground: oklch(0.9843 0.0017 247.8393);
   --primary: oklch(0.5957 0.2196 270.6117);
   --primary-foreground: oklch(0.2079 0.0399 265.7275);
-  --secondary: oklch(0.2800 0.0369 259.9740);
+  --secondary: oklch(0.28 0.0369 259.974);
   --secondary-foreground: oklch(0.9843 0.0017 247.8393);
-  --muted: oklch(0.2800 0.0369 259.9740);
+  --muted: oklch(0.28 0.0369 259.974);
   --muted-foreground: oklch(0.7475 0.0306 256.7731);
-  --accent: oklch(0.2800 0.0369 259.9740);
+  --accent: oklch(0.28 0.0369 259.974);
   --accent-foreground: oklch(0.9843 0.0017 247.8393);
   --destructive: oklch(0.3959 0.1331 25.7205);
   --destructive-foreground: oklch(0.9843 0.0017 247.8393);
-  --border: oklch(0.2800 0.0369 259.9740);
-  --input: oklch(0.2800 0.0369 259.9740);
+  --border: oklch(0.28 0.0369 259.974);
+  --input: oklch(0.28 0.0369 259.974);
   --ring: oklch(0.5957 0.2196 270.6117);
   --chart-1: oklch(0.5957 0.2196 270.6117);
-  --chart-2: oklch(0.6533 0.1840 270.0936);
+  --chart-2: oklch(0.6533 0.184 270.0936);
   --chart-3: oklch(0.7103 0.1502 268.4873);
   --chart-4: oklch(0.7649 0.1193 265.9323);
   --chart-5: oklch(0.8163 0.0917 262.5289);
-  --radius: 0.5rem;
-  --font-sans: 'Inter var', sans-serif;
-  --font-serif: 'Playfair Display', serif;
-  --font-mono: 'Fira Code', monospace;
+  --radius: 0.375rem;
+  --font-sans: "Inter var", sans-serif;
+  --font-serif: "Playfair Display", serif;
+  --font-mono: "Fira Code", monospace;
   --shadow-color: 0 0 0;
   --shadow-opacity: 0.5;
   --shadow-blur: 0.5rem;
@@ -213,11 +218,16 @@
   --spacing: 0.25rem;
   --shadow-2xs: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.25);
   --shadow-xs: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.25);
-  --shadow-sm: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.50), 0rem 1px 2px -1px hsl(0 0 0 / 0.50);
-  --shadow: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.50), 0rem 1px 2px -1px hsl(0 0 0 / 0.50);
-  --shadow-md: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.50), 0rem 2px 4px -1px hsl(0 0 0 / 0.50);
-  --shadow-lg: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.50), 0rem 4px 6px -1px hsl(0 0 0 / 0.50);
-  --shadow-xl: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.50), 0rem 8px 10px -1px hsl(0 0 0 / 0.50);
+  --shadow-sm: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.5),
+    0rem 1px 2px -1px hsl(0 0 0 / 0.5);
+  --shadow: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.5),
+    0rem 1px 2px -1px hsl(0 0 0 / 0.5);
+  --shadow-md: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.5),
+    0rem 2px 4px -1px hsl(0 0 0 / 0.5);
+  --shadow-lg: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.5),
+    0rem 4px 6px -1px hsl(0 0 0 / 0.5);
+  --shadow-xl: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 0.5),
+    0rem 8px 10px -1px hsl(0 0 0 / 0.5);
   --shadow-2xl: 0rem 0.25rem 0.5rem 0rem hsl(0 0 0 / 1.25);
 }
 

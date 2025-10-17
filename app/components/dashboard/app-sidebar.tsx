@@ -14,7 +14,7 @@ import {
 } from "@tabler/icons-react";
 import { Link } from "react-router";
 import { NavGrouped, type NavGroup } from "./nav-grouped";
-import { NavUser } from "./nav-user";
+import { UserButton } from "@clerk/react-router";
 import {
   Sidebar,
   SidebarContent,
@@ -101,7 +101,19 @@ export function AppSidebar({
       <SidebarContent>
         <NavGrouped groups={groupedNav} />
       </SidebarContent>
-      <SidebarFooter>{user && <NavUser user={user} />}</SidebarFooter>
+      <SidebarFooter>
+        {user && (
+          <div className="p-2">
+            <UserButton
+              appearance={{
+                elements: {
+                  avatarBox: "h-10 w-10",
+                },
+              }}
+            />
+          </div>
+        )}
+      </SidebarFooter>
     </Sidebar>
   );
 }
