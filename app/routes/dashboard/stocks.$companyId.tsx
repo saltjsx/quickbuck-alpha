@@ -90,24 +90,21 @@ export default function StockDetailPage() {
   );
   const portfolio = useQuery(api.stocks.getPortfolio);
   const accounts = useQuery(api.accounts.getUserAccounts);
-  const selectedAccountObj = useMemo(
-    () => accounts?.find((a: any) => a._id === selectedAccount),
-    [accounts, selectedAccount]
+  const selectedAccountObj = accounts?.find(
+    (a: any) => a._id === selectedAccount
   );
 
-  const { derivedBuyerType, companyHolderParams } = useMemo(() => {
-    const buyerType: "user" | "company" = selectedAccountObj?.companyId
-      ? "company"
-      : "user";
-    const params =
-      buyerType === "company" && selectedAccountObj?.companyId
-        ? {
-            holderId: selectedAccountObj.companyId as Id<"companies">,
-            holderType: "company" as const,
-          }
-        : null;
-    return { derivedBuyerType: buyerType, companyHolderParams: params };
-  }, [selectedAccountObj?.companyId]);
+  const derivedBuyerType: "user" | "company" = selectedAccountObj?.companyId
+    ? "company"
+    : "user";
+
+  const companyHolderParams =
+    derivedBuyerType === "company" && selectedAccountObj?.companyId
+      ? {
+          holderId: selectedAccountObj.companyId as Id<"companies">,
+          holderType: "company" as const,
+        }
+      : null;
 
   const holderPortfolio = useQuery(
     api.stocks.getHolderPortfolio,
