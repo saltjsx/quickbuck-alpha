@@ -1,6 +1,7 @@
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query, internalAction } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
 
 // Helper to get current user ID
 async function getCurrentUserId(ctx: any) {
@@ -173,464 +174,83 @@ export const updateProduct = mutation({
 });
 
 // AI-powered automatic product purchase (called by cron/scheduler)
-// This now runs the purchase logic directly instead of calling a placeholder
-export const automaticPurchaseAI = internalMutation({
+// This action calls the HTTP endpoint which uses Gemini AI for intelligent purchases
+export const automaticPurchaseAI = internalAction({
   args: {},
   handler: async (ctx) => {
     console.log("🤖 AI Purchase cron triggered at", new Date().toISOString());
     
     try {
-      // Run the same logic as automaticPurchase
-      // Get ALL active products (up to 1000) to ensure fair distribution
-      const products = await ctx.db
-        .query("products")
-        .withIndex("by_active", (q) => q.eq("isActive", true))
-        .take(1000);
-
-      if (products.length === 0) {
-        console.log("⚠️ No active products found");
-        return { message: "No products available" };
-      }
-
-      console.log(`📦 Processing ${products.length} active products for AI purchases`);
-
-      // Fixed minimum spend of $5,000,000 as requested
-      const totalSpend = 5000000;
-
-      // Get or create system account (buyer)
-      // OPTIMIZED: Use by_name index for system account lookup
-      let systemAccount = await ctx.db
-        .query("accounts")
-        .withIndex("by_name", (q) => q.eq("name", "System"))
-        .first();
-
-      if (!systemAccount) {
-        // Get or create a designated system user (not a real player)
-        let systemUser = await ctx.db
-          .query("users")
-          .filter((q) => q.eq(q.field("name"), "System"))
-          .first();
-        
-        if (!systemUser) {
-          const systemUserId = await ctx.db.insert("users", {
-            name: "System",
-            email: "system@quickbuck.internal",
-            tokenIdentifier: "system-internal-account",
-          });
-          systemUser = await ctx.db.get(systemUserId);
-        }
-
-        // Create system account with the system user as owner
-        const systemAccountId = await ctx.db.insert("accounts", {
-          name: "System",
-          type: "personal",
-          ownerId: systemUser!._id,
-          balance: Number.MAX_SAFE_INTEGER, // Unlimited funds for market purchases
-          createdAt: Date.now(),
-        });
-        
-        systemAccount = await ctx.db.get(systemAccountId);
-      }
+      // Get the deployment URL - Convex provides this as CONVEX_SITE_URL
+      const deploymentUrl = process.env.CONVEX_SITE_URL || process.env.CONVEX_CLOUD_URL;
       
-      if (!systemAccount) {
-        throw new Error("Failed to create or retrieve system account");
+      if (!deploymentUrl) {
+        console.error("❌ Deployment URL not found, falling back to legacy purchase");
+        // Fall back to legacy automatic purchase
+        await ctx.runMutation(internal.products.automaticPurchase, {});
+        return { success: true, method: "legacy_fallback", reason: "no_deployment_url" };
       }
 
-      let remainingBudget = totalSpend;
-      const purchases: any[] = [];
-      const companySpend = new Map<string, number>();
+      // Call the AI purchase HTTP endpoint
+      const endpoint = `${deploymentUrl}/api/ai-purchase`;
+      const adminKey = process.env.ADMIN_KEY;
 
-      const idToKey = (id: any) =>
-        typeof id === "string" ? id : id?.toString?.() ?? String(id);
-
-      const productMap = new Map<string, any>();
-      for (const product of products) {
-        productMap.set(idToKey(product._id), product);
+      if (!adminKey) {
+        console.error("❌ ADMIN_KEY not found, falling back to legacy purchase");
+        await ctx.runMutation(internal.products.automaticPurchase, {});
+        return { success: true, method: "legacy_fallback", reason: "no_admin_key" };
       }
 
-      // OPTIMIZATION: Pre-fetch all unique companies at once to avoid N repeated reads
-      const uniqueCompanyIds = [...new Set(products.map(p => p.companyId))];
-      const allCompanies = await Promise.all(
-        uniqueCompanyIds.map(id => ctx.db.get(id))
-      );
-      
-      const companyCache = new Map<string, any>();
-      allCompanies.forEach(company => {
-        if (company) {
-          companyCache.set(idToKey(company._id), company);
-        }
+      console.log(`📡 Calling AI Purchase endpoint: ${endpoint}`);
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Admin-Key": adminKey,
+        },
+        body: JSON.stringify({ adminKey }),
       });
 
-      // OPTIMIZATION: Pre-fetch all unique accounts at once to avoid repeated reads
-      const uniqueAccountIds = [...new Set(allCompanies
-        .filter(c => c && c.accountId)
-        .map(c => c!.accountId))];
-      const allAccounts = await Promise.all(
-        uniqueAccountIds.map(id => ctx.db.get(id))
-      );
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`❌ HTTP Error ${response.status}: ${errorText}`);
+        console.log("⚠️ Falling back to legacy purchase");
+        await ctx.runMutation(internal.products.automaticPurchase, {});
+        return { success: true, method: "legacy_fallback", error: errorText };
+      }
+
+      const result = await response.json();
       
-      const accountCache = new Map<string, any>();
-      allAccounts.forEach(account => {
-        if (account) {
-          accountCache.set(idToKey(account._id), account);
-        }
-      });
-
-      // Track sales and costs by company for batching
-      const companyTransactions = new Map<
-        string,
-        {
-          companyId: any;
-          accountId: any;
-          company: any;
-          totalRevenue: number;
-          totalCost: number;
-          productSales: Map<
-            string,
-            {
-              count: number;
-              totalRevenue: number;
-              totalCost: number;
-            }
-          >;
-        }
-      >();
-
-      const recordPurchase = async (product: any, quantity: number) => {
-        if (!product || !Number.isFinite(product.price) || quantity <= 0) return false;
-
-        const price = Math.max(product.price, 0.01);
-        const totalPrice = price * quantity;
-        const costPercentage = 0.23 + Math.random() * 0.44;
-        const productionCost = totalPrice * costPercentage;
-
-        const companyKey = idToKey(product.companyId);
-        
-        // OPTIMIZED: Use pre-fetched company cache
-        if (!companyCache.has(companyKey)) {
-          const companyDoc = await ctx.db.get(product.companyId);
-          if (!companyDoc) return false;
-          companyCache.set(companyKey, companyDoc);
-        }
-
-        const companyDoc = companyCache.get(companyKey);
-        if (!companyDoc) return false;
-
-        if (!companyTransactions.has(companyKey)) {
-          companyTransactions.set(companyKey, {
-            companyId: companyDoc._id,
-            accountId: companyDoc.accountId,
-            company: companyDoc,
-            totalRevenue: 0,
-            totalCost: 0,
-            productSales: new Map(),
-          });
-        }
-
-        const companyTx = companyTransactions.get(companyKey)!;
-        companyTx.totalRevenue += totalPrice;
-        companyTx.totalCost += productionCost;
-
-        const productKey = idToKey(product._id);
-        const existing =
-          companyTx.productSales.get(productKey) ?? {
-            count: 0,
-            totalRevenue: 0,
-            totalCost: 0,
-          };
-
-        existing.count += quantity;
-        existing.totalRevenue += totalPrice;
-        existing.totalCost += productionCost;
-        companyTx.productSales.set(productKey, existing);
-
-        purchases.push({
-          product: product.name,
-          productId: product._id,
-          quantity,
-          price: totalPrice,
-          cost: productionCost,
-          profit: totalPrice - productionCost,
-        });
-
-        companySpend.set(companyKey, (companySpend.get(companyKey) || 0) + totalPrice);
-
-        return true;
-      };
-
-      // ============================================================
-      // BALANCED RANDOM DISTRIBUTION ALGORITHM
-      // ============================================================
-
-      // Calculate weighted score for each product
-      interface ProductScore {
-        product: any;
-        revenuePerUnit: number;
-        qualityWeight: number;
-        balancedScore: number;
-        randomBonus: number;
-        minPurchases: number;
-        bonusBudget: number;
-      }
-
-      const productScores: ProductScore[] = products.map(product => {
-        const price = Math.max(product.price, 0.01);
-        const quality = Math.max(Math.min(product.quality ?? 100, 100), 0);
-        const qualityWeight = 0.5 + (quality / 100) * 0.5;
-        const balancedScore = Math.sqrt(price) * qualityWeight;
-        const randomBonus = 0.5 + Math.random();
-
-        return {
-          product,
-          revenuePerUnit: price,
-          qualityWeight,
-          balancedScore,
-          randomBonus,
-          minPurchases: 0,
-          bonusBudget: 0,
-        };
-      });
-
-      // Shuffle products for random selection order
-      for (let i = productScores.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [productScores[i], productScores[j]] = [productScores[j], productScores[i]];
-      }
-
-      // Phase 1: GUARANTEED MINIMUM
-      const guaranteedBudget = totalSpend * 0.40;
-      let guaranteedSpent = 0;
-
-      console.log(`Phase 1: Guaranteeing minimum purchases for ${productScores.length} products`);
-      
-      for (const score of productScores) {
-        const priceElasticity = Math.pow(score.revenuePerUnit, -0.4);
-        const baseQuantity = Math.max(2, Math.round(priceElasticity * 15));
-        const quantity = baseQuantity + Math.floor(Math.random() * 3);
-        const cost = score.revenuePerUnit * quantity;
-        
-        if (guaranteedSpent + cost <= guaranteedBudget) {
-          const success = await recordPurchase(score.product, quantity);
-          if (success) {
-            score.minPurchases = quantity;
-            guaranteedSpent += cost;
-          }
-        } else {
-          const tryQuantity = Math.max(1, Math.floor(quantity / 2));
-          const tryCost = score.revenuePerUnit * tryQuantity;
-          if (guaranteedSpent + tryCost <= guaranteedBudget) {
-            const success = await recordPurchase(score.product, tryQuantity);
-            if (success) {
-              score.minPurchases = tryQuantity;
-              guaranteedSpent += tryCost;
-            }
-          }
-        }
-      }
-
-      console.log(`Phase 1 complete: Spent $${guaranteedSpent.toFixed(2)} on minimum purchases`);
-
-      // Phase 2: BALANCED DISTRIBUTION
-      const mainBudget = totalSpend * 0.50;
-      const totalFairnessScore = productScores.reduce((sum, s) => {
-        const inversePrice = 1 / Math.sqrt(s.revenuePerUnit);
-        const fairnessScore = s.qualityWeight * inversePrice;
-        return fairnessScore + sum;
-      }, 0);
-
-      console.log(`Phase 2: Distributing $${mainBudget.toFixed(2)} with fairness weighting`);
-
-      for (const score of productScores) {
-        const inversePrice = 1 / Math.sqrt(score.revenuePerUnit);
-        const fairnessScore = score.qualityWeight * inversePrice;
-        const proportion = fairnessScore / totalFairnessScore;
-        score.bonusBudget = mainBudget * proportion;
-      }
-
-      let phase2Spent = 0;
-      for (const score of productScores) {
-        if (score.bonusBudget < score.revenuePerUnit) {
-          continue;
-        }
-
-        const maxQuantity = Math.floor(score.bonusBudget / score.revenuePerUnit);
-        
-        let multiplier: number;
-        if (score.revenuePerUnit < 100) {
-          multiplier = 1.2 + Math.random() * 0.6;
-        } else if (score.revenuePerUnit < 1000) {
-          multiplier = 0.8 + Math.random() * 0.4;
-        } else {
-          multiplier = 0.5 + Math.random() * 0.4;
-        }
-        
-        const quantity = Math.max(1, Math.min(Math.floor(maxQuantity * multiplier), 500));
-
-        if (quantity > 0) {
-          const success = await recordPurchase(score.product, quantity);
-          if (success) {
-            const actualCost = score.revenuePerUnit * quantity;
-            phase2Spent += actualCost;
-          }
-        }
-      }
-
-      console.log(`Phase 2 complete: Spent $${phase2Spent.toFixed(2)} on balanced purchases`);
-
-      remainingBudget = totalSpend - guaranteedSpent - phase2Spent;
-
-      // Phase 3: UNDERDOG BOOST
-      if (remainingBudget > 100) {
-        console.log(`Phase 3: Distributing remaining $${remainingBudget.toFixed(2)} to underdogs`);
-        
-        interface UnderdogScore {
-          score: ProductScore;
-          underdogRating: number;
-        }
-        
-        const underdogScores: UnderdogScore[] = productScores.map(score => ({
-          score,
-          underdogRating: 
-            (0.4 * (1 / Math.sqrt(score.revenuePerUnit))) +
-            (0.3 * (1 - (score.qualityWeight))) +
-            (0.3 * Math.random()),
-        }));
-
-        underdogScores.sort((a, b) => b.underdogRating - a.underdogRating);
-
-        for (const { score } of underdogScores) {
-          if (remainingBudget < score.revenuePerUnit * 5) continue;
-
-          let bonusQuantity: number;
-          if (score.revenuePerUnit < 50) {
-            bonusQuantity = 50 + Math.floor(Math.random() * 31);
-          } else if (score.revenuePerUnit < 200) {
-            bonusQuantity = 30 + Math.floor(Math.random() * 21);
-          } else {
-            bonusQuantity = 10 + Math.floor(Math.random() * 11);
-          }
-
-          const maxAffordable = Math.floor(remainingBudget / score.revenuePerUnit);
-          const quantity = Math.min(bonusQuantity, maxAffordable);
-
-          if (quantity > 0) {
-            const success = await recordPurchase(score.product, quantity);
-            if (success) {
-              const actualCost = score.revenuePerUnit * quantity;
-              remainingBudget -= actualCost;
-            }
-          }
-        }
-      }
-
-      const totalSpent = totalSpend - remainingBudget;
-      console.log(`Purchase complete: Spent $${totalSpent.toFixed(2)} across ${purchases.length} purchases`);
-
-      // Now process all batched transactions using pre-fetched account data
-      for (const [, tx] of companyTransactions) {
-        if (!tx.company || !tx.accountId) continue;
-
-        const netProfit = tx.totalRevenue - tx.totalCost;
-        const accountKey = idToKey(tx.accountId);
-        
-        let accountDoc = accountCache.get(accountKey);
-        if (!accountDoc || !("balance" in accountDoc)) {
-          accountDoc = await ctx.db.get(tx.accountId);
-          if (!accountDoc || !("balance" in accountDoc)) {
-            continue;
-          }
-          accountCache.set(accountKey, accountDoc);
-        }
-
-        const currentBalance = (accountDoc.balance ?? 0) + netProfit;
-        
-        accountCache.set(accountKey, { ...accountDoc, balance: currentBalance });
-        
-        await ctx.db.patch(tx.accountId, { balance: currentBalance });
-
-        const ledgerInserts: any[] = [];
-        const productPatches: Array<{ id: any; updates: any }> = [];
-        
-        for (const [productIdStr, salesData] of tx.productSales) {
-          const product = productMap.get(productIdStr);
-          if (!product) continue;
-
-          ledgerInserts.push({
-            fromAccountId: systemAccount._id,
-            toAccountId: tx.accountId,
-            amount: salesData.totalRevenue,
-            type: "marketplace_batch" as const,
-            productId: product._id,
-            batchCount: salesData.count,
-            description: `Batch purchase of ${salesData.count}x ${product.name}`,
-            createdAt: Date.now(),
-          });
-
-          ledgerInserts.push({
-            fromAccountId: tx.accountId,
-            toAccountId: systemAccount._id,
-            amount: salesData.totalCost,
-            type: "marketplace_batch" as const,
-            productId: product._id,
-            batchCount: salesData.count,
-            description: `Batch production cost for ${salesData.count}x ${product.name}`,
-            createdAt: Date.now(),
-          });
-
-          if ("totalSales" in product) {
-            const updatedTotals = {
-              totalSales: (product.totalSales || 0) + salesData.count,
-              totalRevenue: (product.totalRevenue || 0) + salesData.totalRevenue,
-              totalCosts: (product.totalCosts || 0) + salesData.totalCost,
-            };
-
-            productMap.set(productIdStr, {
-              ...product,
-              ...updatedTotals,
-            });
-
-            productPatches.push({ id: product._id, updates: updatedTotals });
-          }
-        }
-        
-        // Execute all batched operations
-        await Promise.all([
-          ...ledgerInserts.map(entry => ctx.db.insert("ledger", entry)),
-          ...productPatches.map(({ id, updates }) => ctx.db.patch(id, updates))
-        ]);
-      }
-
-      // After all purchases, check which companies should be made public using cached balances
-      for (const [, tx] of companyTransactions) {
-        const companyDoc = tx.company;
-        if (!companyDoc || companyDoc.isPublic) continue;
-
-        const accountKey = idToKey(tx.accountId);
-        const balance = accountCache.get(accountKey) ?? 0;
-
-        if (balance > 50000) {
-          await ctx.db.patch(companyDoc._id, {
-            isPublic: true,
-          });
-        }
-      }
-
-      console.log(`✅ AI Purchase complete: $${totalSpent.toLocaleString()} spent on ${purchases.length} purchases`);
+      console.log(`✅ AI Purchase complete via Gemini AI`);
+      console.log(`💰 Total spent: $${result.totalSpent?.toLocaleString() || 0}`);
+      console.log(`📦 Products purchased: ${result.totalProductsPurchased || 0}`);
+      console.log(`🏢 Companies affected: ${result.companiesAffected || 0}`);
 
       return {
-        totalSpent,
-        purchases,
-        purchaseCount: purchases.length,
-        productsReached: new Set(purchases.map((p: any) => p.productId)).size,
-        companiesReached: companyTransactions.size,
+        success: true,
+        method: "ai_powered_gemini",
+        ...result,
       };
     } catch (error) {
       console.error("❌ AI Purchase Error:", error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-        timestamp: Date.now(),
-      };
+      console.log("⚠️ Falling back to legacy purchase");
+      
+      try {
+        // Fall back to legacy automatic purchase
+        await ctx.runMutation(internal.products.automaticPurchase, {});
+        return { 
+          success: true, 
+          method: "legacy_fallback", 
+          error: error instanceof Error ? error.message : "Unknown error" 
+        };
+      } catch (fallbackError) {
+        console.error("❌ Legacy purchase also failed:", fallbackError);
+        return {
+          success: false,
+          error: fallbackError instanceof Error ? fallbackError.message : "Unknown error",
+        };
+      }
     }
   },
 });
