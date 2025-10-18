@@ -25,7 +25,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 config({ path: ".env.local" });
 
 const BATCH_SIZE = 50;
-const MIN_SPEND_PER_BATCH = 1000000; // $1M minimum per batch
+const MIN_SPEND_PER_BATCH = 10000000; // $10M minimum per batch (increased for larger purchases)
 const ADMIN_KEY = process.env.ADMIN_KEY;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const CONVEX_URL = process.env.VITE_CONVEX_URL;
@@ -120,29 +120,36 @@ Your role is to make realistic purchasing decisions for ${batch.length} products
 CRITICAL REQUIREMENTS:
 1. You MUST spend a MINIMUM of $${MIN_SPEND_PER_BATCH.toLocaleString()} on this batch
 2. Give EVERY product a chance - buy at least a small quantity of most products
-3. Act like the general public - prioritize useful, quality products that meet real needs
+3. Act like the general public - PRIORITIZE useful, quality products that meet real needs
 4. Avoid spam, low-quality products, or items that seem suspicious
 5. Consider what real consumers and businesses would need
+6. BUY IN LARGE QUANTITIES - Companies should make millions to tens of millions
 
 PURCHASING GUIDELINES:
-- High-quality products (90-100 quality): Buy more generously
-- Medium-quality products (70-89 quality): Buy moderately
-- Low-quality products (50-69 quality): Buy sparingly
-- Very low quality (<50): Buy minimal amounts or skip if spam
+- High-quality products (90-100 quality): Buy VERY generously (1000-50000+ units)
+- Medium-quality products (70-89 quality): Buy generously (500-10000 units)
+- Low-quality products (50-69 quality): Buy moderately (100-500 units)
+- Very low quality (<50): Buy minimal amounts or skip if spam (1-50 units)
 
-REALISTIC BEHAVIOR:
-- Essential products (food, software, services): Higher demand
-- Luxury items: Lower but steady demand
-- Business-to-business products: Moderate professional demand
-- Consumer goods: Mix based on usefulness and price
-- Cheap items ($1-$100): Can buy in larger quantities
-- Mid-range items ($100-$1000): Moderate quantities
-- Expensive items ($1000+): Smaller quantities, must be justified
+QUANTITY STRATEGY:
+- Cheap items ($1-$50): Can buy 5000-50000+ units
+- Budget items ($50-$500): Buy 1000-10000 units
+- Mid-range items ($500-$5000): Buy 100-2000 units
+- Premium items ($5000-$50000): Buy 10-500 units
+- Luxury items ($50000+): Buy 1-100 units, only if high quality
+
+REALISTIC BULK BEHAVIOR:
+- Essential products (food, software, services): Heavy bulk purchases
+- Luxury items: Moderate bulk demand
+- Business-to-business products: Large bulk orders
+- Consumer goods: Mix of bulk purchases based on usefulness and price
+- Scale quantities up 5-10x compared to normal retail
 
 BATCH INFO:
 - This is batch ${batchNumber} of ${totalBatches}
 - ${batch.length} products to evaluate
 - Your minimum budget: $${MIN_SPEND_PER_BATCH.toLocaleString()}
+- Focus on QUALITY but buy in MUCH LARGER QUANTITIES
 
 PRODUCTS TO EVALUATE:
 ${batch.map((p, i) => `
@@ -159,19 +166,21 @@ RESPONSE FORMAT (JSON only, no markdown):
 Return a JSON array of purchase decisions. Each decision must have:
 {
   "productId": "product ID",
-  "quantity": number (1-100 for most items, can be higher for very cheap items),
+  "quantity": number (can be 100-50000+ for cheap items, 1-1000 for expensive items),
   "reasoning": "brief explanation (1-2 sentences)"
 }
 
 IMPORTANT:
 - Return valid JSON array only (no markdown code blocks)
 - Ensure total spending reaches at least $${MIN_SPEND_PER_BATCH.toLocaleString()}
-- Give most products at least 1-5 units to be fair
-- Prioritize quality and usefulness in your decisions
-- Be realistic - don't buy 100 units of a $10,000 item unless it makes sense`;
+- Give most products at least 5-50 units to be fair
+- BUY MUCH LARGER QUANTITIES than normal - aim for millions in total spending
+- PRIORITIZE QUALITY - high quality items get 5-10x larger orders
+- Be realistic with bulk purchases - don't skip any products entirely`;
 
   try {
     console.log(`\n🤖 Asking AI to evaluate batch ${batchNumber}/${totalBatches} (${batch.length} products)...`);
+    console.log(`💰 Target spend: $${MIN_SPEND_PER_BATCH.toLocaleString()}`);
     
     const result = await model.generateContent(prompt);
     const response = result.response;

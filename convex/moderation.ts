@@ -144,6 +144,221 @@ export const warnUser = mutation({
   },
 });
 
+// Helper function to batch delete related entities
+async function deleteUserData(ctx: any, userId: Id<"users">) {
+  let operationCount = 0;
+  const MAX_OPS_PER_CALL = 3000; // Leave buffer for the read limit
+  
+  // Delete companies and all related data
+  let hasMoreCompanies = true;
+  while (hasMoreCompanies) {
+    const companies = await ctx.db
+      .query("companies")
+      .withIndex("by_owner", (q: any) => q.eq("ownerId", userId))
+      .take(50);
+
+    if (companies.length === 0) break;
+    hasMoreCompanies = companies.length === 50;
+
+    for (const company of companies) {
+      // Delete company products
+      let hasMoreProducts = true;
+      while (hasMoreProducts && operationCount < MAX_OPS_PER_CALL) {
+        const products = await ctx.db
+          .query("products")
+          .withIndex("by_company", (q: any) => q.eq("companyId", company._id))
+          .take(30);
+
+        if (products.length === 0) break;
+        hasMoreProducts = products.length === 30;
+
+        for (const product of products) {
+          const collections = await ctx.db
+            .query("collections")
+            .withIndex("by_product", (q: any) => q.eq("productId", product._id))
+            .take(50);
+
+          for (const collection of collections) {
+            await ctx.db.delete(collection._id);
+            operationCount++;
+          }
+
+          await ctx.db.delete(product._id);
+          operationCount++;
+        }
+      }
+
+      // Delete company's other data
+      const dataTables = [
+        { table: "companyAccess", index: "by_company" },
+        { table: "stockTransactions", index: "by_company" },
+        { table: "stockPriceHistory", index: "by_company" },
+        { table: "stocks", index: "by_company" },
+        { table: "companySaleOffers", index: "by_company" },
+        { table: "expenses", index: "by_company" },
+        { table: "companyMetrics", index: "by_company" },
+        { table: "licenses", index: "by_company" },
+      ];
+
+      for (const { table, index } of dataTables) {
+        if (operationCount > MAX_OPS_PER_CALL) break;
+        
+        let hasMore = true;
+        while (hasMore && operationCount < MAX_OPS_PER_CALL) {
+          const records = await ctx.db
+            .query(table as any)
+            .withIndex(index as any, (q: any) => q.eq("companyId", company._id))
+            .take(50);
+
+          if (records.length === 0) break;
+          hasMore = records.length === 50;
+
+          for (const record of records) {
+            await ctx.db.delete(record._id);
+            operationCount++;
+          }
+        }
+      }
+
+      if (operationCount < MAX_OPS_PER_CALL) {
+        await ctx.db.delete(company._id);
+        operationCount++;
+      }
+    }
+
+    if (operationCount > MAX_OPS_PER_CALL) break;
+  }
+
+  // Delete user's accounts and ledger
+  let hasMoreAccounts = true;
+  while (hasMoreAccounts && operationCount < MAX_OPS_PER_CALL) {
+    const accounts = await ctx.db
+      .query("accounts")
+      .withIndex("by_owner", (q: any) => q.eq("ownerId", userId))
+      .take(30);
+
+    if (accounts.length === 0) break;
+    hasMoreAccounts = accounts.length === 30;
+
+    for (const account of accounts) {
+      // Delete ledger entries
+      let hasMoreLedger = true;
+      while (hasMoreLedger && operationCount < MAX_OPS_PER_CALL) {
+        const ledger = await ctx.db
+          .query("ledger")
+          .withIndex("by_from_account_created", (q: any) => q.eq("fromAccountId", account._id))
+          .take(50);
+
+        if (ledger.length === 0) {
+          hasMoreLedger = false;
+        } else {
+          for (const entry of ledger) {
+            await ctx.db.delete(entry._id);
+            operationCount++;
+          }
+        }
+      }
+
+      let hasMoreToLedger = true;
+      while (hasMoreToLedger && operationCount < MAX_OPS_PER_CALL) {
+        const ledger = await ctx.db
+          .query("ledger")
+          .withIndex("by_to_account_created", (q: any) => q.eq("toAccountId", account._id))
+          .take(50);
+
+        if (ledger.length === 0) {
+          hasMoreToLedger = false;
+        } else {
+          for (const entry of ledger) {
+            await ctx.db.delete(entry._id);
+            operationCount++;
+          }
+        }
+      }
+
+      if (operationCount < MAX_OPS_PER_CALL) {
+        await ctx.db.delete(account._id);
+        operationCount++;
+      }
+    }
+
+    if (operationCount > MAX_OPS_PER_CALL) break;
+  }
+
+  // Delete user's personal data
+  const personalDataTables = [
+    { table: "gambles", index: "by_user" },
+    { table: "blackjackStates", index: "by_user" },
+    { table: "collections", index: "by_user" },
+    { table: "loans", index: "by_user" },
+    { table: "userWarnings", index: "by_user" },
+  ];
+
+  for (const { table, index } of personalDataTables) {
+    if (operationCount > MAX_OPS_PER_CALL) break;
+    
+    let hasMore = true;
+    while (hasMore && operationCount < MAX_OPS_PER_CALL) {
+      const records = await ctx.db
+        .query(table as any)
+        .withIndex(index as any, (q: any) => q.eq("userId", userId))
+        .take(50);
+
+      if (records.length === 0) break;
+      hasMore = records.length === 50;
+
+      for (const record of records) {
+        await ctx.db.delete(record._id);
+        operationCount++;
+      }
+    }
+
+    if (operationCount > MAX_OPS_PER_CALL) break;
+  }
+
+  // Delete user's stocks
+  if (operationCount < MAX_OPS_PER_CALL) {
+    let hasMoreStocks = true;
+    while (hasMoreStocks && operationCount < MAX_OPS_PER_CALL) {
+      const stocks = await ctx.db
+        .query("stocks")
+        .withIndex("by_holder_holderType", (q: any) =>
+          q.eq("holderId", userId).eq("holderType", "user")
+        )
+        .take(50);
+
+      if (stocks.length === 0) break;
+      hasMoreStocks = stocks.length === 50;
+
+      for (const stock of stocks) {
+        await ctx.db.delete(stock._id);
+        operationCount++;
+      }
+    }
+  }
+
+  // Delete user's stock transactions
+  if (operationCount < MAX_OPS_PER_CALL) {
+    let hasMoreTx = true;
+    while (hasMoreTx && operationCount < MAX_OPS_PER_CALL) {
+      const transactions = await ctx.db
+        .query("stockTransactions")
+        .withIndex("by_buyer", (q: any) => q.eq("buyerId", userId))
+        .take(50);
+
+      if (transactions.length === 0) break;
+      hasMoreTx = transactions.length === 50;
+
+      for (const tx of transactions) {
+        await ctx.db.delete(tx._id);
+        operationCount++;
+      }
+    }
+  }
+
+  return operationCount;
+}
+
 // Admin: Ban a user
 export const banUser = mutation({
   args: {
@@ -173,219 +388,16 @@ export const banUser = mutation({
       throw new Error("User is already banned");
     }
 
-    // Get all companies owned by this user
-    const userCompanies = await ctx.db
-      .query("companies")
-      .withIndex("by_owner", (q) => q.eq("ownerId", args.userId))
-      .collect();
-
-    // Delete all products associated with user's companies
-    let productsDeleted = 0;
-    for (const company of userCompanies) {
-      const products = await ctx.db
-        .query("products")
-        .withIndex("by_company", (q) => q.eq("companyId", company._id))
-        .collect();
-
-      for (const product of products) {
-        // Delete collections (purchases) for this product
-        const collections = await ctx.db
-          .query("collections")
-          .withIndex("by_product", (q) => q.eq("productId", product._id))
-          .collect();
-
-        for (const collection of collections) {
-          await ctx.db.delete(collection._id);
-        }
-
-        // Delete the product
-        await ctx.db.delete(product._id);
-        productsDeleted++;
-      }
-
-      // Delete company access records
-      const accessRecords = await ctx.db
-        .query("companyAccess")
-        .withIndex("by_company", (q) => q.eq("companyId", company._id))
-        .collect();
-
-      for (const access of accessRecords) {
-        await ctx.db.delete(access._id);
-      }
-
-      // Delete stock transactions
-      const transactions = await ctx.db
-        .query("stockTransactions")
-        .withIndex("by_company", (q) => q.eq("companyId", company._id))
-        .collect();
-
-      for (const transaction of transactions) {
-        await ctx.db.delete(transaction._id);
-      }
-
-      // Delete stock price history
-      const priceHistory = await ctx.db
-        .query("stockPriceHistory")
-        .withIndex("by_company", (q) => q.eq("companyId", company._id))
-        .collect();
-
-      for (const history of priceHistory) {
-        await ctx.db.delete(history._id);
-      }
-
-      // Delete all stocks (holdings) for this company
-      const stocks = await ctx.db
-        .query("stocks")
-        .withIndex("by_company", (q) => q.eq("companyId", company._id))
-        .collect();
-
-      for (const stock of stocks) {
-        await ctx.db.delete(stock._id);
-      }
-
-      // Delete company sale offers
-      const saleOffers = await ctx.db
-        .query("companySaleOffers")
-        .withIndex("by_company", (q) => q.eq("companyId", company._id))
-        .collect();
-
-      for (const offer of saleOffers) {
-        await ctx.db.delete(offer._id);
-      }
-
-      // Delete company expenses
-      const expenses = await ctx.db
-        .query("expenses")
-        .withIndex("by_company", (q) => q.eq("companyId", company._id))
-        .collect();
-
-      for (const expense of expenses) {
-        await ctx.db.delete(expense._id);
-      }
-
-      // Delete company metrics
-      const metrics = await ctx.db
-        .query("companyMetrics")
-        .withIndex("by_company", (q) => q.eq("companyId", company._id))
-        .collect();
-
-      for (const metric of metrics) {
-        await ctx.db.delete(metric._id);
-      }
-
-      // Delete licenses
-      const licenses = await ctx.db
-        .query("licenses")
-        .withIndex("by_company", (q) => q.eq("companyId", company._id))
-        .collect();
-
-      for (const license of licenses) {
-        await ctx.db.delete(license._id);
-      }
-
-      // Delete the company itself
-      await ctx.db.delete(company._id);
-    }
-
-    // Delete user's company accounts
-    const userAccounts = await ctx.db
-      .query("accounts")
-      .withIndex("by_owner", (q) => q.eq("ownerId", args.userId))
-      .collect();
-
-    let accountsDeleted = 0;
-    for (const account of userAccounts) {
-      // Delete ledger entries
-      const fromLedger = await ctx.db
-        .query("ledger")
-        .withIndex("by_from_account_created", (q) => q.eq("fromAccountId", account._id))
-        .collect();
-
-      for (const entry of fromLedger) {
-        await ctx.db.delete(entry._id);
-      }
-
-      const toLedger = await ctx.db
-        .query("ledger")
-        .withIndex("by_to_account_created", (q) => q.eq("toAccountId", account._id))
-        .collect();
-
-      for (const entry of toLedger) {
-        await ctx.db.delete(entry._id);
-      }
-
-      // Delete gambles
-      const gambles = await ctx.db
-        .query("gambles")
-        .withIndex("by_user", (q) => q.eq("userId", args.userId))
-        .collect();
-
-      for (const gamble of gambles) {
-        await ctx.db.delete(gamble._id);
-      }
-
-      // Delete blackjack states
-      const blackjackStates = await ctx.db
-        .query("blackjackStates")
-        .withIndex("by_user", (q) => q.eq("userId", args.userId))
-        .collect();
-
-      for (const state of blackjackStates) {
-        await ctx.db.delete(state._id);
-      }
-
-      // Delete collections (products purchased)
-      const collections = await ctx.db
-        .query("collections")
-        .withIndex("by_user", (q) => q.eq("userId", args.userId))
-        .collect();
-
-      for (const collection of collections) {
-        await ctx.db.delete(collection._id);
-      }
-
-      // Delete loans
-      const loans = await ctx.db
-        .query("loans")
-        .withIndex("by_user", (q) => q.eq("userId", args.userId))
-        .collect();
-
-      for (const loan of loans) {
-        await ctx.db.delete(loan._id);
-      }
-
-      // Delete stocks held by user
-      const userStocks = await ctx.db
-        .query("stocks")
-        .withIndex("by_holder_holderType", (q) => q.eq("holderId", args.userId).eq("holderType", "user"))
-        .collect();
-
-      for (const stock of userStocks) {
-        await ctx.db.delete(stock._id);
-      }
-
-      // Delete stock transactions
-      const userTransactions = await ctx.db
-        .query("stockTransactions")
-        .withIndex("by_buyer", (q) => q.eq("buyerId", args.userId))
-        .collect();
-
-      for (const transaction of userTransactions) {
-        await ctx.db.delete(transaction._id);
-      }
-
-      // Delete the account
-      await ctx.db.delete(account._id);
-      accountsDeleted++;
-    }
-
-    // Create ban record
+    // Create ban record first
     const banId = await ctx.db.insert("userBans", {
       email,
       userId: args.userId,
       reason: args.reason,
       bannedAt: Date.now(),
     });
+
+    // Delete user data in batches
+    const operationsCompleted = await deleteUserData(ctx, args.userId);
 
     return {
       success: true,
@@ -394,9 +406,7 @@ export const banUser = mutation({
       userName: user.name || user.email || "Unknown",
       email,
       reason: args.reason,
-      companiesDeleted: userCompanies.length,
-      productsDeleted,
-      accountsDeleted,
+      status: `Ban created. Deleted ${operationsCompleted} records.`,
     };
   },
 });

@@ -267,8 +267,8 @@ export const automaticPurchase = internalMutation({
 
     if (products.length === 0) return { message: "No products available" };
 
-    // Fixed minimum spend of $5,000,000 as requested
-    const totalSpend = 5000000;
+    // Increased minimum spend to $50M for larger bulk purchases
+    const totalSpend = 50000000;
 
     // Get or create system account (buyer)
     // OPTIMIZED: Use by_name index for system account lookup
@@ -615,14 +615,14 @@ export const automaticPurchase = internalMutation({
       for (const { score } of underdogScores) {
         if (remainingBudget < score.revenuePerUnit * 5) continue; // Need at least 5 units worth
 
-        // Bonus purchases: 20-80 units based on how cheap the product is
+        // Bonus purchases: scaled up quantities for larger bulk orders
         let bonusQuantity: number;
         if (score.revenuePerUnit < 50) {
-          bonusQuantity = 50 + Math.floor(Math.random() * 31); // 50-80 units for cheap
+          bonusQuantity = 500 + Math.floor(Math.random() * 500); // 500-1000 units for cheap (10x increase)
         } else if (score.revenuePerUnit < 200) {
-          bonusQuantity = 30 + Math.floor(Math.random() * 21); // 30-50 units for mid
+          bonusQuantity = 200 + Math.floor(Math.random() * 200); // 200-400 units for mid (7x increase)
         } else {
-          bonusQuantity = 10 + Math.floor(Math.random() * 11); // 10-20 units for expensive
+          bonusQuantity = 50 + Math.floor(Math.random() * 50); // 50-100 units for expensive (5x increase)
         }
 
         const maxAffordable = Math.floor(remainingBudget / score.revenuePerUnit);
@@ -918,7 +918,7 @@ export const adminAIPurchase = mutation({
 
         // Calculate costs
         const pricePerUnit = Math.max(product.price, 0.01);
-        const quantity = Math.max(1, Math.min(100, Math.floor(purchase.quantity)));
+        const quantity = Math.max(1, Math.min(100000, Math.floor(purchase.quantity))); // Increased from 100 to 100,000 for larger bulk purchases
         const totalPrice = pricePerUnit * quantity;
         const costPercentage = 0.23 + Math.random() * 0.44;
         const productionCost = totalPrice * costPercentage;
