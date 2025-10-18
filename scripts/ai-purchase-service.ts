@@ -93,8 +93,13 @@ function categorizeProducts(products: Product[]): Map<string, Product[]> {
     categorized.set(key, []);
   }
   
-  // Sort products into categories
+  // Sort products into categories (only active products)
   for (const product of products) {
+    // Skip inactive products
+    if (!product.isActive) {
+      continue;
+    }
+    
     let assigned = false;
     for (const [key, config] of Object.entries(PRICE_CATEGORIES)) {
       if (product.price >= config.min && product.price < config.max) {
