@@ -1,19 +1,18 @@
 #!/usr/bin/env tsx
 
 /**
- * AI-Powered Product Purchase Service
+ * AI-Powered Product Purchase Service (v2 - Aggressive Spending)
  * 
  * This service uses Google's Gemini 2.5 Flash Lite to make intelligent purchasing
  * decisions for products in the QuickBuck marketplace. It runs every 20 minutes
- * via a cron job and processes products in batches of 50 to avoid context window overload.
+ * via a cron job and processes products in batches of 50.
  * 
- * AI Instructions:
- * - Act like the general public making purchasing decisions
- * - Minimum spend: $1M per batch
- * - Give every product a chance
- * - Avoid spam and low-quality products
- * - Buy based on needs of the general public and other companies
- * - Consider product quality, price, and usefulness
+ * KEY CHANGES IN V2:
+ * - Ensures FULL $10M is spent per batch (can go slightly over)
+ * - Uses Math.ceil() instead of Math.floor() to round up quantities
+ * - Removes minimum quantity restrictions that waste budget
+ * - More aggressive spending strategy with higher allocations
+ * - Better handling of budget distribution across products
  */
 
 import { config } from "dotenv";
@@ -25,7 +24,8 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 config({ path: ".env.local" });
 
 const BATCH_SIZE = 50;
-const MIN_SPEND_PER_BATCH = 10000000; // $10M minimum per batch (increased for larger purchases)
+const TARGET_SPEND_PER_BATCH = 10000000; // $10M target per batch
+const MAX_OVERSPEND = 1000000; // Allow up to $1M overspend (10% buffer)
 const ADMIN_KEY = process.env.ADMIN_KEY;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const CONVEX_URL = process.env.VITE_CONVEX_URL;
@@ -105,6 +105,7 @@ function createBatches(products: Product[], batchSize: number): Product[][] {
 
 /**
  * Get AI purchasing decisions for a batch of products
+ * Returns aggressive allocations that ensure full budget spend
  */
 async function getAIPurchaseDecisions(
   batch: Product[],
@@ -113,161 +114,133 @@ async function getAIPurchaseDecisions(
 ): Promise<AIPurchaseDecision[]> {
   const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
 
-  const prompt = `You are an AI representing bulk wholesale buyers in a marketplace simulation called QuickBuck.
+  const prompt = `You are an AI representing aggressive bulk wholesale buyers in QuickBuck marketplace.
 
-Your role is to allocate a $${MIN_SPEND_PER_BATCH.toLocaleString()} budget across ${batch.length} products to maximize value for general public consumers and businesses.
+YOUR MISSION: Allocate AT LEAST $${TARGET_SPEND_PER_BATCH.toLocaleString()} across ${batch.length} products.
 
-🔴 CRITICAL REQUIREMENT:
-YOU MUST ALLOCATE EXACTLY $${MIN_SPEND_PER_BATCH.toLocaleString()} TO THE PRODUCTS BELOW.
-Your total spending must equal (not exceed or fall short of) this exact budget.
-IF YOUR TOTAL DOESN'T EQUAL $${MIN_SPEND_PER_BATCH.toLocaleString()}, YOUR RESPONSE WILL BE REJECTED.
-
-YOUR MISSION:
-- Allocate budget based on product quality and value
-- High-quality products get larger budget allocations
-- Low-quality products get smaller allocations or are skipped
-- Spread across most/all products but weighted by quality
-- Buy whatever quantity makes sense at each product's price point
-- ENSURE EVERY DOLLAR OF THE BUDGET IS SPENT - NO EXCEPTIONS
-
-BUDGET ALLOCATION BY QUALITY:
-Quality 90-100: Allocate 40-50% of your budget to these excellent products
-Quality 70-89:  Allocate 25-35% of your budget to these good products
-Quality 50-69:  Allocate 10-20% of your budget to these fair products
-Quality <50:    Allocate 0-5% of your budget (minimize or skip)
+🔴 CRITICAL SPENDING RULES:
+1. You MUST allocate AT LEAST $${TARGET_SPEND_PER_BATCH.toLocaleString()} total
+2. Going OVER the budget by up to 10% is ENCOURAGED (better to overspend than underspend)
+3. Allocate aggressively - these are wholesale bulk purchases
+4. Quality-weighted distribution - higher quality gets exponentially more budget
+5. Even low-quality products should get some allocation (diversity is good)
 
 ALLOCATION STRATEGY:
-1. Calculate total quality-weighted score for all products
-2. Allocate budget proportionally to quality scores
-3. High quality items get more of the budget
-4. Low quality items get minimal budget
-5. Leave no money unspent - allocate the FULL $${MIN_SPEND_PER_BATCH.toLocaleString()}
-6. CALCULATION STEPS:
-   a. Sum all quality scores: totalScore = sum of all product qualities
-   b. For each product: allocation = (quality / totalScore) * $${MIN_SPEND_PER_BATCH.toLocaleString()}
-   c. Add all allocations together - verify they equal EXACTLY $${MIN_SPEND_PER_BATCH.toLocaleString()}
-   d. If there's rounding error, adjust the largest allocation to make total exact
+- Quality 90-100 (EXCELLENT): 50-70% of total budget (buy in BULK)
+- Quality 70-89 (GOOD): 25-40% of total budget (substantial purchases)
+- Quality 50-69 (FAIR): 10-20% of total budget (moderate purchases)
+- Quality <50 (POOR): 5-10% of total budget (small trial purchases)
 
-EXAMPLE LOGIC:
-- If there are 5 products total with quality scores [100, 90, 70, 50, 30]
-- Total weighted score = 100+90+70+50+30 = 340 points
-- Product 1 (100 pts): Gets (100/340 * $${MIN_SPEND_PER_BATCH.toLocaleString()}) = allocate to this
-- Product 2 (90 pts): Gets (90/340 * $${MIN_SPEND_PER_BATCH.toLocaleString()}) = allocate to this
-- And so on, buying as many units as that budget allows at each product's price
+CALCULATION METHOD:
+1. Calculate quality weight for each product: weight = quality² (square for exponential scaling)
+2. Sum all weights: totalWeight = Σ(quality²)
+3. Base allocation: baseAllocation = (quality² / totalWeight) × $${TARGET_SPEND_PER_BATCH.toLocaleString()}
+4. Add 15% bonus to all allocations to ensure we hit/exceed target
+5. Round UP dollar amounts to avoid losing pennies
+
+EXAMPLE:
+- Product A (quality 100): weight = 10,000
+- Product B (quality 80): weight = 6,400  
+- Product C (quality 50): weight = 2,500
+- Total weight = 18,900
+- Product A gets: (10,000/18,900) × $10M × 1.15 = $6.08M
+- Product B gets: (6,400/18,900) × $10M × 1.15 = $3.89M
+- Product C gets: (2,500/18,900) × $10M × 1.15 = $1.52M
+- TOTAL = $11.49M (15% over target - PERFECT!)
 
 BATCH INFO:
 - Batch ${batchNumber} of ${totalBatches}
 - ${batch.length} products to evaluate
-- Total budget to allocate: $${MIN_SPEND_PER_BATCH.toLocaleString()}
+- Minimum target spend: $${TARGET_SPEND_PER_BATCH.toLocaleString()}
+- Maximum spend: $${(TARGET_SPEND_PER_BATCH + MAX_OVERSPEND).toLocaleString()}
 
 PRODUCTS TO EVALUATE:
 ${batch.map((p, i) => {
+  const quality = p.quality ?? 100;
+  const weight = quality * quality;
   const priceCategory = p.price < 20 ? '💰 VERY CHEAP' : p.price < 100 ? '💵 CHEAP' : p.price < 500 ? '💳 BUDGET' : '💎 PREMIUM';
-  const qualityLevel = (p.quality ?? 100) >= 90 ? '⭐⭐⭐ EXCELLENT' : (p.quality ?? 100) >= 70 ? '⭐⭐ GOOD' : '⭐ FAIR';
+  const qualityLevel = quality >= 90 ? '⭐⭐⭐ EXCELLENT' : quality >= 70 ? '⭐⭐ GOOD' : quality >= 50 ? '⭐ FAIR' : '💩 POOR';
   return `${i + 1}. "${p.name}" by ${p.companyName}
    ID: ${p._id}
-   Price: $${p.price.toFixed(2)} per unit [${priceCategory}]
-   Quality: ${p.quality ?? 100}/100 [${qualityLevel}]
-   Description: ${p.description.substring(0, 120)}${p.description.length > 120 ? "..." : ""}
+   Price: $${p.price.toFixed(2)}/unit [${priceCategory}]
+   Quality: ${quality}/100 [${qualityLevel}] → Weight: ${weight.toLocaleString()}
+   Description: ${p.description.substring(0, 100)}${p.description.length > 100 ? "..." : ""}
    Tags: ${p.tags.join(", ")}`;
 }).join("\n\n")}
 
-RESPONSE FORMAT - MUST BE VALID JSON ARRAY:
+RESPONSE FORMAT (JSON ARRAY ONLY):
 [
   {
-    "productId": "string (exact ID from list)",
-    "spendAmount": number (in dollars, total budget to spend on this product),
-    "reasoning": "brief (1 sentence)"
+    "productId": "exact_id_from_list",
+    "spendAmount": 500000.00,
+    "reasoning": "One sentence max"
   }
 ]
 
-CRITICAL REQUIREMENTS FOR YOUR RESPONSE:
-1. Return ONLY valid JSON array (no markdown, no text)
-2. Every productId must match exactly from the list
-3. All spendAmount values must be positive numbers (can be decimals)
-4. Calculate: SUM(spendAmount) for all products
-5. TOTAL SPENDING MUST EQUAL $${MIN_SPEND_PER_BATCH.toLocaleString()} (not more, not less)
-6. Allocate higher budget to higher quality items
-7. Allocate minimal or zero budget to low quality items (use 0 if quality too low)
-8. Quality should be the primary factor in allocation decisions
-9. Do the math carefully - ensure your total equals exactly the target budget
-10. Return spendAmount as a number representing dollars, we'll convert to units based on price`;
+VALIDATION CHECKLIST:
+✅ Every productId matches the list exactly
+✅ All spendAmount values are positive numbers
+✅ Total spending is AT LEAST $${TARGET_SPEND_PER_BATCH.toLocaleString()}
+✅ Total spending is LESS THAN $${(TARGET_SPEND_PER_BATCH + MAX_OVERSPEND).toLocaleString()}
+✅ Higher quality products get exponentially more budget
+✅ Every product gets SOME allocation (even if small)
+✅ Response is valid JSON array (no markdown, no commentary)
+
+REMEMBER: It's better to OVERSPEND than UNDERSPEND. Be AGGRESSIVE!`;
 
   try {
-    console.log(`\n🤖 Asking AI to evaluate batch ${batchNumber}/${totalBatches} (${batch.length} products)...`);
-    console.log(`💰 Target budget allocation: $${MIN_SPEND_PER_BATCH.toLocaleString()}`);
+    console.log(`\n🤖 Asking AI for aggressive budget allocation for batch ${batchNumber}/${totalBatches}...`);
+    console.log(`💰 Target spend: $${TARGET_SPEND_PER_BATCH.toLocaleString()} (up to $${(TARGET_SPEND_PER_BATCH + MAX_OVERSPEND).toLocaleString()} allowed)`);
     
     const result = await model.generateContent(prompt);
     const response = result.response;
-    const text = response.text();
+    let text = response.text().trim();
     
-    // Clean up response - remove markdown code blocks if present
-    let cleanedText = text.trim();
-    if (cleanedText.startsWith("```json")) {
-      cleanedText = cleanedText.substring(7);
-    } else if (cleanedText.startsWith("```")) {
-      cleanedText = cleanedText.substring(3);
-    }
-    if (cleanedText.endsWith("```")) {
-      cleanedText = cleanedText.substring(0, cleanedText.length - 3);
-    }
-    cleanedText = cleanedText.trim();
+    // Clean markdown code blocks
+    if (text.startsWith("```json")) text = text.substring(7);
+    else if (text.startsWith("```")) text = text.substring(3);
+    if (text.endsWith("```")) text = text.substring(0, text.length - 3);
+    text = text.trim();
     
-    const decisions: AIPurchaseDecision[] = JSON.parse(cleanedText);
+    const decisions: AIPurchaseDecision[] = JSON.parse(text);
     
     // Calculate total spend
-    let totalSpend = decisions.reduce((sum, decision) => {
-      return sum + decision.spendAmount;
-    }, 0);
+    const totalSpend = decisions.reduce((sum, d) => sum + d.spendAmount, 0);
     
-    console.log(`✅ AI recommended ${decisions.length} purchases`);
-    console.log(`💰 Total allocated: $${totalSpend.toLocaleString()}`);
+    console.log(`✅ AI allocated $${totalSpend.toLocaleString()} across ${decisions.length} products`);
     
-    // Log individual allocations for debugging
-    console.log(`\n📋 Individual allocations:`);
-    decisions.forEach((d, idx) => {
-      const product = batch.find((p: Product) => p._id === d.productId);
+    // If AI is conservative, force aggressive scaling
+    if (totalSpend < TARGET_SPEND_PER_BATCH) {
+      const shortfall = TARGET_SPEND_PER_BATCH - totalSpend;
+      const scaleFactor = (TARGET_SPEND_PER_BATCH * 1.05) / totalSpend; // Scale to 105% of target
+      
+      console.log(`📈 AI was too conservative! Scaling by ${scaleFactor.toFixed(2)}x to meet target...`);
+      
+      for (const decision of decisions) {
+        decision.spendAmount = Math.ceil(decision.spendAmount * scaleFactor);
+      }
+      
+      const newTotal = decisions.reduce((sum, d) => sum + d.spendAmount, 0);
+      console.log(`✅ Scaled total: $${newTotal.toLocaleString()} (was $${totalSpend.toLocaleString()})`);
+    }
+    
+    // Log allocations
+    console.log(`\n📋 Budget allocations:`);
+    const sortedDecisions = [...decisions].sort((a, b) => b.spendAmount - a.spendAmount);
+    sortedDecisions.slice(0, 10).forEach((d, idx) => {
+      const product = batch.find(p => p._id === d.productId);
       if (product) {
-        const units = Math.floor(d.spendAmount / product.price);
-        console.log(`   ${idx + 1}. ${product.name}: $${d.spendAmount.toLocaleString()} (≈${units} units @ $${product.price}/ea)`);
+        const units = Math.ceil(d.spendAmount / product.price);
+        const percentage = ((d.spendAmount / TARGET_SPEND_PER_BATCH) * 100).toFixed(1);
+        console.log(`   ${idx + 1}. ${product.name.substring(0, 30)}: $${d.spendAmount.toLocaleString()} (${percentage}%) → ${units} units`);
       }
     });
-    
-    // If under minimum, scale up all spend amounts proportionally
-    if (totalSpend < MIN_SPEND_PER_BATCH) {
-      const scale = MIN_SPEND_PER_BATCH / totalSpend;
-      console.log(`📈 Scaling budget allocations by ${scale.toFixed(2)}x to meet budget...`);
-      
-      // Scale all amounts first
-      for (const decision of decisions) {
-        decision.spendAmount = Math.ceil(decision.spendAmount * scale);
-      }
-      
-      // Recalculate total spend
-      totalSpend = decisions.reduce((sum, decision) => {
-        return sum + decision.spendAmount;
-      }, 0);
-      
-      console.log(`📊 Scaled total: $${totalSpend.toLocaleString()}`);
-      
-      // If still under due to rounding, add remainder to the largest allocation
-      if (totalSpend < MIN_SPEND_PER_BATCH) {
-        const remainder = MIN_SPEND_PER_BATCH - totalSpend;
-        const maxDecision = decisions.reduce((max, current) => 
-          current.spendAmount > max.spendAmount ? current : max
-        );
-        maxDecision.spendAmount += remainder;
-        totalSpend = MIN_SPEND_PER_BATCH;
-        console.log(`✅ Added remainder $${remainder.toLocaleString()} to reach exact target`);
-      }
-      
-      console.log(`✅ Final total: $${totalSpend.toLocaleString()}`);
+    if (decisions.length > 10) {
+      console.log(`   ... and ${decisions.length - 10} more products`);
     }
     
-    // Ensure we never exceed the target
-    if (totalSpend > MIN_SPEND_PER_BATCH) {
-      console.log(`⚠️  Total exceeds budget by $${(totalSpend - MIN_SPEND_PER_BATCH).toLocaleString()}`);
-    }
+    const finalTotal = decisions.reduce((sum, d) => sum + d.spendAmount, 0);
+    console.log(`\n💰 Final allocated budget: $${finalTotal.toLocaleString()}`);
     
     return decisions;
   } catch (error) {
@@ -278,6 +251,7 @@ CRITICAL REQUIREMENTS FOR YOUR RESPONSE:
 
 /**
  * Execute purchases via Convex mutation
+ * Uses Math.ceil() to round UP quantities, ensuring we spend the full budget
  */
 async function executePurchases(
   decisions: AIPurchaseDecision[],
@@ -288,30 +262,67 @@ async function executePurchases(
     console.log(`\n💳 Executing ${decisions.length} purchases for batch ${batchNumber}...`);
     
     const purchases = decisions.map(d => {
-      const product = batch.find((p: Product) => p._id === d.productId);
-      const quantity = product ? Math.floor(d.spendAmount / product.price) : 0;
+      const product = batch.find(p => p._id === d.productId);
+      if (!product) {
+        console.warn(`⚠️ Product ${d.productId} not found in batch`);
+        return null;
+      }
+      
+      // Calculate quantity by rounding UP to ensure we spend at least the allocated amount
+      // This allows us to slightly exceed the budget, which is acceptable
+      const exactQuantity = d.spendAmount / product.price;
+      const quantity = Math.ceil(exactQuantity); // Round UP to spend more if needed
+      const actualSpend = quantity * product.price;
+      
+      // Log if we're spending significantly more than allocated
+      if (actualSpend > d.spendAmount * 1.1) {
+        console.log(`   📈 ${product.name}: Buying ${quantity} units ($${actualSpend.toLocaleString()}) - exceeded allocation by $${(actualSpend - d.spendAmount).toLocaleString()}`);
+      }
+      
       return {
         productId: d.productId as any,
-        quantity: Math.max(1, quantity), // Ensure at least 1 unit
+        quantity: quantity,
       };
-    });
+    }).filter(p => p !== null);
+    
+    // Calculate expected total spend before execution
+    const expectedSpend = purchases.reduce((sum, p) => {
+      if (!p) return sum;
+      const product = batch.find(prod => prod._id === p.productId);
+      return sum + (product ? product.price * p.quantity : 0);
+    }, 0);
+    
+    console.log(`💰 Expected spend: $${expectedSpend.toLocaleString()}`);
     
     const result = await convexClient.mutation(api.products.adminAIPurchase, {
-      purchases,
+      purchases: purchases as any,
       adminKey: ADMIN_KEY!,
     });
     
     console.log(`✅ Batch ${batchNumber} complete!`);
-    console.log(`   - Total spent: $${result.totalSpent.toLocaleString()}`);
+    console.log(`   - Actual spent: $${result.totalSpent.toLocaleString()}`);
     console.log(`   - Products purchased: ${result.productsPurchased}`);
-    console.log(`   - Total items: ${result.totalItems}`);
+    console.log(`   - Total items: ${result.totalItems.toLocaleString()}`);
     console.log(`   - Companies affected: ${result.companiesAffected}`);
     
+    // Check if we hit our target
+    const percentOfTarget = (result.totalSpent / TARGET_SPEND_PER_BATCH) * 100;
+    if (percentOfTarget < 95) {
+      console.log(`   ⚠️ WARNING: Only spent ${percentOfTarget.toFixed(1)}% of target!`);
+    } else if (percentOfTarget > 110) {
+      console.log(`   💰 Exceeded target by ${(percentOfTarget - 100).toFixed(1)}% (acceptable overspend)`);
+    } else {
+      console.log(`   ✅ Spent ${percentOfTarget.toFixed(1)}% of target - excellent!`);
+    }
+    
     if (result.errors && result.errors.length > 0) {
-      console.log(`   ⚠️  ${result.errors.length} errors occurred`);
-      result.errors.forEach((error: string, i: number) => {
+      console.log(`   ⚠️ ${result.errors.length} errors occurred`);
+      result.errors.slice(0, 5).forEach((error: string, i: number) => {
         console.log(`      ${i + 1}. ${error}`);
       });
+      if (result.errors.length > 5) {
+        console.log(`      ... and ${result.errors.length - 5} more errors`);
+      }
     }
     
     return {
@@ -334,12 +345,13 @@ async function executePurchases(
  */
 async function runAIPurchaseService() {
   const startTime = Date.now();
-  console.log("\n🚀 AI Purchase Service Starting");
+  console.log("\n🚀 AI Purchase Service Starting (v2 - Aggressive Spending)");
   console.log("═".repeat(60));
   console.log(`⏰ Time: ${new Date().toISOString()}`);
-  console.log(`🤖 Model: Gemini 2.5 Flash Lite`);
+  console.log(`🤖 Model: Gemini 2.0 Flash Lite`);
   console.log(`📦 Batch size: ${BATCH_SIZE} products`);
-  console.log(`💰 Min spend per batch: $${MIN_SPEND_PER_BATCH.toLocaleString()}`);
+  console.log(`💰 Target spend per batch: $${TARGET_SPEND_PER_BATCH.toLocaleString()}`);
+  console.log(`📈 Max overspend allowed: $${MAX_OVERSPEND.toLocaleString()} (${(MAX_OVERSPEND/TARGET_SPEND_PER_BATCH*100).toFixed(0)}%)`);
   console.log("═".repeat(60));
   
   try {
@@ -405,15 +417,31 @@ async function runAIPurchaseService() {
     const uniqueCompanies = new Set(results.flatMap(r => [r.companiesAffected])).size;
     const totalErrors = results.reduce((sum, r) => sum + (r.errors?.length || 0), 0);
     
+    const targetTotal = TARGET_SPEND_PER_BATCH * batches.length;
+    const percentOfTarget = (totalSpent / targetTotal) * 100;
+    
     console.log(`✅ Successfully processed ${batches.length} batches`);
     console.log(`💰 Total spent: $${totalSpent.toLocaleString()}`);
-    console.log(`📦 Total items purchased: ${totalItems.toLocaleString()}`);
+    console.log(`🎯 Target budget: $${targetTotal.toLocaleString()}`);
+    console.log(`� Spend efficiency: ${percentOfTarget.toFixed(1)}%`);
+    console.log(`�📦 Total items purchased: ${totalItems.toLocaleString()}`);
     console.log(`🏷️  Unique products purchased: ${totalProductsPurchased}`);
     console.log(`🏢 Companies affected: ${uniqueCompanies}`);
     console.log(`⏱️  Total time: ${duration}s`);
+    console.log(`💵 Average per batch: $${(totalSpent / batches.length).toLocaleString()}`);
+    
+    if (percentOfTarget < 95) {
+      console.log(`\n⚠️ WARNING: Only ${percentOfTarget.toFixed(1)}% of target budget was spent!`);
+      console.log(`   Missing: $${(targetTotal - totalSpent).toLocaleString()}`);
+    } else if (percentOfTarget > 105) {
+      console.log(`\n✅ EXCELLENT: Exceeded target by ${(percentOfTarget - 100).toFixed(1)}%`);
+      console.log(`   Overspend: $${(totalSpent - targetTotal).toLocaleString()} (within acceptable limits)`);
+    } else {
+      console.log(`\n✅ PERFECT: Hit target budget within acceptable range!`);
+    }
     
     if (totalErrors > 0) {
-      console.log(`⚠️  Total errors: ${totalErrors}`);
+      console.log(`\n⚠️ Total errors: ${totalErrors}`);
     }
     
     console.log("═".repeat(60));
