@@ -148,10 +148,18 @@ http.route({
 
       // Process each batch
       for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-        const batch = batches[batchIndex];
+        let batch = batches[batchIndex];
         const batchNumber = batchIndex + 1;
 
-        console.log(`Processing batch ${batchNumber}/${batches.length} (${batch.length} products)`);
+        // Filter out any inactive products (safety check)
+        batch = batch.filter((p: any) => p.isActive === true);
+        
+        if (batch.length === 0) {
+          console.log(`Batch ${batchNumber}: No active products in batch, skipping`);
+          continue;
+        }
+
+        console.log(`Processing batch ${batchNumber}/${batches.length} (${batch.length} active products)`);
 
         // Create AI prompt
         const prompt = `You are an AI representing the general public's purchasing decisions in a marketplace simulation called QuickBuck.
