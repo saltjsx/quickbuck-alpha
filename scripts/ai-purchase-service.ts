@@ -120,6 +120,7 @@ Your role is to allocate a $${MIN_SPEND_PER_BATCH.toLocaleString()} budget acros
 🔴 CRITICAL REQUIREMENT:
 YOU MUST ALLOCATE EXACTLY $${MIN_SPEND_PER_BATCH.toLocaleString()} TO THE PRODUCTS BELOW.
 Your total spending must equal (not exceed or fall short of) this exact budget.
+IF YOUR TOTAL DOESN'T EQUAL $${MIN_SPEND_PER_BATCH.toLocaleString()}, YOUR RESPONSE WILL BE REJECTED.
 
 YOUR MISSION:
 - Allocate budget based on product quality and value
@@ -127,7 +128,7 @@ YOUR MISSION:
 - Low-quality products get smaller allocations or are skipped
 - Spread across most/all products but weighted by quality
 - Buy whatever quantity makes sense at each product's price point
-- Ensure every dollar of the budget is spent
+- ENSURE EVERY DOLLAR OF THE BUDGET IS SPENT - NO EXCEPTIONS
 
 BUDGET ALLOCATION BY QUALITY:
 Quality 90-100: Allocate 40-50% of your budget to these excellent products
@@ -141,6 +142,11 @@ ALLOCATION STRATEGY:
 3. High quality items get more of the budget
 4. Low quality items get minimal budget
 5. Leave no money unspent - allocate the FULL $${MIN_SPEND_PER_BATCH.toLocaleString()}
+6. CALCULATION STEPS:
+   a. Sum all quality scores: totalScore = sum of all product qualities
+   b. For each product: allocation = (quality / totalScore) * $${MIN_SPEND_PER_BATCH.toLocaleString()}
+   c. Add all allocations together - verify they equal EXACTLY $${MIN_SPEND_PER_BATCH.toLocaleString()}
+   d. If there's rounding error, adjust the largest allocation to make total exact
 
 EXAMPLE LOGIC:
 - If there are 5 products total with quality scores [100, 90, 70, 50, 30]
@@ -217,11 +223,22 @@ CRITICAL REQUIREMENTS FOR YOUR RESPONSE:
     console.log(`✅ AI recommended ${decisions.length} purchases`);
     console.log(`💰 Total allocated: $${totalSpend.toLocaleString()}`);
     
+    // Log individual allocations for debugging
+    console.log(`\n📋 Individual allocations:`);
+    decisions.forEach((d, idx) => {
+      const product = batch.find((p: Product) => p._id === d.productId);
+      if (product) {
+        const units = Math.floor(d.spendAmount / product.price);
+        console.log(`   ${idx + 1}. ${product.name}: $${d.spendAmount.toLocaleString()} (≈${units} units @ $${product.price}/ea)`);
+      }
+    });
+    
     // If under minimum, scale up all spend amounts proportionally
     if (totalSpend < MIN_SPEND_PER_BATCH) {
       const scale = MIN_SPEND_PER_BATCH / totalSpend;
       console.log(`📈 Scaling budget allocations by ${scale.toFixed(2)}x to meet budget...`);
       
+      // Scale all amounts first
       for (const decision of decisions) {
         decision.spendAmount = Math.ceil(decision.spendAmount * scale);
       }
@@ -231,7 +248,25 @@ CRITICAL REQUIREMENTS FOR YOUR RESPONSE:
         return sum + decision.spendAmount;
       }, 0);
       
-      console.log(`✅ Adjusted total: $${totalSpend.toLocaleString()}`);
+      console.log(`📊 Scaled total: $${totalSpend.toLocaleString()}`);
+      
+      // If still under due to rounding, add remainder to the largest allocation
+      if (totalSpend < MIN_SPEND_PER_BATCH) {
+        const remainder = MIN_SPEND_PER_BATCH - totalSpend;
+        const maxDecision = decisions.reduce((max, current) => 
+          current.spendAmount > max.spendAmount ? current : max
+        );
+        maxDecision.spendAmount += remainder;
+        totalSpend = MIN_SPEND_PER_BATCH;
+        console.log(`✅ Added remainder $${remainder.toLocaleString()} to reach exact target`);
+      }
+      
+      console.log(`✅ Final total: $${totalSpend.toLocaleString()}`);
+    }
+    
+    // Ensure we never exceed the target
+    if (totalSpend > MIN_SPEND_PER_BATCH) {
+      console.log(`⚠️  Total exceeds budget by $${(totalSpend - MIN_SPEND_PER_BATCH).toLocaleString()}`);
     }
     
     return decisions;
