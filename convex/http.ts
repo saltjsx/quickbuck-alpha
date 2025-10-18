@@ -231,14 +231,36 @@ IMPORTANT:
 
           const decisions = JSON.parse(text);
 
-          // Execute purchases
-          const purchases = decisions.map((d: any) => ({
-            productId: d.productId,
-            quantity: d.quantity,
-          }));
+          // Validate product IDs exist in this batch
+          const batchProductIds = new Set(batch.map((p: any) => String(p._id)));
+          const validPurchases = [];
+          const invalidIds = [];
 
+          for (const decision of decisions) {
+            if (batchProductIds.has(String(decision.productId))) {
+              validPurchases.push({
+                productId: decision.productId,
+                quantity: decision.quantity,
+              });
+            } else {
+              invalidIds.push(decision.productId);
+            }
+          }
+
+          if (invalidIds.length > 0) {
+            console.warn(
+              `Batch ${batchNumber}: AI referenced ${invalidIds.length} invalid product IDs: ${invalidIds.slice(0, 5).join(", ")}`
+            );
+          }
+
+          if (validPurchases.length === 0) {
+            console.warn(`Batch ${batchNumber}: No valid purchases after filtering`);
+            continue;
+          }
+
+          // Execute purchases with valid IDs only
           const purchaseResult = await ctx.runMutation(api.products.adminAIPurchase, {
-            purchases,
+            purchases: validPurchases,
             adminKey: process.env.ADMIN_KEY!,
           });
 
