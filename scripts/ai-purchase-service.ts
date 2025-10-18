@@ -1,18 +1,19 @@
 #!/usr/bin/env tsx
 
 /**
- * AI-Powered Product Purchase Service (v2 - Aggressive Spending)
+ * AI-Powered Product Purchase Service (v4 - Mega Spending Edition)
  * 
- * This service uses Google's Gemini 2.5 Flash Lite to make intelligent purchasing
+ * This service uses Google's Gemini 2.0 Flash Lite to make MASSIVE purchasing
  * decisions for products in the QuickBuck marketplace. It runs every 20 minutes
  * via a cron job and processes products in batches of 50.
  * 
- * KEY CHANGES IN V2:
- * - Ensures FULL $10M is spent per batch (can go slightly over)
- * - Uses Math.ceil() instead of Math.floor() to round up quantities
- * - Removes minimum quantity restrictions that waste budget
- * - More aggressive spending strategy with higher allocations
- * - Better handling of budget distribution across products
+ * KEY CHANGES IN V4:
+ * - MASSIVE budget increase: $10M → $50M per batch (5x increase)
+ * - Targets $50M-$60M spending per batch (allows 20% overspend)
+ * - Companies will make millions per batch
+ * - More aggressive tier allocations
+ * - Increased scaling multiplier: 1.05x → 1.20x (much more aggressive)
+ * - Ultra Cheap tier allocation doubled: 25% → 35%
  */
 
 import { config } from "dotenv";
@@ -24,8 +25,8 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 config({ path: ".env.local" });
 
 const BATCH_SIZE = 50;
-const TARGET_SPEND_PER_BATCH = 10000000; // $10M target per batch
-const MAX_OVERSPEND = 1000000; // Allow up to $1M overspend (10% buffer)
+const TARGET_SPEND_PER_BATCH = 50000000; // $50M target per batch (increased from $10M)
+const MAX_OVERSPEND = 10000000; // Allow up to $10M overspend (20% buffer)
 const ADMIN_KEY = process.env.ADMIN_KEY;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const CONVEX_URL = process.env.VITE_CONVEX_URL;
@@ -114,56 +115,93 @@ async function getAIPurchaseDecisions(
 ): Promise<AIPurchaseDecision[]> {
   const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
 
-  const prompt = `You are an AI representing aggressive bulk wholesale buyers in QuickBuck marketplace.
+  // Categorize products by price tier
+  const priceTiers = {
+    ultraCheap: batch.filter(p => p.price < 10),      // < $10
+    veryCheap: batch.filter(p => p.price >= 10 && p.price < 50),    // $10-50
+    cheap: batch.filter(p => p.price >= 50 && p.price < 200),       // $50-200
+    budget: batch.filter(p => p.price >= 200 && p.price < 500),     // $200-500
+    premium: batch.filter(p => p.price >= 500),       // $500+
+  };
+
+  const prompt = `You are an AI representing MEGA AGGRESSIVE bulk wholesale buyers in QuickBuck marketplace.
 
 YOUR MISSION: Allocate AT LEAST $${TARGET_SPEND_PER_BATCH.toLocaleString()} across ${batch.length} products.
+THIS IS A MASSIVE SPENDING OPERATION. SPEND LIKE YOUR LIFE DEPENDS ON IT.
 
 🔴 CRITICAL SPENDING RULES:
-1. You MUST allocate AT LEAST $${TARGET_SPEND_PER_BATCH.toLocaleString()} total
-2. Going OVER the budget by up to 10% is ENCOURAGED (better to overspend than underspend)
-3. Allocate aggressively - these are wholesale bulk purchases
-4. Quality-weighted distribution - higher quality gets exponentially more budget
-5. Even low-quality products should get some allocation (diversity is good)
+1. You MUST allocate AT LEAST $${TARGET_SPEND_PER_BATCH.toLocaleString()} total (this is a LOT of money)
+2. Going OVER the budget by 15-20% is ENCOURAGED (we have deep pockets)
+3. Allocate across ALL PRICE TIERS to maintain diverse purchasing
+4. Quality is a MINOR factor - price tier is PRIMARY
+5. BULK BUY MASSIVE QUANTITIES from cheaper tiers, aggressive buying from premium tiers
+6. SPEND EVERY DOLLAR - maximize purchases and volumes
 
-ALLOCATION STRATEGY:
-- Quality 90-100 (EXCELLENT): 50-70% of total budget (buy in BULK)
-- Quality 70-89 (GOOD): 25-40% of total budget (substantial purchases)
-- Quality 50-69 (FAIR): 10-20% of total budget (moderate purchases)
-- Quality <50 (POOR): 5-10% of total budget (small trial purchases)
+PRICE TIER ALLOCATION STRATEGY (Primary Factor):
+- Ultra Cheap ($<10): 30-40% of total budget (MAXIMUM VOLUME - buy thousands)
+- Very Cheap ($10-50): 30-35% of total budget (BULK WHOLESALE QUANTITIES)
+- Cheap ($50-200): 15-20% of total budget (LARGE BULK PURCHASES)
+- Budget ($200-500): 8-12% of total budget (STRATEGIC MAJOR PURCHASES)
+- Premium ($500+): 5-8% of total budget (HIGH-VALUE SELECTIVE BUYING)
+
+QUALITY MODIFIERS (Secondary Factor - Only 10-20% impact):
+- Only use quality to slightly adjust allocations within a tier
+- High quality within a tier: +5-10% bonus
+- Low quality within a tier: -5% discount (minimum $0)
+- Don't let quality override price tier allocation
 
 CALCULATION METHOD:
-1. Calculate quality weight for each product: weight = quality² (square for exponential scaling)
-2. Sum all weights: totalWeight = Σ(quality²)
-3. Base allocation: baseAllocation = (quality² / totalWeight) × $${TARGET_SPEND_PER_BATCH.toLocaleString()}
-4. Add 15% bonus to all allocations to ensure we hit/exceed target
-5. Round UP dollar amounts to avoid losing pennies
+1. Allocate base budget to EACH PRICE TIER per strategy above
+2. Split each tier's budget among products in that tier (spread it wide)
+3. Within each tier, allocate more to higher quality (small adjustments only)
+4. Add 20% bonus to total allocations to ensure we MASSIVELY exceed target
+5. Round UP all dollar amounts (never round down)
 
-EXAMPLE:
-- Product A (quality 100): weight = 10,000
-- Product B (quality 80): weight = 6,400  
-- Product C (quality 50): weight = 2,500
-- Total weight = 18,900
-- Product A gets: (10,000/18,900) × $10M × 1.15 = $6.08M
-- Product B gets: (6,400/18,900) × $10M × 1.15 = $3.89M
-- Product C gets: (2,500/18,900) × $10M × 1.15 = $1.52M
-- TOTAL = $11.49M (15% over target - PERFECT!)
+EXAMPLE WITH 5 PRODUCTS:
+- Product A ($5, quality 80) → Ultra Cheap tier
+- Product B ($25, quality 60) → Very Cheap tier
+- Product C ($150, quality 95) → Cheap tier
+- Product D ($300, quality 70) → Budget tier
+- Product E ($600, quality 40) → Premium tier
 
-BATCH INFO:
+TIER BUDGETS (for $50M):
+- Ultra Cheap: $17.5M (35% of $50M) - THOUSANDS OF UNITS
+- Very Cheap: $16.5M (33%) - MASSIVE BULK ORDERS
+- Cheap: $9.0M (18%)
+- Budget: $5.0M (10%)
+- Premium: $3.5M (7%)
+
+WITHIN TIER ALLOCATIONS:
+- Product A gets: $17.5M (massive volume)
+- Product B gets: $16.5M (massive bulk)
+- Product C gets: $9.0M (large quantities)
+- Product D gets: $5.0M (strategic major purchase)
+- Product E gets: $3.5M (premium selection)
+- TOTAL: $50M × 1.20 bonus = $60M ✅ (HUGE OVERSPEND - PERFECT!)
+
+BATCH SUMMARY:
 - Batch ${batchNumber} of ${totalBatches}
-- ${batch.length} products to evaluate
-- Minimum target spend: $${TARGET_SPEND_PER_BATCH.toLocaleString()}
-- Maximum spend: $${(TARGET_SPEND_PER_BATCH + MAX_OVERSPEND).toLocaleString()}
+- ${batch.length} products total
+- Ultra Cheap ($<10): ${priceTiers.ultraCheap.length} products
+- Very Cheap ($10-50): ${priceTiers.veryCheap.length} products
+- Cheap ($50-200): ${priceTiers.cheap.length} products
+- Budget ($200-500): ${priceTiers.budget.length} products
+- Premium ($500+): ${priceTiers.premium.length} products
 
 PRODUCTS TO EVALUATE:
 ${batch.map((p, i) => {
   const quality = p.quality ?? 100;
-  const weight = quality * quality;
-  const priceCategory = p.price < 20 ? '💰 VERY CHEAP' : p.price < 100 ? '💵 CHEAP' : p.price < 500 ? '💳 BUDGET' : '💎 PREMIUM';
+  let tier = "Premium";
+  if (p.price < 10) tier = "Ultra Cheap";
+  else if (p.price < 50) tier = "Very Cheap";
+  else if (p.price < 200) tier = "Cheap";
+  else if (p.price < 500) tier = "Budget";
+  
   const qualityLevel = quality >= 90 ? '⭐⭐⭐ EXCELLENT' : quality >= 70 ? '⭐⭐ GOOD' : quality >= 50 ? '⭐ FAIR' : '💩 POOR';
   return `${i + 1}. "${p.name}" by ${p.companyName}
    ID: ${p._id}
-   Price: $${p.price.toFixed(2)}/unit [${priceCategory}]
-   Quality: ${quality}/100 [${qualityLevel}] → Weight: ${weight.toLocaleString()}
+   Price: $${p.price.toFixed(2)}/unit [${tier}]
+   Quality: ${quality}/100 [${qualityLevel}]
    Description: ${p.description.substring(0, 100)}${p.description.length > 100 ? "..." : ""}
    Tags: ${p.tags.join(", ")}`;
 }).join("\n\n")}
@@ -182,15 +220,19 @@ VALIDATION CHECKLIST:
 ✅ All spendAmount values are positive numbers
 ✅ Total spending is AT LEAST $${TARGET_SPEND_PER_BATCH.toLocaleString()}
 ✅ Total spending is LESS THAN $${(TARGET_SPEND_PER_BATCH + MAX_OVERSPEND).toLocaleString()}
-✅ Higher quality products get exponentially more budget
-✅ Every product gets SOME allocation (even if small)
+✅ Ultra Cheap tier gets 30-40% of budget (most products, maximum volume)
+✅ Very Cheap tier gets 30-35% of budget (bulk volume)
+✅ Cheap tier gets 15-20% of budget
+✅ Budget tier gets 8-12% of budget
+✅ Premium tier gets 5-8% of budget (least, but still significant)
+✅ Quality only modifies allocations by ±10% within tiers
 ✅ Response is valid JSON array (no markdown, no commentary)
-
-REMEMBER: It's better to OVERSPEND than UNDERSPEND. Be AGGRESSIVE!`;
+✅ TOTAL SHOULD BE $50M-$60M (going over by 20% is GOOD)`;
 
   try {
-    console.log(`\n🤖 Asking AI for aggressive budget allocation for batch ${batchNumber}/${totalBatches}...`);
+    console.log(`\n🤖 Asking AI for MEGA AGGRESSIVE budget allocation for batch ${batchNumber}/${totalBatches}...`);
     console.log(`💰 Target spend: $${TARGET_SPEND_PER_BATCH.toLocaleString()} (up to $${(TARGET_SPEND_PER_BATCH + MAX_OVERSPEND).toLocaleString()} allowed)`);
+    console.log(`🔥 THIS IS A MASSIVE SPENDING OPERATION - EXPECT $50M-$60M PER BATCH`);
     
     const result = await model.generateContent(prompt);
     const response = result.response;
@@ -212,7 +254,7 @@ REMEMBER: It's better to OVERSPEND than UNDERSPEND. Be AGGRESSIVE!`;
     // If AI is conservative, force aggressive scaling
     if (totalSpend < TARGET_SPEND_PER_BATCH) {
       const shortfall = TARGET_SPEND_PER_BATCH - totalSpend;
-      const scaleFactor = (TARGET_SPEND_PER_BATCH * 1.05) / totalSpend; // Scale to 105% of target
+      const scaleFactor = (TARGET_SPEND_PER_BATCH * 1.20) / totalSpend; // Scale to 120% of target (was 105%)
       
       console.log(`📈 AI was too conservative! Scaling by ${scaleFactor.toFixed(2)}x to meet target...`);
       
@@ -224,22 +266,57 @@ REMEMBER: It's better to OVERSPEND than UNDERSPEND. Be AGGRESSIVE!`;
       console.log(`✅ Scaled total: $${newTotal.toLocaleString()} (was $${totalSpend.toLocaleString()})`);
     }
     
-    // Log allocations
-    console.log(`\n📋 Budget allocations:`);
+    // Log allocations by price tier
+    console.log(`\n📋 Budget allocations by price tier:`);
+    
+    const getTierName = (price: number) => {
+      if (price < 10) return "Ultra Cheap";
+      if (price < 50) return "Very Cheap";
+      if (price < 200) return "Cheap";
+      if (price < 500) return "Budget";
+      return "Premium";
+    };
+    
+    // Group decisions by tier
+    const tierAllocations: { [key: string]: number } = {
+      "Ultra Cheap": 0,
+      "Very Cheap": 0,
+      "Cheap": 0,
+      "Budget": 0,
+      "Premium": 0,
+    };
+    
+    decisions.forEach(d => {
+      const product = batch.find(p => p._id === d.productId);
+      if (product) {
+        const tier = getTierName(product.price);
+        tierAllocations[tier] += d.spendAmount;
+      }
+    });
+    
+    const finalTotal = decisions.reduce((sum, d) => sum + d.spendAmount, 0);
+    
+    console.log(`\n   Tier Breakdown:`);
+    Object.entries(tierAllocations).forEach(([tier, amount]) => {
+      const percent = ((amount / finalTotal) * 100).toFixed(1);
+      console.log(`   • ${tier}: $${amount.toLocaleString()} (${percent}%)`);
+    });
+    
     const sortedDecisions = [...decisions].sort((a, b) => b.spendAmount - a.spendAmount);
+    console.log(`\n   Top 10 Products:`);
     sortedDecisions.slice(0, 10).forEach((d, idx) => {
       const product = batch.find(p => p._id === d.productId);
       if (product) {
         const units = Math.ceil(d.spendAmount / product.price);
+        const tier = getTierName(product.price);
         const percentage = ((d.spendAmount / TARGET_SPEND_PER_BATCH) * 100).toFixed(1);
-        console.log(`   ${idx + 1}. ${product.name.substring(0, 30)}: $${d.spendAmount.toLocaleString()} (${percentage}%) → ${units} units`);
+        console.log(`   ${idx + 1}. ${product.name.substring(0, 25)}: $${d.spendAmount.toLocaleString()} (${percentage}%) [${tier}] → ${units} units`);
       }
     });
     if (decisions.length > 10) {
       console.log(`   ... and ${decisions.length - 10} more products`);
     }
     
-    const finalTotal = decisions.reduce((sum, d) => sum + d.spendAmount, 0);
     console.log(`\n💰 Final allocated budget: $${finalTotal.toLocaleString()}`);
     
     return decisions;
@@ -307,10 +384,10 @@ async function executePurchases(
     
     // Check if we hit our target
     const percentOfTarget = (result.totalSpent / TARGET_SPEND_PER_BATCH) * 100;
-    if (percentOfTarget < 95) {
+    if (percentOfTarget < 90) {
       console.log(`   ⚠️ WARNING: Only spent ${percentOfTarget.toFixed(1)}% of target!`);
-    } else if (percentOfTarget > 110) {
-      console.log(`   💰 Exceeded target by ${(percentOfTarget - 100).toFixed(1)}% (acceptable overspend)`);
+    } else if (percentOfTarget > 120) {
+      console.log(`   💰 MEGA OVERSPEND: Exceeded target by ${(percentOfTarget - 100).toFixed(1)}% - EXCELLENT!`);
     } else {
       console.log(`   ✅ Spent ${percentOfTarget.toFixed(1)}% of target - excellent!`);
     }
@@ -345,13 +422,14 @@ async function executePurchases(
  */
 async function runAIPurchaseService() {
   const startTime = Date.now();
-  console.log("\n🚀 AI Purchase Service Starting (v2 - Aggressive Spending)");
+  console.log("\n🚀 AI Purchase Service Starting (v4 - MEGA Spending)");
   console.log("═".repeat(60));
   console.log(`⏰ Time: ${new Date().toISOString()}`);
   console.log(`🤖 Model: Gemini 2.0 Flash Lite`);
   console.log(`📦 Batch size: ${BATCH_SIZE} products`);
   console.log(`💰 Target spend per batch: $${TARGET_SPEND_PER_BATCH.toLocaleString()}`);
   console.log(`📈 Max overspend allowed: $${MAX_OVERSPEND.toLocaleString()} (${(MAX_OVERSPEND/TARGET_SPEND_PER_BATCH*100).toFixed(0)}%)`);
+  console.log(`🤑 COMPANIES WILL MAKE SERIOUS MONEY - Expected: $${TARGET_SPEND_PER_BATCH.toLocaleString()}-$${(TARGET_SPEND_PER_BATCH + MAX_OVERSPEND).toLocaleString()} per batch`);
   console.log("═".repeat(60));
   
   try {
@@ -430,14 +508,15 @@ async function runAIPurchaseService() {
     console.log(`⏱️  Total time: ${duration}s`);
     console.log(`💵 Average per batch: $${(totalSpent / batches.length).toLocaleString()}`);
     
-    if (percentOfTarget < 95) {
+    if (percentOfTarget < 90) {
       console.log(`\n⚠️ WARNING: Only ${percentOfTarget.toFixed(1)}% of target budget was spent!`);
       console.log(`   Missing: $${(targetTotal - totalSpent).toLocaleString()}`);
-    } else if (percentOfTarget > 105) {
-      console.log(`\n✅ EXCELLENT: Exceeded target by ${(percentOfTarget - 100).toFixed(1)}%`);
-      console.log(`   Overspend: $${(totalSpent - targetTotal).toLocaleString()} (within acceptable limits)`);
+    } else if (percentOfTarget > 120) {
+      console.log(`\n🤑 MEGA SUCCESS: Exceeded target by ${(percentOfTarget - 100).toFixed(1)}%`);
+      console.log(`   Overspend: $${(totalSpent - targetTotal).toLocaleString()} - COMPANIES MAKING SERIOUS MONEY!`);
     } else {
-      console.log(`\n✅ PERFECT: Hit target budget within acceptable range!`);
+      console.log(`\n✅ EXCELLENT: Hit target budget within acceptable range!`);
+      console.log(`   Companies are generating significant revenue per batch.`);
     }
     
     if (totalErrors > 0) {
