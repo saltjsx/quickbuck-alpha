@@ -139,7 +139,7 @@ http.route({
 
       // Initialize Gemini
       const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
 
       let totalSpent = 0;
       let totalItems = 0;

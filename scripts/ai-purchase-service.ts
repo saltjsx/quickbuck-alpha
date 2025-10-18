@@ -111,7 +111,7 @@ async function getAIPurchaseDecisions(
   batchNumber: number,
   totalBatches: number
 ): Promise<AIPurchaseDecision[]> {
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
 
   const prompt = `You are an AI representing the general public's purchasing decisions in a marketplace simulation called QuickBuck.
 
