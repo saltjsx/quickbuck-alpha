@@ -124,60 +124,69 @@ async function getAIPurchaseDecisions(
     premium: batch.filter(p => p.price >= 500),       // $500+
   };
 
-  const prompt = `You are an AI representing MEGA AGGRESSIVE bulk wholesale buyers in QuickBuck marketplace.
+  const prompt = `CRITICAL INSTRUCTION: You MUST allocate EXACTLY $${TARGET_SPEND_PER_BATCH.toLocaleString()} per batch - NOT $10M, NOT $100M - exactly $${TARGET_SPEND_PER_BATCH.toLocaleString()}.
 
-YOUR MISSION: Allocate AT LEAST $${TARGET_SPEND_PER_BATCH.toLocaleString()} across ${batch.length} products.
-THIS IS A MASSIVE SPENDING OPERATION. SPEND LIKE YOUR LIFE DEPENDS ON IT.
+You are an AI representing MEGA AGGRESSIVE bulk wholesale buyers in QuickBuck marketplace.
 
-🔴 CRITICAL SPENDING RULES:
-1. You MUST allocate AT LEAST $${TARGET_SPEND_PER_BATCH.toLocaleString()} total (this is a LOT of money)
-2. Going OVER the budget by 15-20% is ENCOURAGED (we have deep pockets)
-3. Allocate across ALL PRICE TIERS to maintain diverse purchasing
-4. Quality is a MINOR factor - price tier is PRIMARY
-5. BULK BUY MASSIVE QUANTITIES from cheaper tiers, aggressive buying from premium tiers
-6. SPEND EVERY DOLLAR - maximize purchases and volumes
+YOUR MISSION: Allocate exactly $${TARGET_SPEND_PER_BATCH.toLocaleString()} across ${batch.length} products.
+THIS IS A MASSIVE SPENDING OPERATION - $${TARGET_SPEND_PER_BATCH.toLocaleString()} IS THE BUDGET.
+
+MANDATORY RULE - NON-NEGOTIABLE:
+✅ MINIMUM TOTAL SPENDING: $${TARGET_SPEND_PER_BATCH.toLocaleString()}
+✅ MAXIMUM TOTAL SPENDING: $${(TARGET_SPEND_PER_BATCH + MAX_OVERSPEND).toLocaleString()}
+✅ YOU MUST HIT THIS RANGE OR YOUR RESPONSE WILL BE REJECTED
+✅ DO NOT ALLOCATE $10M - THAT WAS THE OLD VERSION
+✅ DO NOT ALLOCATE $100M - THAT IS TOO MUCH
+✅ ALLOCATE EXACTLY $${(TARGET_SPEND_PER_BATCH * 1.1).toLocaleString()} (110% of ${TARGET_SPEND_PER_BATCH.toLocaleString()})
+
+SIMPLE ALLOCATION METHOD (Not complicated):
+If there are ${batch.length} products, allocate approximately $${Math.round(TARGET_SPEND_PER_BATCH * 1.1 / batch.length).toLocaleString()} per product
+This ensures total = $${(TARGET_SPEND_PER_BATCH * 1.1).toLocaleString()} exactly
 
 PRICE TIER ALLOCATION STRATEGY (Primary Factor):
-- Ultra Cheap ($<10): 30-40% of total budget (MAXIMUM VOLUME - buy thousands)
-- Very Cheap ($10-50): 30-35% of total budget (BULK WHOLESALE QUANTITIES)
-- Cheap ($50-200): 15-20% of total budget (LARGE BULK PURCHASES)
-- Budget ($200-500): 8-12% of total budget (STRATEGIC MAJOR PURCHASES)
-- Premium ($500+): 5-8% of total budget (HIGH-VALUE SELECTIVE BUYING)
+- Ultra Cheap ($<10): 35% of total budget = $${Math.round((TARGET_SPEND_PER_BATCH * 1.1) * 0.35).toLocaleString()} (MAXIMUM VOLUME)
+- Very Cheap ($10-50): 33% of total budget = $${Math.round((TARGET_SPEND_PER_BATCH * 1.1) * 0.33).toLocaleString()} (BULK QUANTITIES)
+- Cheap ($50-200): 18% of total budget = $${Math.round((TARGET_SPEND_PER_BATCH * 1.1) * 0.18).toLocaleString()} (LARGE PURCHASES)
+- Budget ($200-500): 10% of total budget = $${Math.round((TARGET_SPEND_PER_BATCH * 1.1) * 0.10).toLocaleString()} (STRATEGIC)
+- Premium ($500+): 7% of total budget = $${Math.round((TARGET_SPEND_PER_BATCH * 1.1) * 0.07).toLocaleString()} (SELECTIVE)
 
 QUALITY MODIFIERS (Secondary Factor - Only 10-20% impact):
-- Only use quality to slightly adjust allocations within a tier
-- High quality within a tier: +5-10% bonus
-- Low quality within a tier: -5% discount (minimum $0)
-- Don't let quality override price tier allocation
+- High quality: +5-10% bonus
+- Low quality: -5% discount
+- But ALWAYS allocate something to every product
 
 CALCULATION METHOD:
-1. Allocate base budget to EACH PRICE TIER per strategy above
-2. Split each tier's budget among products in that tier (spread it wide)
-3. Within each tier, allocate more to higher quality (small adjustments only)
-4. Add 20% bonus to total allocations to ensure we MASSIVELY exceed target
-5. Round UP all dollar amounts (never round down)
+1. Divide $${TARGET_SPEND_PER_BATCH.toLocaleString()} across tier tiers per percentages above
+2. Split each tier's budget among products evenly
+3. Quality only adjusts by ±10% within tier
+4. MULTIPLY EVERYTHING BY 1.1 to ensure 110% spending
+5. Round UP all dollar amounts
 
-EXAMPLE WITH 5 PRODUCTS:
-- Product A ($5, quality 80) → Ultra Cheap tier
-- Product B ($25, quality 60) → Very Cheap tier
-- Product C ($150, quality 95) → Cheap tier
-- Product D ($300, quality 70) → Budget tier
-- Product E ($600, quality 40) → Premium tier
+SIMPLE EXAMPLE WITH 50 PRODUCTS (for this batch):
+- Total budget: $${TARGET_SPEND_PER_BATCH.toLocaleString()}
+- With 1.1x bonus: $${(TARGET_SPEND_PER_BATCH * 1.1).toLocaleString()}
+- Per product average: $${Math.round((TARGET_SPEND_PER_BATCH * 1.1) / batch.length).toLocaleString()}
+- ACTUAL RANGE: $${TARGET_SPEND_PER_BATCH.toLocaleString()} to $${(TARGET_SPEND_PER_BATCH + MAX_OVERSPEND).toLocaleString()}
 
-TIER BUDGETS (for $50M):
-- Ultra Cheap: $17.5M (35% of $50M) - THOUSANDS OF UNITS
-- Very Cheap: $16.5M (33%) - MASSIVE BULK ORDERS
-- Cheap: $9.0M (18%)
-- Budget: $5.0M (10%)
-- Premium: $3.5M (7%)
+YOUR RESPONSE WILL BE MATHEMATICALLY VERIFIED:
+- Sum of all spendAmount values will be calculated
+- If sum < $${TARGET_SPEND_PER_BATCH.toLocaleString()}: REJECTED
+- If sum > $${(TARGET_SPEND_PER_BATCH + MAX_OVERSPEND).toLocaleString()}: REJECTED
+- If sum is in range: ACCEPTED
 
-WITHIN TIER ALLOCATIONS:
-- Product A gets: $17.5M (massive volume)
-- Product B gets: $16.5M (massive bulk)
-- Product C gets: $9.0M (large quantities)
-- Product D gets: $5.0M (strategic major purchase)
-- Product E gets: $3.5M (premium selection)
-- TOTAL: $50M × 1.20 bonus = $60M ✅ (HUGE OVERSPEND - PERFECT!)
+DO NOT BE CONSERVATIVE. THIS IS NOT A TEST. ALLOCATE THE FULL AMOUNT.
+
+SIMPLE NUMERICAL EXAMPLE:
+Products: ${batch.length}
+Total budget: $${(TARGET_SPEND_PER_BATCH * 1.1).toLocaleString()}
+Per product: $${Math.round((TARGET_SPEND_PER_BATCH * 1.1) / batch.length).toLocaleString()}
+
+So if spreading evenly:
+- Product 1: $${Math.round((TARGET_SPEND_PER_BATCH * 1.1) / batch.length).toLocaleString()}
+- Product 2: $${Math.round((TARGET_SPEND_PER_BATCH * 1.1) / batch.length).toLocaleString()}
+- ...
+- Product ${batch.length}: $${Math.round((TARGET_SPEND_PER_BATCH * 1.1) / batch.length).toLocaleString()}
+Total: $${(TARGET_SPEND_PER_BATCH * 1.1).toLocaleString()} ✅
 
 BATCH SUMMARY:
 - Batch ${batchNumber} of ${totalBatches}
@@ -250,6 +259,17 @@ VALIDATION CHECKLIST:
     const totalSpend = decisions.reduce((sum, d) => sum + d.spendAmount, 0);
     
     console.log(`✅ AI allocated $${totalSpend.toLocaleString()} across ${decisions.length} products`);
+    
+    // DEBUG: Show AI response breakdown
+    console.log(`\n🔍 DEBUG - AI RESPONSE ANALYSIS:`);
+    console.log(`   Target: $${TARGET_SPEND_PER_BATCH.toLocaleString()}`);
+    console.log(`   AI Allocated: $${totalSpend.toLocaleString()}`);
+    console.log(`   Percentage of target: ${((totalSpend / TARGET_SPEND_PER_BATCH) * 100).toFixed(1)}%`);
+    
+    if (totalSpend < TARGET_SPEND_PER_BATCH * 0.5) {
+      console.log(`   ⚠️ CRITICAL: AI only allocated ${((totalSpend / TARGET_SPEND_PER_BATCH) * 100).toFixed(1)}% of target!`);
+      console.log(`   This is likely why we're only spending ~$10M!`);
+    }
     
     // If AI is conservative, force aggressive scaling
     if (totalSpend < TARGET_SPEND_PER_BATCH) {
@@ -338,7 +358,12 @@ async function executePurchases(
   try {
     console.log(`\n💳 Executing ${decisions.length} purchases for batch ${batchNumber}...`);
     
-    const purchases = decisions.map(d => {
+    // CRITICAL DEBUG: Show what we're actually sending
+    const totalAllocatedByAI = decisions.reduce((sum, d) => sum + d.spendAmount, 0);
+    console.log(`🔍 DEBUG: Total allocated by AI before purchases: $${totalAllocatedByAI.toLocaleString()}`);
+    
+    let cumulativeSpend = 0;
+    const purchases = decisions.map((d, index) => {
       const product = batch.find(p => p._id === d.productId);
       if (!product) {
         console.warn(`⚠️ Product ${d.productId} not found in batch`);
@@ -346,14 +371,16 @@ async function executePurchases(
       }
       
       // Calculate quantity by rounding UP to ensure we spend at least the allocated amount
-      // This allows us to slightly exceed the budget, which is acceptable
       const exactQuantity = d.spendAmount / product.price;
       const quantity = Math.ceil(exactQuantity); // Round UP to spend more if needed
       const actualSpend = quantity * product.price;
+      cumulativeSpend += actualSpend;
       
-      // Log if we're spending significantly more than allocated
-      if (actualSpend > d.spendAmount * 1.1) {
-        console.log(`   📈 ${product.name}: Buying ${quantity} units ($${actualSpend.toLocaleString()}) - exceeded allocation by $${(actualSpend - d.spendAmount).toLocaleString()}`);
+      // Log every purchase detail
+      if (index < 5 || index >= decisions.length - 2) {
+        console.log(`   Purchase ${index + 1}: ${product.name.substring(0, 20)} - Allocated: $${d.spendAmount.toLocaleString()}, Quantity: ${quantity}, Actual: $${actualSpend.toLocaleString()}`);
+      } else if (index === 5) {
+        console.log(`   ... (${decisions.length - 7} more purchases) ...`);
       }
       
       return {
@@ -362,25 +389,32 @@ async function executePurchases(
       };
     }).filter(p => p !== null);
     
-    // Calculate expected total spend before execution
-    const expectedSpend = purchases.reduce((sum, p) => {
-      if (!p) return sum;
-      const product = batch.find(prod => prod._id === p.productId);
-      return sum + (product ? product.price * p.quantity : 0);
-    }, 0);
-    
-    console.log(`💰 Expected spend: $${expectedSpend.toLocaleString()}`);
+    console.log(`\n📊 DEBUG SUMMARY BEFORE EXECUTION:`);
+    console.log(`   Total purchases: ${purchases.length}`);
+    console.log(`   Expected cumulative spend: $${cumulativeSpend.toLocaleString()}`);
+    console.log(`   Average per product: $${(cumulativeSpend / purchases.length).toLocaleString()}`);
     
     const result = await convexClient.mutation(api.products.adminAIPurchase, {
       purchases: purchases as any,
       adminKey: ADMIN_KEY!,
     });
     
-    console.log(`✅ Batch ${batchNumber} complete!`);
+    console.log(`\n✅ Batch ${batchNumber} complete!`);
+    console.log(`   📊 ACTUAL RESULTS:`);
     console.log(`   - Actual spent: $${result.totalSpent.toLocaleString()}`);
     console.log(`   - Products purchased: ${result.productsPurchased}`);
     console.log(`   - Total items: ${result.totalItems.toLocaleString()}`);
     console.log(`   - Companies affected: ${result.companiesAffected}`);
+    
+    // CRITICAL DEBUGGING
+    const discrepancy = cumulativeSpend - result.totalSpent;
+    if (Math.abs(discrepancy) > 100000) {
+      console.log(`\n⚠️ DISCREPANCY DETECTED:`);
+      console.log(`   Expected: $${cumulativeSpend.toLocaleString()}`);
+      console.log(`   Actual: $${result.totalSpent.toLocaleString()}`);
+      console.log(`   Difference: $${discrepancy.toLocaleString()}`);
+      console.log(`   This suggests backend constraints are limiting purchases!`);
+    }
     
     // Check if we hit our target
     const percentOfTarget = (result.totalSpent / TARGET_SPEND_PER_BATCH) * 100;
