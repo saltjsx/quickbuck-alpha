@@ -113,7 +113,7 @@ async function getAIPurchaseDecisions(
   batchNumber: number,
   totalBatches: number
 ): Promise<AIPurchaseDecision[]> {
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
   // Categorize products by price tier
   const priceTiers = {
