@@ -625,6 +625,11 @@ export const checkAndUpdatePublicStatus = mutation({
     const company = await ctx.db.get(args.companyId);
     if (!company) throw new Error("Company not found");
 
+    // Respect keepPrivate flag
+    if (company.keepPrivate) {
+      throw new Error("Company is set to remain private");
+    }
+
     // Get balance from cached account balance
     const account = await ctx.db.get(company.accountId);
     const balance = account?.balance ?? 0;
@@ -701,6 +706,35 @@ export const updateCompany = mutation({
     await ctx.db.patch(args.companyId, updates);
 
     return { success: true };
+  },
+});
+
+// Toggle keepPrivate flag to prevent automatic going public
+export const toggleKeepPrivate = mutation({
+  args: {
+    companyId: v.id("companies"),
+    keepPrivate: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const company = await ctx.db.get(args.companyId);
+    if (!company) throw new Error("Company not found");
+
+    // Check if user is the owner
+    if (company.ownerId !== userId) {
+      throw new Error("Only the owner can change this setting");
+    }
+
+    // If setting to keep private and company is already public, throw error
+    if (args.keepPrivate && company.isPublic) {
+      throw new Error("Cannot keep private - company is already public");
+    }
+
+    await ctx.db.patch(args.companyId, { keepPrivate: args.keepPrivate });
+
+    return { success: true, keepPrivate: args.keepPrivate };
   },
 });
 

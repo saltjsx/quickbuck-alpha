@@ -131,6 +131,7 @@ export default defineSchema({
     ownerId: v.id("users"),
     accountId: v.id("accounts"),
     isPublic: v.boolean(),
+    keepPrivate: v.optional(v.boolean()), // Flag to prevent automatic going public
     totalShares: v.number(),
     sharePrice: v.number(),
     marketSentiment: v.optional(v.number()),

@@ -722,7 +722,7 @@ export const automaticPurchase = internalMutation({
     // After all purchases, check which companies should be made public using cached balances
     for (const [, tx] of companyTransactions) {
       const companyDoc = tx.company;
-      if (!companyDoc || companyDoc.isPublic) continue;
+      if (!companyDoc || companyDoc.isPublic || companyDoc.keepPrivate) continue;
 
       const accountKey = idToKey(tx.accountId);
       const balance = accountCache.get(accountKey) ?? 0;
@@ -1014,9 +1014,9 @@ export const adminAIPurchase = mutation({
           });
         }
 
-        // Check if company should go public
+        // Check if company should go public (only if keepPrivate is not set)
         const company = await ctx.db.get(tx.companyId);
-        if (company && "isPublic" in company && !company.isPublic && newBalance > 50000) {
+        if (company && "isPublic" in company && !company.isPublic && newBalance > 50000 && !(company as any).keepPrivate) {
           await ctx.db.patch(company._id, { isPublic: true });
         }
       } catch (error) {
