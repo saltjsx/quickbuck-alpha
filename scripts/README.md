@@ -2,33 +2,88 @@
 
 Collection of utility scripts for managing and automating the QuickBuck marketplace.
 
-## 🤖 AI Purchase System (NEW!)
+## 🤖 AI Purchase System (ENHANCED!)
 
-**AI-powered automatic product purchasing service using Gemini 2.5 Flash Lite**
+**Advanced AI-powered automatic product purchasing service using Gemini 2.0 Flash Lite**
 
-### Quick Start
+### Overview
 
-```bash
-# Test the AI purchase service manually
-npm run trigger-ai-purchase
+A sophisticated purchasing system that simulates realistic market demand across all products. The system intelligently allocates a **$25M budget** across price categories and uses AI to make fair, realistic purchasing decisions.
 
-# Or run the standalone version
-npm run ai-purchase
-```
+### Key Features
 
-**Setup Required:**
-1. Get Gemini API key from https://aistudio.google.com/
-2. Add `GEMINI_API_KEY` to `.env.local` and Convex environment variables
-3. Deploy: `npx convex deploy`
+- 💰 **$25M Budget** - Allocated across 5 price tiers
+- 🎯 **Fair Distribution** - Every product gets purchased
+- 📦 **Batch Processing** - 50 products per AI call
+- 🤖 **Gemini 2.0 Flash Lite** - Fast, efficient AI decisions
+- 📊 **Price Categories** - Smart budget allocation by price tier
+- ⏰ **Automated** - Runs every 20 minutes via Convex cron
+- 📈 **Quality-Based** - Higher quality products get more purchases
+- 🔍 **Comprehensive Logging** - Detailed console output for tracking
 
-**Features:**
-- 🤖 AI evaluates products like the general public
-- 📦 Processes in batches of 50
-- 💰 Spends minimum $1M per batch
-- ⏰ Runs automatically every 20 minutes
-- 🎯 Gives every product a fair chance
+### Budget Allocation
 
-**Documentation:** See [AI_PURCHASE_SETUP.md](../docs/AI_PURCHASE_SETUP.md) for detailed setup guide.
+| Category | Price Range | Budget % | Amount |
+|----------|-------------|----------|--------|
+| Micro | $0-$50 | 15% | $3.75M |
+| Low | $50-$250 | 25% | $6.25M |
+| Medium | $250-$1,000 | 30% | $7.5M |
+| High | $1,000-$5,000 | 20% | $5M |
+| Premium | $5,000+ | 10% | $2.5M |
+
+### Setup Required
+
+1. **Get API Key**: https://aistudio.google.com/
+2. **Add to Environment**:
+   ```bash
+   # .env.local
+   GEMINI_API_KEY=your_api_key_here
+   ADMIN_KEY=your_admin_key_here
+   
+   # Convex environment
+   npx convex env set GEMINI_API_KEY "your_api_key_here"
+   npx convex env set ADMIN_KEY "your_admin_key_here"
+   ```
+3. **Deploy**: `npx convex deploy`
+
+### Files
+
+- `ai-purchase-service.ts` - Main service implementation
+- `AI-PURCHASE-SERVICE.md` - Detailed documentation
+- `INTEGRATION-EXAMPLE.ts` - HTTP endpoint integration example
+
+### How It Works
+
+1. **Categorize**: Products sorted into price tiers
+2. **Allocate**: Budget distributed across categories
+3. **Process**: AI evaluates each batch of 50 products
+4. **Purchase**: Executes purchases via mutation
+5. **Report**: Comprehensive statistics and breakdown
+
+### AI Decision Making
+
+The AI considers:
+- Product quality (0-100 scale)
+- Price point and value
+- Historical sales data
+- Product usefulness and category
+- Realistic consumer behavior
+
+**Quality Multipliers:**
+- 90-100: Buy 1.5-2x base amount
+- 70-89: Buy 1x base amount
+- 50-69: Buy 0.5x base amount
+- <50: Minimal or skip if spam
+
+### Documentation
+
+See **[AI-PURCHASE-SERVICE.md](./AI-PURCHASE-SERVICE.md)** for:
+- Complete feature breakdown
+- Integration guide
+- Customization options
+- Troubleshooting
+- Performance characteristics
+- Monitoring metrics
 
 ---
 
