@@ -63,7 +63,7 @@ interface Product {
 
 interface AIPurchaseDecision {
   productId: string;
-  quantity: number;
+  spendAmount: number; // Amount to spend in dollars instead of quantity
   reasoning: string;
 }
 
@@ -113,74 +113,83 @@ async function getAIPurchaseDecisions(
 ): Promise<AIPurchaseDecision[]> {
   const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
 
-  const prompt = `You are an AI representing the general public's purchasing decisions in a marketplace simulation called QuickBuck.
+  const prompt = `You are an AI representing bulk wholesale buyers in a marketplace simulation called QuickBuck.
 
-Your role is to make realistic purchasing decisions for ${batch.length} products based on what the general public and businesses would actually buy.
+Your role is to allocate a $${MIN_SPEND_PER_BATCH.toLocaleString()} budget across ${batch.length} products to maximize value for general public consumers and businesses.
 
-CRITICAL REQUIREMENTS:
-1. You MUST spend a MINIMUM of $${MIN_SPEND_PER_BATCH.toLocaleString()} on this batch
-2. Give EVERY product a chance - buy at least a small quantity of most products
-3. Act like the general public - PRIORITIZE useful, quality products that meet real needs
-4. Avoid spam, low-quality products, or items that seem suspicious
-5. Consider what real consumers and businesses would need
-6. BUY IN LARGE QUANTITIES - Companies should make millions to tens of millions
+🔴 CRITICAL REQUIREMENT:
+YOU MUST ALLOCATE EXACTLY $${MIN_SPEND_PER_BATCH.toLocaleString()} TO THE PRODUCTS BELOW.
+Your total spending must equal (not exceed or fall short of) this exact budget.
 
-PURCHASING GUIDELINES:
-- High-quality products (90-100 quality): Buy VERY generously (1000-50000+ units)
-- Medium-quality products (70-89 quality): Buy generously (500-10000 units)
-- Low-quality products (50-69 quality): Buy moderately (100-500 units)
-- Very low quality (<50): Buy minimal amounts or skip if spam (1-50 units)
+YOUR MISSION:
+- Allocate budget based on product quality and value
+- High-quality products get larger budget allocations
+- Low-quality products get smaller allocations or are skipped
+- Spread across most/all products but weighted by quality
+- Buy whatever quantity makes sense at each product's price point
+- Ensure every dollar of the budget is spent
 
-QUANTITY STRATEGY:
-- Cheap items ($1-$50): Can buy 5000-50000+ units
-- Budget items ($50-$500): Buy 1000-10000 units
-- Mid-range items ($500-$5000): Buy 100-2000 units
-- Premium items ($5000-$50000): Buy 10-500 units
-- Luxury items ($50000+): Buy 1-100 units, only if high quality
+BUDGET ALLOCATION BY QUALITY:
+Quality 90-100: Allocate 40-50% of your budget to these excellent products
+Quality 70-89:  Allocate 25-35% of your budget to these good products
+Quality 50-69:  Allocate 10-20% of your budget to these fair products
+Quality <50:    Allocate 0-5% of your budget (minimize or skip)
 
-REALISTIC BULK BEHAVIOR:
-- Essential products (food, software, services): Heavy bulk purchases
-- Luxury items: Moderate bulk demand
-- Business-to-business products: Large bulk orders
-- Consumer goods: Mix of bulk purchases based on usefulness and price
-- Scale quantities up 5-10x compared to normal retail
+ALLOCATION STRATEGY:
+1. Calculate total quality-weighted score for all products
+2. Allocate budget proportionally to quality scores
+3. High quality items get more of the budget
+4. Low quality items get minimal budget
+5. Leave no money unspent - allocate the FULL $${MIN_SPEND_PER_BATCH.toLocaleString()}
+
+EXAMPLE LOGIC:
+- If there are 5 products total with quality scores [100, 90, 70, 50, 30]
+- Total weighted score = 100+90+70+50+30 = 340 points
+- Product 1 (100 pts): Gets (100/340 * $${MIN_SPEND_PER_BATCH.toLocaleString()}) = allocate to this
+- Product 2 (90 pts): Gets (90/340 * $${MIN_SPEND_PER_BATCH.toLocaleString()}) = allocate to this
+- And so on, buying as many units as that budget allows at each product's price
 
 BATCH INFO:
-- This is batch ${batchNumber} of ${totalBatches}
+- Batch ${batchNumber} of ${totalBatches}
 - ${batch.length} products to evaluate
-- Your minimum budget: $${MIN_SPEND_PER_BATCH.toLocaleString()}
-- Focus on QUALITY but buy in MUCH LARGER QUANTITIES
+- Total budget to allocate: $${MIN_SPEND_PER_BATCH.toLocaleString()}
 
 PRODUCTS TO EVALUATE:
-${batch.map((p, i) => `
-${i + 1}. "${p.name}" by ${p.companyName}
-   - ID: ${p._id}
-   - Price: $${p.price.toFixed(2)}
-   - Quality: ${p.quality ?? 100}/100
-   - Description: ${p.description.substring(0, 150)}${p.description.length > 150 ? "..." : ""}
-   - Tags: ${p.tags.join(", ")}
-   - Total Sales History: ${p.totalSales} units
-`).join("\n")}
+${batch.map((p, i) => {
+  const priceCategory = p.price < 20 ? '💰 VERY CHEAP' : p.price < 100 ? '💵 CHEAP' : p.price < 500 ? '💳 BUDGET' : '💎 PREMIUM';
+  const qualityLevel = (p.quality ?? 100) >= 90 ? '⭐⭐⭐ EXCELLENT' : (p.quality ?? 100) >= 70 ? '⭐⭐ GOOD' : '⭐ FAIR';
+  return `${i + 1}. "${p.name}" by ${p.companyName}
+   ID: ${p._id}
+   Price: $${p.price.toFixed(2)} per unit [${priceCategory}]
+   Quality: ${p.quality ?? 100}/100 [${qualityLevel}]
+   Description: ${p.description.substring(0, 120)}${p.description.length > 120 ? "..." : ""}
+   Tags: ${p.tags.join(", ")}`;
+}).join("\n\n")}
 
-RESPONSE FORMAT (JSON only, no markdown):
-Return a JSON array of purchase decisions. Each decision must have:
-{
-  "productId": "product ID",
-  "quantity": number (can be 100-50000+ for cheap items, 1-1000 for expensive items),
-  "reasoning": "brief explanation (1-2 sentences)"
-}
+RESPONSE FORMAT - MUST BE VALID JSON ARRAY:
+[
+  {
+    "productId": "string (exact ID from list)",
+    "spendAmount": number (in dollars, total budget to spend on this product),
+    "reasoning": "brief (1 sentence)"
+  }
+]
 
-IMPORTANT:
-- Return valid JSON array only (no markdown code blocks)
-- Ensure total spending reaches at least $${MIN_SPEND_PER_BATCH.toLocaleString()}
-- Give most products at least 5-50 units to be fair
-- BUY MUCH LARGER QUANTITIES than normal - aim for millions in total spending
-- PRIORITIZE QUALITY - high quality items get 5-10x larger orders
-- Be realistic with bulk purchases - don't skip any products entirely`;
+CRITICAL REQUIREMENTS FOR YOUR RESPONSE:
+1. Return ONLY valid JSON array (no markdown, no text)
+2. Every productId must match exactly from the list
+3. All spendAmount values must be positive numbers (can be decimals)
+4. Calculate: SUM(spendAmount) for all products
+5. TOTAL SPENDING MUST EQUAL $${MIN_SPEND_PER_BATCH.toLocaleString()} (not more, not less)
+6. Allocate higher budget to higher quality items
+7. Allocate minimal or zero budget to low quality items (use 0 if quality too low)
+8. Quality should be the primary factor in allocation decisions
+9. Do the math carefully - ensure your total equals exactly the target budget
+10. Return spendAmount as a number representing dollars, we'll convert to units based on price`;
 
   try {
     console.log(`\n🤖 Asking AI to evaluate batch ${batchNumber}/${totalBatches} (${batch.length} products)...`);
-    console.log(`💰 Target spend: $${MIN_SPEND_PER_BATCH.toLocaleString()}`);
+    console.log(`💰 Target budget allocation: $${MIN_SPEND_PER_BATCH.toLocaleString()}`);
     
     const result = await model.generateContent(prompt);
     const response = result.response;
@@ -201,17 +210,28 @@ IMPORTANT:
     const decisions: AIPurchaseDecision[] = JSON.parse(cleanedText);
     
     // Calculate total spend
-    const totalSpend = decisions.reduce((sum, decision) => {
-      const product = batch.find(p => p._id === decision.productId);
-      return sum + (product ? product.price * decision.quantity : 0);
+    let totalSpend = decisions.reduce((sum, decision) => {
+      return sum + decision.spendAmount;
     }, 0);
     
     console.log(`✅ AI recommended ${decisions.length} purchases`);
-    console.log(`💰 Estimated spend: $${totalSpend.toLocaleString()}`);
+    console.log(`💰 Total allocated: $${totalSpend.toLocaleString()}`);
     
-    // Warn if under minimum
+    // If under minimum, scale up all spend amounts proportionally
     if (totalSpend < MIN_SPEND_PER_BATCH) {
-      console.log(`⚠️  Warning: Spending $${totalSpend.toLocaleString()} is below minimum of $${MIN_SPEND_PER_BATCH.toLocaleString()}`);
+      const scale = MIN_SPEND_PER_BATCH / totalSpend;
+      console.log(`📈 Scaling budget allocations by ${scale.toFixed(2)}x to meet budget...`);
+      
+      for (const decision of decisions) {
+        decision.spendAmount = Math.ceil(decision.spendAmount * scale);
+      }
+      
+      // Recalculate total spend
+      totalSpend = decisions.reduce((sum, decision) => {
+        return sum + decision.spendAmount;
+      }, 0);
+      
+      console.log(`✅ Adjusted total: $${totalSpend.toLocaleString()}`);
     }
     
     return decisions;
@@ -226,15 +246,20 @@ IMPORTANT:
  */
 async function executePurchases(
   decisions: AIPurchaseDecision[],
+  batch: Product[],
   batchNumber: number
 ): Promise<BatchResult> {
   try {
     console.log(`\n💳 Executing ${decisions.length} purchases for batch ${batchNumber}...`);
     
-    const purchases = decisions.map(d => ({
-      productId: d.productId as any,
-      quantity: d.quantity,
-    }));
+    const purchases = decisions.map(d => {
+      const product = batch.find((p: Product) => p._id === d.productId);
+      const quantity = product ? Math.floor(d.spendAmount / product.price) : 0;
+      return {
+        productId: d.productId as any,
+        quantity: Math.max(1, quantity), // Ensure at least 1 unit
+      };
+    });
     
     const result = await convexClient.mutation(api.products.adminAIPurchase, {
       purchases,
@@ -311,7 +336,7 @@ async function runAIPurchaseService() {
         const decisions = await getAIPurchaseDecisions(batch, batchNumber, batches.length);
         
         // Execute purchases
-        const result = await executePurchases(decisions, batchNumber);
+        const result = await executePurchases(decisions, batch, batchNumber);
         results.push(result);
         
         // Brief delay between batches to avoid rate limiting
