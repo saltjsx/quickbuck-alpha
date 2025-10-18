@@ -705,6 +705,11 @@ export const updateCompany = mutation({
 
     await ctx.db.patch(args.companyId, updates);
 
+    // If company name is being updated, also update the associated account name
+    if (args.name !== undefined && company.accountId) {
+      await ctx.db.patch(company.accountId, { name: args.name });
+    }
+
     return { success: true };
   },
 });
