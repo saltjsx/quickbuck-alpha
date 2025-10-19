@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query, internalAction } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 
 // Helper to get current user ID
@@ -14,6 +14,56 @@ async function getCurrentUserId(ctx: any) {
     .unique();
   
   return user?._id || null;
+}
+
+// Helper to get company employee bonuses
+async function getCompanyEmployeeBonuses(ctx: any, companyId: Id<"companies">) {
+  const employees = await ctx.db
+    .query("employees")
+    .withIndex("by_company_active", (q: any) =>
+      q.eq("companyId", companyId).eq("isActive", true)
+    )
+    .collect();
+
+  const totalBonuses = {
+    salesBoost: 0,
+    maintenanceReduction: 0,
+    qualityBoost: 0,
+    costReduction: 0,
+    efficiencyBoost: 0,
+  };
+
+  for (const employee of employees) {
+    const baseMultiplier = 0.02; // 2% per level
+    const levelMultiplier = employee.level * baseMultiplier;
+    const totalMultiplier = levelMultiplier * employee.bonusMultiplier;
+    const moraleMultiplier = employee.morale / 100;
+
+    switch (employee.role) {
+      case "marketer":
+        totalBonuses.salesBoost += totalMultiplier * moraleMultiplier;
+        break;
+      case "engineer":
+        totalBonuses.maintenanceReduction += totalMultiplier * moraleMultiplier;
+        break;
+      case "quality_control":
+        totalBonuses.qualityBoost += totalMultiplier * moraleMultiplier;
+        break;
+      case "cost_optimizer":
+        totalBonuses.costReduction += totalMultiplier * moraleMultiplier;
+        break;
+      case "manager":
+        const managerBonus = (totalMultiplier * 0.5) * moraleMultiplier;
+        totalBonuses.salesBoost += managerBonus;
+        totalBonuses.maintenanceReduction += managerBonus;
+        totalBonuses.qualityBoost += managerBonus;
+        totalBonuses.costReduction += managerBonus;
+        totalBonuses.efficiencyBoost += managerBonus;
+        break;
+    }
+  }
+
+  return totalBonuses;
 }
 
 // Create a product
@@ -40,6 +90,11 @@ export const createProduct = mutation({
 
     if (!access) throw new Error("No access to this company");
 
+    // Apply employee quality bonuses
+    const employeeBonuses = await getCompanyEmployeeBonuses(ctx, args.companyId);
+    // Quality boost: start at 100 and add bonus (cap at 120)
+    const initialQuality = Math.min(120, 100 + (employeeBonuses.qualityBoost * 100));
+
     const productId = await ctx.db.insert("products", {
       name: args.name,
       description: args.description,
@@ -52,7 +107,7 @@ export const createProduct = mutation({
       totalSales: 0,
       totalRevenue: 0,
       totalCosts: 0,
-      quality: 100, // Start with perfect quality
+      quality: initialQuality,
       lastMaintenanceDate: Date.now(),
       maintenanceCost: 0,
       createdAt: Date.now(),
@@ -377,9 +432,7 @@ export const automaticPurchase = internalMutation({
       
       // Do not purchase anything over $50k
       if (totalPrice > 50000) return false;
-      const costPercentage = 0.23 + Math.random() * 0.44;
-      const productionCost = totalPrice * costPercentage;
-
+      
       const companyKey = idToKey(product.companyId);
       
       // OPTIMIZED: Use pre-fetched company cache
@@ -391,6 +444,13 @@ export const automaticPurchase = internalMutation({
 
       const companyDoc = companyCache.get(companyKey);
       if (!companyDoc) return false;
+
+      // Apply employee bonuses (cost reduction from cost optimizers)
+      const employeeBonuses = await getCompanyEmployeeBonuses(ctx, companyDoc._id);
+      const costPercentage = 0.23 + Math.random() * 0.44;
+      // Reduce production cost based on employee bonuses (max 50% reduction)
+      const costReductionMultiplier = Math.max(0.5, 1 - employeeBonuses.costReduction);
+      const productionCost = totalPrice * costPercentage * costReductionMultiplier;
 
       if (!companyTransactions.has(companyKey)) {
         companyTransactions.set(companyKey, {
