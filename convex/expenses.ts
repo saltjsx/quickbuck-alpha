@@ -1,28 +1,13 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 
 /**
  * Company Expenses System
  * 
  * This module handles:
  * 1. Operating Costs - rent, staff, logistics (scales with revenue)
- *    // Deduct from company balance
-    await ctx.db.patch(company.accountId, {
-      balance: balance - maintenanceCost,
-    });
-
-    // Get system account
-    // OPTIMIZED: Use by_name index for system account lookup
-    let systemAccount = await ctx.db
-      .query("accounts")
-      .withIndex("by_name", (q) => q.eq("name", "System"))
-      .first();
-
-    if (!systemAccount) {
-      throw new Error("System account not found");
-    }
-
-    // Update product quality (restore to 100)orate tax on profits
+ * 2. Corporate tax on profits
  * 3. License Fees - required to operate in certain industries
  * 4. Maintenance - product quality degradation and R&D costs
  */
@@ -38,6 +23,56 @@ async function getCurrentUserId(ctx: any) {
     .unique();
   
   return user?._id || null;
+}
+
+// Helper to get company employee bonuses
+async function getCompanyEmployeeBonuses(ctx: any, companyId: Id<"companies">) {
+  const employees = await ctx.db
+    .query("employees")
+    .withIndex("by_company_active", (q: any) =>
+      q.eq("companyId", companyId).eq("isActive", true)
+    )
+    .collect();
+
+  const totalBonuses = {
+    salesBoost: 0,
+    maintenanceReduction: 0,
+    qualityBoost: 0,
+    costReduction: 0,
+    efficiencyBoost: 0,
+  };
+
+  for (const employee of employees) {
+    const baseMultiplier = 0.02; // 2% per level
+    const levelMultiplier = employee.level * baseMultiplier;
+    const totalMultiplier = levelMultiplier * employee.bonusMultiplier;
+    const moraleMultiplier = employee.morale / 100;
+
+    switch (employee.role) {
+      case "marketer":
+        totalBonuses.salesBoost += totalMultiplier * moraleMultiplier;
+        break;
+      case "engineer":
+        totalBonuses.maintenanceReduction += totalMultiplier * moraleMultiplier;
+        break;
+      case "quality_control":
+        totalBonuses.qualityBoost += totalMultiplier * moraleMultiplier;
+        break;
+      case "cost_optimizer":
+        totalBonuses.costReduction += totalMultiplier * moraleMultiplier;
+        break;
+      case "manager":
+        const managerBonus = (totalMultiplier * 0.5) * moraleMultiplier;
+        totalBonuses.salesBoost += managerBonus;
+        totalBonuses.maintenanceReduction += managerBonus;
+        totalBonuses.qualityBoost += managerBonus;
+        totalBonuses.costReduction += managerBonus;
+        totalBonuses.efficiencyBoost += managerBonus;
+        break;
+    }
+  }
+
+  return totalBonuses;
 }
 
 // License costs by industry
@@ -243,7 +278,13 @@ export const performMaintenance = mutation({
     // Calculate maintenance cost (5-15% of product price)
     // Use product ID as seed for deterministic "randomness"
     const seed = parseInt(args.productId.slice(-8), 16) % 100;
-    const maintenanceCost = product.price * (0.05 + (seed / 1000));
+    const baseCost = product.price * (0.05 + (seed / 1000));
+    
+    // Apply employee bonuses (maintenance reduction from engineers)
+    const employeeBonuses = await getCompanyEmployeeBonuses(ctx, product.companyId);
+    // Reduce maintenance cost based on employee bonuses (max 60% reduction)
+    const maintenanceReductionMultiplier = Math.max(0.4, 1 - employeeBonuses.maintenanceReduction);
+    const maintenanceCost = baseCost * maintenanceReductionMultiplier;
 
     // Check if company has enough balance
     const account = await ctx.db.get(company.accountId);
@@ -268,9 +309,12 @@ export const performMaintenance = mutation({
       throw new Error("System account not found");
     }
 
-    // Update product quality (restore to 100)
+    // Update product quality (restore to 100 + quality boost from quality control employees)
+    // Quality boost: base 100 + bonus (cap at 120)
+    const restoredQuality = Math.min(120, 100 + (employeeBonuses.qualityBoost * 100));
+    
     await ctx.db.patch(args.productId, {
-      quality: 100,
+      quality: restoredQuality,
       lastMaintenanceDate: Date.now(),
       maintenanceCost,
     });

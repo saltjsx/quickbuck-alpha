@@ -3,11 +3,12 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
-// Run AI-powered automatic product purchases every 20 minutes
+// Run stochastic public purchases every 20 minutes
 crons.interval(
-  "AI automatic product purchases",
+  "Stochastic public product purchases",
   { minutes: 20 },
-  internal.products.automaticPurchaseAI
+  // @ts-ignore - API types will be regenerated
+  internal.publicPurchases.scheduledPublicPurchaseWave
 );
 
 // Update stock prices every 5 minutes
@@ -58,6 +59,27 @@ crons.daily(
   "apply loan interest and process defaults",
   { hourUTC: 2, minuteUTC: 0 },
   internal.loans.applyDailyInterest
+);
+
+// Process employee payroll every 10 minutes
+crons.interval(
+  "process employee payroll",
+  { minutes: 10 },
+  internal.employees.processPayroll
+);
+
+// Update employee morale every hour
+crons.hourly(
+  "update employee morale",
+  { minuteUTC: 0 },
+  internal.employees.updateEmployeeMorale
+);
+
+// Update resource prices every 30 minutes
+crons.interval(
+  "update resource prices",
+  { minutes: 30 },
+  internal.resources.updateResourcePrices
 );
 
 export default crons;

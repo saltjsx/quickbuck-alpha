@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query, internalAction } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 
 // Helper to get current user ID
@@ -14,6 +14,56 @@ async function getCurrentUserId(ctx: any) {
     .unique();
   
   return user?._id || null;
+}
+
+// Helper to get company employee bonuses
+async function getCompanyEmployeeBonuses(ctx: any, companyId: Id<"companies">) {
+  const employees = await ctx.db
+    .query("employees")
+    .withIndex("by_company_active", (q: any) =>
+      q.eq("companyId", companyId).eq("isActive", true)
+    )
+    .collect();
+
+  const totalBonuses = {
+    salesBoost: 0,
+    maintenanceReduction: 0,
+    qualityBoost: 0,
+    costReduction: 0,
+    efficiencyBoost: 0,
+  };
+
+  for (const employee of employees) {
+    const baseMultiplier = 0.02; // 2% per level
+    const levelMultiplier = employee.level * baseMultiplier;
+    const totalMultiplier = levelMultiplier * employee.bonusMultiplier;
+    const moraleMultiplier = employee.morale / 100;
+
+    switch (employee.role) {
+      case "marketer":
+        totalBonuses.salesBoost += totalMultiplier * moraleMultiplier;
+        break;
+      case "engineer":
+        totalBonuses.maintenanceReduction += totalMultiplier * moraleMultiplier;
+        break;
+      case "quality_control":
+        totalBonuses.qualityBoost += totalMultiplier * moraleMultiplier;
+        break;
+      case "cost_optimizer":
+        totalBonuses.costReduction += totalMultiplier * moraleMultiplier;
+        break;
+      case "manager":
+        const managerBonus = (totalMultiplier * 0.5) * moraleMultiplier;
+        totalBonuses.salesBoost += managerBonus;
+        totalBonuses.maintenanceReduction += managerBonus;
+        totalBonuses.qualityBoost += managerBonus;
+        totalBonuses.costReduction += managerBonus;
+        totalBonuses.efficiencyBoost += managerBonus;
+        break;
+    }
+  }
+
+  return totalBonuses;
 }
 
 // Create a product
@@ -40,6 +90,11 @@ export const createProduct = mutation({
 
     if (!access) throw new Error("No access to this company");
 
+    // Apply employee quality bonuses
+    const employeeBonuses = await getCompanyEmployeeBonuses(ctx, args.companyId);
+    // Quality boost: start at 100 and add bonus (cap at 120)
+    const initialQuality = Math.min(120, 100 + (employeeBonuses.qualityBoost * 100));
+
     const productId = await ctx.db.insert("products", {
       name: args.name,
       description: args.description,
@@ -52,7 +107,7 @@ export const createProduct = mutation({
       totalSales: 0,
       totalRevenue: 0,
       totalCosts: 0,
-      quality: 100, // Start with perfect quality
+      quality: initialQuality,
       lastMaintenanceDate: Date.now(),
       maintenanceCost: 0,
       createdAt: Date.now(),
@@ -173,579 +228,6 @@ export const updateProduct = mutation({
   },
 });
 
-// AI-powered automatic product purchase (called by cron/scheduler)
-// This action calls the HTTP endpoint which uses Gemini AI for intelligent purchases
-export const automaticPurchaseAI = internalAction({
-  args: {},
-  handler: async (ctx) => {
-    console.log("🤖 AI Purchase cron triggered at", new Date().toISOString());
-    
-    try {
-      // Get the deployment URL - Convex provides this as CONVEX_SITE_URL
-      const deploymentUrl = process.env.CONVEX_SITE_URL || process.env.CONVEX_CLOUD_URL;
-      
-      if (!deploymentUrl) {
-        console.error("❌ Deployment URL not found, falling back to legacy purchase");
-        // Fall back to legacy automatic purchase
-        await ctx.runMutation(internal.products.automaticPurchase, {});
-        return { success: true, method: "legacy_fallback", reason: "no_deployment_url" };
-      }
-
-      // Call the AI purchase HTTP endpoint
-      const endpoint = `${deploymentUrl}/api/ai-purchase`;
-      const adminKey = process.env.ADMIN_KEY;
-
-      if (!adminKey) {
-        console.error("❌ ADMIN_KEY not found, falling back to legacy purchase");
-        await ctx.runMutation(internal.products.automaticPurchase, {});
-        return { success: true, method: "legacy_fallback", reason: "no_admin_key" };
-      }
-
-      console.log(`📡 Calling AI Purchase endpoint: ${endpoint}`);
-
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Admin-Key": adminKey,
-        },
-        body: JSON.stringify({ adminKey }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`❌ HTTP Error ${response.status}: ${errorText}`);
-        console.log("⚠️ Falling back to legacy purchase");
-        await ctx.runMutation(internal.products.automaticPurchase, {});
-        return { success: true, method: "legacy_fallback", error: errorText };
-      }
-
-      const result = await response.json();
-      
-      console.log(`✅ AI Purchase complete via Gemini AI`);
-      console.log(`💰 Total spent: $${result.totalSpent?.toLocaleString() || 0}`);
-      console.log(`📦 Products purchased: ${result.totalProductsPurchased || 0}`);
-      console.log(`🏢 Companies affected: ${result.companiesAffected || 0}`);
-
-      return {
-        success: true,
-        method: "ai_powered_gemini",
-        ...result,
-      };
-    } catch (error) {
-      console.error("❌ AI Purchase Error:", error);
-      console.log("⚠️ Falling back to legacy purchase");
-      
-      try {
-        // Fall back to legacy automatic purchase
-        await ctx.runMutation(internal.products.automaticPurchase, {});
-        return { 
-          success: true, 
-          method: "legacy_fallback", 
-          error: error instanceof Error ? error.message : "Unknown error" 
-        };
-      } catch (fallbackError) {
-        console.error("❌ Legacy purchase also failed:", fallbackError);
-        return {
-          success: false,
-          error: fallbackError instanceof Error ? fallbackError.message : "Unknown error",
-        };
-      }
-    }
-  },
-});
-
-// Legacy automatic product purchase (kept for reference/fallback)
-export const automaticPurchase = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    // Get ALL active products (up to 1000) to ensure fair distribution
-    const products = await ctx.db
-      .query("products")
-      .withIndex("by_active", (q) => q.eq("isActive", true))
-      .take(1000); // Increased to handle 350+ products
-
-    if (products.length === 0) return { message: "No products available" };
-
-    // Increased minimum spend to $50M for larger bulk purchases
-    const totalSpend = 50000000;
-
-    // Get or create system account (buyer)
-    // OPTIMIZED: Use by_name index for system account lookup
-    let systemAccount = await ctx.db
-      .query("accounts")
-      .withIndex("by_name", (q) => q.eq("name", "System"))
-      .first();
-
-    if (!systemAccount) {
-      // Get or create a designated system user (not a real player)
-      let systemUser = await ctx.db
-        .query("users")
-        .filter((q) => q.eq(q.field("name"), "System"))
-        .first();
-      
-      if (!systemUser) {
-        const systemUserId = await ctx.db.insert("users", {
-          name: "System",
-          email: "system@quickbuck.internal",
-          tokenIdentifier: "system-internal-account",
-        });
-        systemUser = await ctx.db.get(systemUserId);
-      }
-
-      // Create system account with the system user as owner
-      const systemAccountId = await ctx.db.insert("accounts", {
-        name: "System",
-        type: "personal",
-        ownerId: systemUser!._id,
-        balance: Number.MAX_SAFE_INTEGER, // Unlimited funds for market purchases
-        createdAt: Date.now(),
-      });
-      
-      systemAccount = await ctx.db.get(systemAccountId);
-    }
-    
-    if (!systemAccount) {
-      throw new Error("Failed to create or retrieve system account");
-    }
-
-    let remainingBudget = totalSpend;
-    const purchases: any[] = [];
-    const companySpend = new Map<string, number>();
-
-    const idToKey = (id: any) =>
-      typeof id === "string" ? id : id?.toString?.() ?? String(id);
-
-    const productMap = new Map<string, any>();
-    for (const product of products) {
-      productMap.set(idToKey(product._id), product);
-    }
-
-    // OPTIMIZATION: Pre-fetch all unique companies at once to avoid N repeated reads
-    const uniqueCompanyIds = [...new Set(products.map(p => p.companyId))];
-    const allCompanies = await Promise.all(
-      uniqueCompanyIds.map(id => ctx.db.get(id))
-    );
-    
-    const companyCache = new Map<string, any>();
-    allCompanies.forEach(company => {
-      if (company) {
-        companyCache.set(idToKey(company._id), company);
-      }
-    });
-
-    // OPTIMIZATION: Pre-fetch all unique accounts at once to avoid repeated reads
-    const uniqueAccountIds = [...new Set(allCompanies
-      .filter(c => c && c.accountId)
-      .map(c => c!.accountId))];
-    const allAccounts = await Promise.all(
-      uniqueAccountIds.map(id => ctx.db.get(id))
-    );
-    
-    const accountCache = new Map<string, any>();
-    allAccounts.forEach(account => {
-      if (account) {
-        accountCache.set(idToKey(account._id), account);
-      }
-    });
-
-    // Track sales and costs by company for batching
-    const companyTransactions = new Map<
-      string,
-      {
-        companyId: any;
-        accountId: any;
-        company: any;
-        totalRevenue: number;
-        totalCost: number;
-        productSales: Map<
-          string,
-          {
-            count: number;
-            totalRevenue: number;
-            totalCost: number;
-          }
-        >;
-      }
-    >();
-
-    const recordPurchase = async (product: any, quantity: number) => {
-      if (!product || !Number.isFinite(product.price) || quantity <= 0) return false;
-
-      const price = Math.max(product.price, 0.01);
-      const totalPrice = price * quantity;
-      
-      // Do not purchase anything over $50k
-      if (totalPrice > 50000) return false;
-      const costPercentage = 0.23 + Math.random() * 0.44;
-      const productionCost = totalPrice * costPercentage;
-
-      const companyKey = idToKey(product.companyId);
-      
-      // OPTIMIZED: Use pre-fetched company cache
-      if (!companyCache.has(companyKey)) {
-        const companyDoc = await ctx.db.get(product.companyId);
-        if (!companyDoc) return false;
-        companyCache.set(companyKey, companyDoc);
-      }
-
-      const companyDoc = companyCache.get(companyKey);
-      if (!companyDoc) return false;
-
-      if (!companyTransactions.has(companyKey)) {
-        companyTransactions.set(companyKey, {
-          companyId: companyDoc._id,
-          accountId: companyDoc.accountId,
-          company: companyDoc,
-          totalRevenue: 0,
-          totalCost: 0,
-          productSales: new Map(),
-        });
-      }
-
-      const companyTx = companyTransactions.get(companyKey)!;
-      companyTx.totalRevenue += totalPrice;
-      companyTx.totalCost += productionCost;
-
-      const productKey = idToKey(product._id);
-      const existing =
-        companyTx.productSales.get(productKey) ?? {
-          count: 0,
-          totalRevenue: 0,
-          totalCost: 0,
-        };
-
-      existing.count += quantity;
-      existing.totalRevenue += totalPrice;
-      existing.totalCost += productionCost;
-      companyTx.productSales.set(productKey, existing);
-
-      purchases.push({
-        product: product.name,
-        productId: product._id,
-        quantity,
-        price: totalPrice,
-        cost: productionCost,
-        profit: totalPrice - productionCost,
-      });
-
-      companySpend.set(companyKey, (companySpend.get(companyKey) || 0) + totalPrice);
-
-      return true;
-    };
-
-    // ============================================================
-    // BALANCED RANDOM DISTRIBUTION ALGORITHM
-    // ============================================================
-    // Goal: Spend $5M across ALL products with balanced distribution
-    // Strategy:
-    // 1. Give every product a guaranteed minimum purchase
-    // 2. Distribute remaining budget more evenly with weighted randomness
-    // 3. Pick some lucky products to get extra sales (but not millions)
-    // 4. Use sqrt(price) weighting to reduce extreme imbalances
-    // ============================================================
-
-    // Calculate weighted score for each product
-    interface ProductScore {
-      product: any;
-      revenuePerUnit: number; // Price per item
-      qualityWeight: number; // 0.5 - 1.0 based on quality
-      balancedScore: number; // sqrt(price) * quality for more balanced distribution
-      randomBonus: number; // Random multiplier for variety
-      minPurchases: number; // Guaranteed minimum purchases
-      bonusBudget: number; // Additional budget allocation
-    }
-
-    const productScores: ProductScore[] = products.map(product => {
-      const price = Math.max(product.price, 0.01);
-      const quality = Math.max(Math.min(product.quality ?? 100, 100), 0);
-      const qualityWeight = 0.5 + (quality / 100) * 0.5; // Range: 0.5 to 1.0
-      
-      // Use square root of price to reduce impact of extreme prices
-      // A $10,000 product now only has 10x weight vs $100 product (not 100x)
-      const balancedScore = Math.sqrt(price) * qualityWeight;
-      
-      // Add random bonus (0.5 to 1.5x multiplier) for variety
-      const randomBonus = 0.5 + Math.random();
-
-      return {
-        product,
-        revenuePerUnit: price,
-        qualityWeight,
-        balancedScore,
-        randomBonus,
-        minPurchases: 0,
-        bonusBudget: 0,
-      };
-    });
-
-    // Shuffle products for random selection order
-    for (let i = productScores.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [productScores[i], productScores[j]] = [productScores[j], productScores[i]];
-    }
-
-    // Phase 1: GUARANTEED MINIMUM - Every product gets purchases based on price
-    // Cheaper products get MORE units to balance revenue
-    // Allocate 40% of budget to ensure everyone gets decent baseline
-    const guaranteedBudget = totalSpend * 0.40;
-    let guaranteedSpent = 0;
-
-    console.log(`Phase 1: Guaranteeing minimum purchases for ${productScores.length} products`);
-    
-    for (const score of productScores) {
-      // DEMAND MULTIPLIER: Calculate inverse of price to give cheap products more volume
-      // Price $100 → 10 units, Price $1000 → 3 units, Price $10 → 50 units
-      const priceElasticity = Math.pow(score.revenuePerUnit, -0.4); // Inverse power law
-      const baseQuantity = Math.max(2, Math.round(priceElasticity * 15)); // Scale to reasonable numbers
-      const quantity = baseQuantity + Math.floor(Math.random() * 3); // Add 0-2 random units
-      const cost = score.revenuePerUnit * quantity;
-      
-      if (guaranteedSpent + cost <= guaranteedBudget) {
-        const success = await recordPurchase(score.product, quantity);
-        if (success) {
-          score.minPurchases = quantity;
-          guaranteedSpent += cost;
-        }
-      } else {
-        // If we can't afford calculated quantity, try with lower quantity
-        const tryQuantity = Math.max(1, Math.floor(quantity / 2));
-        const tryCost = score.revenuePerUnit * tryQuantity;
-        if (guaranteedSpent + tryCost <= guaranteedBudget) {
-          const success = await recordPurchase(score.product, tryQuantity);
-          if (success) {
-            score.minPurchases = tryQuantity;
-            guaranteedSpent += tryCost;
-          }
-        }
-      }
-    }
-
-    console.log(`Phase 1 complete: Spent $${guaranteedSpent.toFixed(2)} on minimum purchases`);
-
-    // Phase 2: BALANCED DISTRIBUTION with quality weighting
-    // Use 50% of budget, distributed to reward all products fairly regardless of price
-    // Cheap products get advantage: more budget allocation per product
-    const mainBudget = totalSpend * 0.50;
-    
-    // NEW METRIC: Inverse price weighting for fairer distribution
-    // High quality products get bonus, but cheap products get advantage on volume
-    const totalFairnessScore = productScores.reduce((sum, s) => {
-      // Fairness score = quality * (1 / sqrt(price))
-      // This rewards quality and gives cheap products more volume opportunities
-      const inversePrice = 1 / Math.sqrt(s.revenuePerUnit);
-      const fairnessScore = s.qualityWeight * inversePrice;
-      return fairnessScore + sum;
-    }, 0);
-
-    console.log(`Phase 2: Distributing $${mainBudget.toFixed(2)} with fairness weighting`);
-
-    // Calculate each product's budget allocation
-    for (const score of productScores) {
-      const inversePrice = 1 / Math.sqrt(score.revenuePerUnit);
-      const fairnessScore = score.qualityWeight * inversePrice;
-      const proportion = fairnessScore / totalFairnessScore;
-      score.bonusBudget = mainBudget * proportion;
-    }
-
-    // Execute balanced purchases with dynamic quantity based on price tier
-    let phase2Spent = 0;
-    for (const score of productScores) {
-      if (score.bonusBudget < score.revenuePerUnit) {
-        continue; // Not enough budget for even 1 unit
-      }
-
-      // Calculate how many units to buy based on allocated budget
-      const maxQuantity = Math.floor(score.bonusBudget / score.revenuePerUnit);
-      
-      // Add randomness PLUS price tier bonus for cheaper products
-      // Cheap products (under $100) get 1.2-1.8x multiplier
-      // Mid-range ($100-$1000) get 0.8-1.2x multiplier
-      // Expensive ($1000+) get 0.5-0.9x multiplier
-      let multiplier: number;
-      if (score.revenuePerUnit < 100) {
-        multiplier = 1.2 + Math.random() * 0.6; // 1.2 to 1.8
-      } else if (score.revenuePerUnit < 1000) {
-        multiplier = 0.8 + Math.random() * 0.4; // 0.8 to 1.2
-      } else {
-        multiplier = 0.5 + Math.random() * 0.4; // 0.5 to 0.9
-      }
-      
-      const quantity = Math.max(1, Math.min(Math.floor(maxQuantity * multiplier), 500)); // Cap at 500 units
-
-      if (quantity > 0) {
-        const success = await recordPurchase(score.product, quantity);
-        if (success) {
-          const actualCost = score.revenuePerUnit * quantity;
-          phase2Spent += actualCost;
-        }
-      }
-    }
-
-    console.log(`Phase 2 complete: Spent $${phase2Spent.toFixed(2)} on balanced purchases`);
-
-    remainingBudget = totalSpend - guaranteedSpent - phase2Spent;
-
-    // Phase 3: UNDERDOG BOOST - Pick struggling/cheap products for bonus sales
-    // Remaining budget goes to products that need it most:
-    // - Very cheap products that haven't sold much
-    // - Products with quality issues
-    // - Random variety boosters
-    if (remainingBudget > 100) {
-      console.log(`Phase 3: Distributing remaining $${remainingBudget.toFixed(2)} to underdogs`);
-      
-      // Calculate underdog score for each product:
-      // Products with low revenue per unit (cheap) get bonus
-      // Products with low sales count get bonus
-      // Products with quality issues get bonus
-      interface UnderdogScore {
-        score: ProductScore;
-        underdogRating: number; // 0-1, higher = more deserving of bonus
-      }
-      
-      const underdogScores: UnderdogScore[] = productScores.map(score => ({
-        score,
-        underdogRating: 
-          (0.4 * (1 / Math.sqrt(score.revenuePerUnit))) + // Cheap products get boost
-          (0.3 * (1 - (score.qualityWeight))) + // Lower quality gets boost
-          (0.3 * Math.random()), // Random luck factor
-      }));
-
-      // Sort by underdog rating (highest first - most deserving)
-      underdogScores.sort((a, b) => b.underdogRating - a.underdogRating);
-
-      // Give bonus to top underdogs until budget runs out
-      for (const { score } of underdogScores) {
-        if (remainingBudget < score.revenuePerUnit * 5) continue; // Need at least 5 units worth
-
-        // Bonus purchases: scaled up quantities for larger bulk orders
-        let bonusQuantity: number;
-        if (score.revenuePerUnit < 50) {
-          bonusQuantity = 500 + Math.floor(Math.random() * 500); // 500-1000 units for cheap (10x increase)
-        } else if (score.revenuePerUnit < 200) {
-          bonusQuantity = 200 + Math.floor(Math.random() * 200); // 200-400 units for mid (7x increase)
-        } else {
-          bonusQuantity = 50 + Math.floor(Math.random() * 50); // 50-100 units for expensive (5x increase)
-        }
-
-        const maxAffordable = Math.floor(remainingBudget / score.revenuePerUnit);
-        const quantity = Math.min(bonusQuantity, maxAffordable);
-
-        if (quantity > 0) {
-          const success = await recordPurchase(score.product, quantity);
-          if (success) {
-            const actualCost = score.revenuePerUnit * quantity;
-            remainingBudget -= actualCost;
-          }
-        }
-      }
-    }
-
-    const totalSpent = totalSpend - remainingBudget;
-    console.log(`Purchase complete: Spent $${totalSpent.toFixed(2)} across ${purchases.length} purchases`);    // Now process all batched transactions using pre-fetched account data
-    for (const [, tx] of companyTransactions) {
-      if (!tx.company || !tx.accountId) continue;
-
-      const netProfit = tx.totalRevenue - tx.totalCost;
-      const accountKey = idToKey(tx.accountId);
-      
-      // Get account from pre-fetched cache
-      let accountDoc = accountCache.get(accountKey);
-      if (!accountDoc || !("balance" in accountDoc)) {
-        // Fallback: fetch if not in cache (shouldn't happen with pre-fetch)
-        accountDoc = await ctx.db.get(tx.accountId);
-        if (!accountDoc || !("balance" in accountDoc)) {
-          continue;
-        }
-        accountCache.set(accountKey, accountDoc);
-      }
-
-      const currentBalance = (accountDoc.balance ?? 0) + netProfit;
-      
-      // Update cache with new balance for potential future transactions
-      accountCache.set(accountKey, { ...accountDoc, balance: currentBalance });
-      
-      // Patch account balance
-      await ctx.db.patch(tx.accountId, { balance: currentBalance });
-
-      // BANDWIDTH OPTIMIZATION: Batch all ledger inserts and product patches
-      const ledgerInserts: any[] = [];
-      const productPatches: Array<{ id: any; updates: any }> = [];
-      
-      for (const [productIdStr, salesData] of tx.productSales) {
-        const product = productMap.get(productIdStr);
-        if (!product) continue;
-
-        // Queue ledger entries for batch insert
-        ledgerInserts.push({
-          fromAccountId: systemAccount._id,
-          toAccountId: tx.accountId,
-          amount: salesData.totalRevenue,
-          type: "marketplace_batch" as const,
-          productId: product._id,
-          batchCount: salesData.count,
-          description: `Batch purchase of ${salesData.count}x ${product.name}`,
-          createdAt: Date.now(),
-        });
-
-        ledgerInserts.push({
-          fromAccountId: tx.accountId,
-          toAccountId: systemAccount._id,
-          amount: salesData.totalCost,
-          type: "marketplace_batch" as const,
-          productId: product._id,
-          batchCount: salesData.count,
-          description: `Batch production cost for ${salesData.count}x ${product.name}`,
-          createdAt: Date.now(),
-        });
-
-        if ("totalSales" in product) {
-          const updatedTotals = {
-            totalSales: (product.totalSales || 0) + salesData.count,
-            totalRevenue: (product.totalRevenue || 0) + salesData.totalRevenue,
-            totalCosts: (product.totalCosts || 0) + salesData.totalCost,
-          };
-
-          productMap.set(productIdStr, {
-            ...product,
-            ...updatedTotals,
-          });
-
-          productPatches.push({ id: product._id, updates: updatedTotals });
-        }
-      }
-      
-      // Execute all batched operations
-      await Promise.all([
-        ...ledgerInserts.map(entry => ctx.db.insert("ledger", entry)),
-        ...productPatches.map(({ id, updates }) => ctx.db.patch(id, updates))
-      ]);
-    }
-
-    // After all purchases, check which companies should be made public using cached balances
-    for (const [, tx] of companyTransactions) {
-      const companyDoc = tx.company;
-      if (!companyDoc || companyDoc.isPublic || companyDoc.keepPrivate) continue;
-
-      const accountKey = idToKey(tx.accountId);
-      const balance = accountCache.get(accountKey) ?? 0;
-
-      if (balance > 50000) {
-        await ctx.db.patch(companyDoc._id, {
-          isPublic: true,
-        });
-      }
-    }
-
-    return {
-      totalSpent,
-      purchases,
-      purchaseCount: purchases.length,
-      productsReached: new Set(purchases.map((p: any) => p.productId)).size,
-      companiesReached: companyTransactions.size,
-    };
-  },
-});
 
 // Delete a product (deactivate it)
 export const deleteProduct = mutation({
