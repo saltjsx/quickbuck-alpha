@@ -903,169 +903,107 @@ export const getCompanyDashboard = query({
       .take(200); // Increased from 20 to 200 for accurate ownership calculation
     const ownershipSnapshot = computeOwnerMetricsFromHoldings(company, companyHoldings ?? [], company.ownerId);
 
-    // BANDWIDTH OPTIMIZATION: Always use cached metrics (extend cache time to 30 min)
-    const cachedMetrics = await ctx.db
-      .query("companyMetrics")
-      .withIndex("by_company_period", (q) => 
-        q.eq("companyId", args.companyId).eq("period", "30d")
-      )
-      .first();
-
-    // Check if cache is fresh (less than 60 minutes old - increased from 30 min)
-    // Since cron now runs every 30 min, we can trust cache for up to 60 min
-    const cacheAge = cachedMetrics ? Date.now() - cachedMetrics.lastUpdated : Infinity;
-    const cachedMetricsPayloadVersion = cachedMetrics?.payloadVersion ?? null;
-    const useCachedData =
-      cachedMetrics &&
-      cachedMetricsPayloadVersion === COMPANY_METRICS_PAYLOAD_VERSION &&
-      cacheAge < 60 * 60 * 1000;
-
     let totalRevenue = 0;
     let totalCosts = 0;
     let totalExpenses = 0;
     let totalProfit = 0;
     let chartData: Array<{ date: string; revenue: number; costs: number; expenses: number; profit: number }> = [];
 
-    if (useCachedData) {
-      // CACHED PATH: Use pre-calculated metrics (MAIN PATH - saves massive bandwidth)
-      totalRevenue = cachedMetrics.totalRevenue;
-      totalCosts = cachedMetrics.totalCosts;
-      totalExpenses = cachedMetrics.totalExpenses;
-      totalProfit = cachedMetrics.totalProfit;
-      
-      // BANDWIDTH OPTIMIZATION: Limit chart to last 7 days
-      // Use collect() to get all transactions (not just first 30) for accurate daily breakdown
-      const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
-      
-      const [incomingTx, outgoingTx] = await Promise.all([
-        ctx.db
-          .query("ledger")
-          .withIndex("by_to_account_created", (q) => 
-            q.eq("toAccountId", company.accountId).gt("createdAt", sevenDaysAgo)
-          )
-          .collect(), // Get all transactions for accurate chart
-        ctx.db
-          .query("ledger")
-          .withIndex("by_from_account_created", (q) => 
-            q.eq("fromAccountId", company.accountId).gt("createdAt", sevenDaysAgo)
-          )
-          .collect(), // Get all transactions for accurate chart
-      ]);
+    // IMPORTANT: Always calculate totals from 30-day ledger data for accuracy
+    // This ensures the displayed totals are always current, not relying on potentially stale cache
+    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    
+    const [incomingTx30d, outgoingTx30d, incomingTx7d, outgoingTx7d] = await Promise.all([
+      ctx.db
+        .query("ledger")
+        .withIndex("by_to_account_created", (q) => 
+          q.eq("toAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
+        )
+        .collect(), // All 30-day incoming for accurate totals
+      ctx.db
+        .query("ledger")
+        .withIndex("by_from_account_created", (q) => 
+          q.eq("fromAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
+        )
+        .collect(), // All 30-day outgoing for accurate totals
+      ctx.db
+        .query("ledger")
+        .withIndex("by_to_account_created", (q) => 
+          q.eq("toAccountId", company.accountId).gt("createdAt", sevenDaysAgo)
+        )
+        .collect(), // All 7-day incoming for chart
+      ctx.db
+        .query("ledger")
+        .withIndex("by_from_account_created", (q) => 
+          q.eq("fromAccountId", company.accountId).gt("createdAt", sevenDaysAgo)
+        )
+        .collect(), // All 7-day outgoing for chart
+    ]);
 
-      // Revenue: incoming transactions for product sales
-      const revenueTypes = new Set(["product_purchase", "marketplace_batch"]);
-      // Costs: outgoing transactions for production costs (NOT expenses)
-      const costTypes = new Set(["product_cost", "marketplace_batch"]);
-      
-      const dailyRevenue: Record<string, number> = {};
-      const dailyCosts: Record<string, number> = {};
-      const dailyExpenses: Record<string, number> = {};
-
-      // Process incoming transactions (revenue)
-      for (const tx of incomingTx) {
-        if (revenueTypes.has(tx.type)) {
-          const date = new Date(tx.createdAt).toISOString().split('T')[0];
-          dailyRevenue[date] = (dailyRevenue[date] || 0) + (tx.amount || 0);
-        }
+    // Revenue: incoming transactions for product sales
+    const revenueTypes = new Set(["product_purchase", "marketplace_batch"]);
+    // Costs: outgoing transactions for production costs (NOT expenses)
+    const costTypes = new Set(["product_cost", "marketplace_batch"]);
+    
+    // ===== CALCULATE 30-DAY TOTALS FOR DISPLAY =====
+    for (const tx of incomingTx30d) {
+      if (revenueTypes.has(tx.type)) {
+        totalRevenue += tx.amount || 0;
       }
-
-      // Process outgoing transactions (costs and expenses separately)
-      for (const tx of outgoingTx) {
-        const date = new Date(tx.createdAt).toISOString().split('T')[0];
-        if (costTypes.has(tx.type)) {
-          // Production costs (COGS - Cost of Goods Sold)
-          dailyCosts[date] = (dailyCosts[date] || 0) + (tx.amount || 0);
-        } else if (tx.type === "expense") {
-          // Operating expenses (overhead, taxes, licenses, maintenance)
-          dailyExpenses[date] = (dailyExpenses[date] || 0) + (tx.amount || 0);
-        }
-      }
-
-      const allDates = new Set([
-        ...Object.keys(dailyRevenue),
-        ...Object.keys(dailyCosts),
-        ...Object.keys(dailyExpenses),
-      ]);
-
-      chartData = Array.from(allDates)
-        .map(date => ({
-          date,
-          revenue: dailyRevenue[date] || 0,
-          costs: dailyCosts[date] || 0,
-          expenses: dailyExpenses[date] || 0,
-          profit: (dailyRevenue[date] || 0) - (dailyCosts[date] || 0) - (dailyExpenses[date] || 0),
-        }))
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .slice(-7); // Only last 7 days for chart
-
-    } else {
-      // FALLBACK PATH: Calculate from ledger when cache is stale/missing
-      const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-      
-      // IMPORTANT: Use collect() for accurate totals (same as cache calculation)
-      // This fallback path should rarely execute, but when it does, must be accurate
-      const [incomingTx, outgoingTx] = await Promise.all([
-        ctx.db
-          .query("ledger")
-          .withIndex("by_to_account_created", (q) => 
-            q.eq("toAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
-          )
-          .collect(), // FIXED: Changed from take(75) to collect() for accurate totals
-        ctx.db
-          .query("ledger")
-          .withIndex("by_from_account_created", (q) => 
-            q.eq("fromAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
-          )
-          .collect(), // FIXED: Changed from take(75) to collect() for accurate totals
-      ]);
-
-      const revenueTypes = new Set(["product_purchase", "marketplace_batch"]);
-      const costTypes = new Set(["product_cost", "marketplace_batch"]);
-      
-      const dailyRevenue: Record<string, number> = {};
-      const dailyCosts: Record<string, number> = {};
-      const dailyExpenses: Record<string, number> = {};
-
-      for (const tx of incomingTx) {
-        if (revenueTypes.has(tx.type)) {
-          totalRevenue += tx.amount || 0;
-          const date = new Date(tx.createdAt).toISOString().split('T')[0];
-          dailyRevenue[date] = (dailyRevenue[date] || 0) + (tx.amount || 0);
-        }
-      }
-
-      for (const tx of outgoingTx) {
-        if (costTypes.has(tx.type)) {
-          totalCosts += tx.amount || 0;
-          const date = new Date(tx.createdAt).toISOString().split('T')[0];
-          dailyCosts[date] = (dailyCosts[date] || 0) + (tx.amount || 0);
-        } else if (tx.type === "expense") {
-          totalExpenses += tx.amount || 0;
-          const date = new Date(tx.createdAt).toISOString().split('T')[0];
-          dailyExpenses[date] = (dailyExpenses[date] || 0) + (tx.amount || 0);
-        }
-      }
-
-      totalProfit = totalRevenue - totalCosts - totalExpenses;
-
-      const allDates = new Set([
-        ...Object.keys(dailyRevenue),
-        ...Object.keys(dailyCosts),
-        ...Object.keys(dailyExpenses),
-      ]);
-
-      // BANDWIDTH OPTIMIZATION: Only last 7 days even in fallback
-      chartData = Array.from(allDates)
-        .map(date => ({
-          date,
-          revenue: dailyRevenue[date] || 0,
-          costs: dailyCosts[date] || 0,
-          expenses: dailyExpenses[date] || 0,
-          profit: (dailyRevenue[date] || 0) - (dailyCosts[date] || 0) - (dailyExpenses[date] || 0),
-        }))
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .slice(-7); // CHANGED from -30 to -7 for consistency
     }
+
+    for (const tx of outgoingTx30d) {
+      if (costTypes.has(tx.type)) {
+        totalCosts += tx.amount || 0;
+      } else if (tx.type === "expense") {
+        totalExpenses += tx.amount || 0;
+      }
+    }
+
+    totalProfit = totalRevenue - totalCosts - totalExpenses;
+
+    // ===== BUILD 7-DAY CHART DATA =====
+    const dailyRevenue: Record<string, number> = {};
+    const dailyCosts: Record<string, number> = {};
+    const dailyExpenses: Record<string, number> = {};
+
+    // Process incoming transactions (revenue)
+    for (const tx of incomingTx7d) {
+      if (revenueTypes.has(tx.type)) {
+        const date = new Date(tx.createdAt).toISOString().split('T')[0];
+        dailyRevenue[date] = (dailyRevenue[date] || 0) + (tx.amount || 0);
+      }
+    }
+
+    // Process outgoing transactions (costs and expenses separately)
+    for (const tx of outgoingTx7d) {
+      const date = new Date(tx.createdAt).toISOString().split('T')[0];
+      if (costTypes.has(tx.type)) {
+        // Production costs (COGS - Cost of Goods Sold)
+        dailyCosts[date] = (dailyCosts[date] || 0) + (tx.amount || 0);
+      } else if (tx.type === "expense") {
+        // Operating expenses (overhead, taxes, licenses, maintenance)
+        dailyExpenses[date] = (dailyExpenses[date] || 0) + (tx.amount || 0);
+      }
+    }
+
+    const allDates = new Set([
+      ...Object.keys(dailyRevenue),
+      ...Object.keys(dailyCosts),
+      ...Object.keys(dailyExpenses),
+    ]);
+
+    chartData = Array.from(allDates)
+      .map(date => ({
+        date,
+        revenue: dailyRevenue[date] || 0,
+        costs: dailyCosts[date] || 0,
+        expenses: dailyExpenses[date] || 0,
+        profit: (dailyRevenue[date] || 0) - (dailyCosts[date] || 0) - (dailyExpenses[date] || 0),
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(-7); // Only last 7 days for chart
 
     // ULTRA-OPTIMIZED: Use stored totals from products table (no additional queries needed)
     const productStats = products.map((product) => {
@@ -1103,7 +1041,6 @@ export const getCompanyDashboard = query({
       },
       products: productStats,
       chartData,
-      cachedData: useCachedData, // Indicate if using cached data
     };
   },
 });
