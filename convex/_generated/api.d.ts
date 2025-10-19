@@ -28,6 +28,7 @@ import type * as loans from "../loans.js";
 import type * as moderation from "../moderation.js";
 import type * as products from "../products.js";
 import type * as queries from "../queries.js";
+import type * as resources from "../resources.js";
 import type * as stocks from "../stocks.js";
 import type * as upgrades from "../upgrades.js";
 import type * as users from "../users.js";
@@ -57,6 +58,7 @@ declare const fullApi: ApiFromModules<{
   moderation: typeof moderation;
   products: typeof products;
   queries: typeof queries;
+  resources: typeof resources;
   stocks: typeof stocks;
   upgrades: typeof upgrades;
   users: typeof users;

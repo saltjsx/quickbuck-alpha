@@ -33,10 +33,13 @@ export default defineSchema({
       v.literal("loan_default"),
       v.literal("company_sale"),
       v.literal("ai_purchase"),
-      v.literal("payroll")
+      v.literal("payroll"),
+      v.literal("resource_purchase"),
+      v.literal("resource_sale")
     ),
     description: v.optional(v.string()),
     productId: v.optional(v.id("products")),
+    resourceId: v.optional(v.id("resources")),
     batchCount: v.optional(v.number()),
     createdAt: v.number(),
   })
@@ -429,6 +432,69 @@ export default defineSchema({
     .index("by_player", ["playerId"])
     .index("by_lastPayrollDate", ["lastPayrollDate"])
     .index("by_active", ["isActive"]),
+
+  resources: defineTable({
+    name: v.string(),
+    category: v.union(
+      v.literal("raw_material"),
+      v.literal("component"),
+      v.literal("energy")
+    ),
+    basePrice: v.number(), // Starting price
+    currentPrice: v.number(), // Dynamic market price
+    volatility: v.number(), // 0.0-1.0 - how much price fluctuates
+    description: v.string(),
+    unit: v.string(), // e.g., "kg", "unit", "barrel", "kWh"
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    lastPriceUpdate: v.number(),
+  })
+    .index("by_active", ["isActive"])
+    .index("by_category", ["category"])
+    .index("by_category_active", ["category", "isActive"])
+    .index("by_name", ["name"]),
+
+  productResources: defineTable({
+    productId: v.id("products"),
+    resourceId: v.id("resources"),
+    quantityRequired: v.number(), // Amount needed to produce 1 unit of product
+    createdAt: v.number(),
+  })
+    .index("by_product", ["productId"])
+    .index("by_resource", ["resourceId"])
+    .index("by_product_resource", ["productId", "resourceId"]),
+
+  resourceInventory: defineTable({
+    companyId: v.id("companies"),
+    resourceId: v.id("resources"),
+    quantity: v.number(),
+    averagePurchasePrice: v.number(), // Weighted average of purchase prices
+    lastUpdated: v.number(),
+  })
+    .index("by_company", ["companyId"])
+    .index("by_resource", ["resourceId"])
+    .index("by_company_resource", ["companyId", "resourceId"]),
+
+  resourceTransactions: defineTable({
+    companyId: v.id("companies"),
+    resourceId: v.id("resources"),
+    type: v.union(
+      v.literal("purchase"),
+      v.literal("sale"),
+      v.literal("consumption")
+    ),
+    quantity: v.number(),
+    pricePerUnit: v.number(),
+    totalAmount: v.number(),
+    productId: v.optional(v.id("products")), // For consumption transactions
+    createdAt: v.number(),
+  })
+    .index("by_company", ["companyId"])
+    .index("by_resource", ["resourceId"])
+    .index("by_type", ["type"])
+    .index("by_company_created", ["companyId", "createdAt"])
+    .index("by_company_type", ["companyId", "type"])
+    .index("by_product", ["productId"]),
 });
 
 

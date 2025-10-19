@@ -74,4 +74,11 @@ crons.hourly(
   internal.employees.updateEmployeeMorale
 );
 
+// Update resource prices every 30 minutes
+crons.interval(
+  "update resource prices",
+  { minutes: 30 },
+  internal.resources.updateResourcePrices
+);
+
 export default crons;
