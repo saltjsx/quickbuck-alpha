@@ -2,88 +2,36 @@
 
 Collection of utility scripts for managing and automating the QuickBuck marketplace.
 
-## 🤖 AI Purchase System (ENHANCED!)
+## 📊 Public Purchase System
 
-**Advanced AI-powered automatic product purchasing service using Gemini 2.0 Flash Lite**
+**Stochastic public purchase algorithm for fair, realistic market simulation**
 
-### Overview
-
-A sophisticated purchasing system that simulates realistic market demand across all products. The system intelligently allocates a **$25M budget** across price categories and uses AI to make fair, realistic purchasing decisions.
+The public purchase system has been completely redesigned and moved to `convex/publicPurchases.ts`. It uses a sophisticated probabilistic algorithm to simulate realistic market demand without relying on AI/LLM services.
 
 ### Key Features
 
-- 💰 **$25M Budget** - Allocated across 5 price tiers
-- 🎯 **Fair Distribution** - Every product gets purchased
-- 📦 **Batch Processing** - 50 products per AI call
-- 🤖 **Gemini 2.0 Flash Lite** - Fast, efficient AI decisions
-- 📊 **Price Categories** - Smart budget allocation by price tier
-- ⏰ **Automated** - Runs every 20 minutes via Convex cron
-- 📈 **Quality-Based** - Higher quality products get more purchases
-- 🔍 **Comprehensive Logging** - Detailed console output for tracking
+- Stochastic (non-deterministic) purchase decisions
+- Quality and price-based scoring system
+- Anti-exploit mechanisms (price spam, new product holds)
+- Per-company budget caps
+- Atomic transactions with retry logic
+- Comprehensive telemetry and logging
 
-### Budget Allocation
+### Configuration
 
-| Category | Price Range | Budget % | Amount |
-|----------|-------------|----------|--------|
-| Micro | $0-$50 | 15% | $3.75M |
-| Low | $50-$250 | 25% | $6.25M |
-| Medium | $250-$1,000 | 30% | $7.5M |
-| High | $1,000-$5,000 | 20% | $5M |
-| Premium | $5,000+ | 10% | $2.5M |
-
-### Setup Required
-
-1. **Get API Key**: https://aistudio.google.com/
-2. **Add to Environment**:
-   ```bash
-   # .env.local
-   GEMINI_API_KEY=your_api_key_here
-   ADMIN_KEY=your_admin_key_here
-   
-   # Convex environment
-   npx convex env set GEMINI_API_KEY "your_api_key_here"
-   npx convex env set ADMIN_KEY "your_admin_key_here"
-   ```
-3. **Deploy**: `npx convex deploy`
-
-### Files
-
-- `ai-purchase-service.ts` - Main service implementation
-- `AI-PURCHASE-SERVICE.md` - Detailed documentation
-- `INTEGRATION-EXAMPLE.ts` - HTTP endpoint integration example
-
-### How It Works
-
-1. **Categorize**: Products sorted into price tiers
-2. **Allocate**: Budget distributed across categories
-3. **Process**: AI evaluates each batch of 50 products
-4. **Purchase**: Executes purchases via mutation
-5. **Report**: Comprehensive statistics and breakdown
-
-### AI Decision Making
-
-The AI considers:
-- Product quality (0-100 scale)
-- Price point and value
-- Historical sales data
-- Product usefulness and category
-- Realistic consumer behavior
-
-**Quality Multipliers:**
-- 90-100: Buy 1.5-2x base amount
-- 70-89: Buy 1x base amount
-- 50-69: Buy 0.5x base amount
-- <50: Minimal or skip if spam
+All parameters are configurable in `convex/publicPurchases.ts`:
+- Global budget per wave: $10,000 (tunable)
+- Scoring weights: Quality 40%, Price 25%, Demand 20%, Recency 5%, Company 10%
+- Purchase caps and limits
+- Anti-exploit thresholds
 
 ### Documentation
 
-See **[AI-PURCHASE-SERVICE.md](./AI-PURCHASE-SERVICE.md)** for:
-- Complete feature breakdown
-- Integration guide
-- Customization options
-- Troubleshooting
-- Performance characteristics
-- Monitoring metrics
+See `STOCHASTIC_PURCHASE_MIGRATION.md` in the root directory for:
+- Complete implementation details
+- Algorithm specifications
+- Configuration options
+- Testing recommendations
 
 ---
 
@@ -242,7 +190,7 @@ The company deletion process now automatically deactivates all products when a c
 
 ## Fix System Accounts
 
-**IMPORTANT: Run this BEFORE using ai-buy or gambling features for the first time!**
+**IMPORTANT: Run this if you notice account issues with automated systems!**
 
 This script ensures both the "System" and "QuickBuck Casino Reserve" accounts are not owned by players:
 
@@ -255,7 +203,7 @@ You'll be prompted for:
 
 The script will fix **TWO** critical accounts:
 
-### 1. System Account (for AI purchases, loans, initial deposits)
+### 1. System Account (for public purchases, loans, initial deposits)
 - Checks if a "System" user exists (creates one if not)
 - Checks if a "System" account exists and who owns it
 - If owned by a player (like "saltjsx"), transfers ownership to the system user
@@ -271,14 +219,14 @@ The script will fix **TWO** critical accounts:
 
 **Why this is needed:**
 The original code had a bug where the first user to trigger account creation would become the owner of these special accounts. This meant:
-- AI purchases were crediting/debiting a real player's account (System account issue)
+- Public purchases were crediting/debiting a real player's account (System account issue)
 - Casino winnings/losses were affecting a real player's balance (Casino Reserve issue)
 
 **When to run:**
-- ⚠️ **RIGHT NOW** - Before using `ai-buy` or gambling features
-- If you notice a player's account balance changing during AI purchases
+- If you notice a player's account balance changing during public purchases
 - If you notice a player's account balance changing during casino games
 - After any economy reset
+- After migrating to the stochastic purchase system
 
 ## Manual Bot Purchase (CLI Tool)
 
@@ -312,56 +260,32 @@ The script provides an interactive menu:
 - Debugging purchase logic
 - Simulating targeted market activity
 
-## AI Market Simulation
+## Automated Public Purchases
 
-Simulate realistic market demand by having an AI agent purchase products based on their appeal, quality, and pricing:
+Public purchases are now handled automatically by the stochastic purchase system running every 20 minutes via Convex cron jobs.
 
-```bash
-npm run ai-buy
-```
-
-You'll be prompted for:
-1. Your Gemini API key (get one from [Google AI Studio](https://aistudio.google.com/app/apikey))
-2. Your Convex admin key
-
-The script will:
-1. Fetch all products from the database
-2. Send them to Google's Gemini 2.0 Flash Lite model in batches
-3. AI analyzes each product and determines purchase quantity (1-100) based on:
-   - Product quality (0-100 scale)
-   - Price point (affordable items get more purchases)
-   - Name and description appeal
-   - Tags and relevance
-   - Historical sales data
-4. Show you the top 10 most demanded products
-5. Display total statistics (total spend, average quantity, etc.)
-6. Ask for confirmation
-7. Process all purchases in batches:
-   - Updates product sales statistics
-   - Credits company accounts
-   - Creates ledger entries
-   - Makes companies public if balance > $50,000
+**System Details:**
+- Location: `convex/publicPurchases.ts`
+- Trigger: Automated cron job every 20 minutes
+- Budget: $10,000 per wave (configurable)
+- Algorithm: Probabilistic scoring with anti-exploit measures
 
 **Features:**
-- 🤖 Uses Gemini 2.0 Flash Lite (fast and efficient)
-- 💰 Unlimited budget - AI must purchase every product
-- 📊 Quantities vary realistically (1-100 per product)
-- 🔄 Batch processing for efficiency
-- 📝 Full transaction logging
-- 🚨 Fallback mechanism if AI fails to respond
-- 💼 Automatic company status updates
+- Quality-based product scoring
+- Price normalization (logarithmic scaling)
+- Anti-spam and anti-exploit detection
+- Per-company budget caps
+- Atomic transactions with retries
+- Comprehensive logging and metrics
 
-**Model Information:**
-- **Model**: `gemini-2.0-flash-lite`
-- **Provider**: Google AI
-- **Cost**: Free tier available (15 RPM, 1500 RPD)
-- **Context Window**: 1M tokens
+**Configuration:**
+All parameters can be adjusted in `convex/publicPurchases.ts`:
+- Budget per wave
+- Scoring weights
+- Purchase caps
+- Anti-exploit thresholds
 
-**Use Cases:**
-- Seed the marketplace with realistic purchase data
-- Test product pricing and demand
-- Bootstrap new deployments
-- Simulate market activity for demos
+For full documentation, see `STOCHASTIC_PURCHASE_MIGRATION.md` in the root directory.
 
 ## Initialize Upgrades
 
@@ -401,8 +325,8 @@ All upgrades are created in the `upgrades` table with:
 - [ ] Add option to export flagged items to CSV before deleting
 - [ ] Support for custom moderation rules/criteria
 - [ ] Auto-fix orphaned products after company deletion
-- [ ] Add configurable budget limits for AI purchases
-- [ ] Support for multiple AI models (OpenAI, Anthropic, etc.)
+- [ ] Enhanced anomaly detection in public purchases (self-sell, collusion)
+- [ ] A/B testing framework for purchase algorithm tuning
 
 
 ````
