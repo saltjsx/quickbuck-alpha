@@ -44,80 +44,70 @@ const getColor = (changePercent: number): string => {
   }
 };
 
-// Custom content renderer for treemap cells
-const CustomizedContent = (props: any) => {
-  const { x, y, width, height, fill } = props;
+// Custom shape renderer for treemap cells with labels
+const TreemapShape = (props: any) => {
+  const { x, y, width, height, payload, fill } = props;
 
-  // Only render if reasonably sized
-  if (!width || !height || width < 50 || height < 40) {
+  if (!payload || !width || !height) {
     return null;
   }
 
-  // Get values from props payload
-  const payload = props.payload;
-  const ticker = payload?.ticker;
-  const price = payload?.price;
-  const priceChange = payload?.priceChange;
-
-  if (
-    ticker === undefined ||
-    price === undefined ||
-    priceChange === undefined
-  ) {
-    return null;
-  }
-
-  const fontSize = Math.max(10, Math.min(width / 12, height / 10));
+  const { ticker, price, priceChange } = payload;
+  const fontSize = Math.max(10, Math.min(width / 14, height / 12));
 
   return (
     <g>
-      {/* Colored background rectangle */}
+      {/* Background rectangle */}
       <rect
         x={x}
         y={y}
         width={width}
         height={height}
-        fill={fill}
+        fill={fill || "#8884d8"}
         stroke="#fff"
         strokeWidth={2}
       />
-      {/* Ticker */}
-      <text
-        x={x + width / 2}
-        y={y + height / 2 - fontSize}
-        textAnchor="middle"
-        fill="#000"
-        fontSize={fontSize * 1.1}
-        fontWeight="bold"
-        dominantBaseline="middle"
-      >
-        {ticker}
-      </text>
-      {/* Price */}
-      <text
-        x={x + width / 2}
-        y={y + height / 2 + fontSize * 0.5}
-        textAnchor="middle"
-        fill="#333"
-        fontSize={fontSize * 0.85}
-        dominantBaseline="middle"
-      >
-        ${typeof price === "number" ? price.toFixed(2) : "0.00"}
-      </text>
-      {/* Change Percent */}
-      <text
-        x={x + width / 2}
-        y={y + height / 2 + fontSize * 1.6}
-        textAnchor="middle"
-        fill="#000"
-        fontSize={fontSize * 0.75}
-        fontWeight="600"
-        dominantBaseline="middle"
-      >
-        {typeof priceChange === "number"
-          ? `${priceChange >= 0 ? "+" : ""}${priceChange.toFixed(2)}%`
-          : "N/A"}
-      </text>
+      {/* Ticker text */}
+      {width > 50 && height > 40 && (
+        <>
+          <text
+            x={x + width / 2}
+            y={y + height / 2 - fontSize * 0.8}
+            textAnchor="middle"
+            fill="#000"
+            fontSize={fontSize * 1.2}
+            fontWeight="bold"
+            dominantBaseline="middle"
+          >
+            {ticker}
+          </text>
+          {/* Price text */}
+          <text
+            x={x + width / 2}
+            y={y + height / 2 + fontSize * 0.4}
+            textAnchor="middle"
+            fill="#333"
+            fontSize={fontSize * 0.9}
+            dominantBaseline="middle"
+          >
+            ${typeof price === "number" ? price.toFixed(2) : "0.00"}
+          </text>
+          {/* Change text */}
+          <text
+            x={x + width / 2}
+            y={y + height / 2 + fontSize * 1.5}
+            textAnchor="middle"
+            fill="#000"
+            fontSize={fontSize * 0.8}
+            fontWeight="600"
+            dominantBaseline="middle"
+          >
+            {typeof priceChange === "number"
+              ? `${priceChange >= 0 ? "+" : ""}${priceChange.toFixed(2)}%`
+              : "N/A"}
+          </text>
+        </>
+      )}
     </g>
   );
 };
@@ -165,7 +155,7 @@ export function StockTreemap({ stocks, onStockClick }: StockTreemapProps) {
           aspectRatio={4 / 3}
           stroke="#fff"
           fill="#8884d8"
-          content={<CustomizedContent />}
+          shape={<TreemapShape />}
           onClick={handleClick}
         >
           <Tooltip
