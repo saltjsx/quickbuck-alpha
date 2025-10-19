@@ -64,8 +64,7 @@ const TreemapShape = (props: any) => {
         width={width}
         height={height}
         fill={fill || "#8884d8"}
-        stroke="#fff"
-        strokeWidth={2}
+        stroke="none"
       />
       {/* Ticker text */}
       {width > 50 && height > 40 && (
@@ -86,7 +85,7 @@ const TreemapShape = (props: any) => {
             x={x + width / 2}
             y={y + height / 2 + fontSize * 0.4}
             textAnchor="middle"
-            fill="#333"
+            fill="#000"
             fontSize={fontSize * 0.9}
             dominantBaseline="middle"
           >
@@ -153,9 +152,9 @@ export function StockTreemap({ stocks, onStockClick }: StockTreemapProps) {
           data={treemapData}
           dataKey="value"
           aspectRatio={4 / 3}
-          stroke="#fff"
+          stroke="none"
           fill="#8884d8"
-          shape={<TreemapShape />}
+          content={<TreemapShape />}
           onClick={handleClick}
         >
           <Tooltip
