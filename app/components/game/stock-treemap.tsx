@@ -46,13 +46,19 @@ const getColor = (changePercent: number): string => {
 
 // Custom shape renderer for treemap cells with labels
 const TreemapShape = (props: any) => {
-  const { x, y, width, height, payload, fill } = props;
+  const { x, y, width, height, payload } = props;
 
   if (!payload || !width || !height) {
     return null;
   }
 
-  const { ticker, price, priceChange } = payload;
+  const { ticker, price, priceChange, fill: payloadFill } = payload;
+
+  // Safety check - only render if we have stock data (leaf nodes have ticker)
+  if (!ticker) {
+    return null;
+  }
+
   const fontSize = Math.max(10, Math.min(width / 14, height / 12));
 
   return (
@@ -63,9 +69,9 @@ const TreemapShape = (props: any) => {
         y={y}
         width={width}
         height={height}
-        fill={fill || "#8884d8"}
-        stroke="#f5f5f5"
-        strokeWidth={1}
+        fill={payloadFill || "#8884d8"}
+        stroke="#fff"
+        strokeWidth={2}
       />
       {/* Ticker text */}
       {width > 50 && height > 40 && (
@@ -156,16 +162,15 @@ export function StockTreemap({ stocks, onStockClick }: StockTreemapProps) {
   }
 
   return (
-    <div className="w-full" style={{ minHeight: 600 }}>
-      <ResponsiveContainer width="100%" height={600}>
+    <div className="w-full" style={{ height: 600 }}>
+      <ResponsiveContainer width="100%" height="100%">
         <Treemap
           data={treemapData}
           dataKey="value"
           aspectRatio={4 / 3}
-          stroke="#f5f5f5"
-          fill="#8884d8"
+          stroke="#fff"
+          isAnimationActive={false}
           content={<TreemapShape />}
-          onClick={handleClick}
         >
           <Tooltip
             content={({ payload }) => {
