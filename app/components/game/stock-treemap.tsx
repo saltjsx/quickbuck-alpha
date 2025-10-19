@@ -10,10 +10,11 @@ interface StockTreemapProps {
 interface TreemapNode {
   name: string;
   ticker: string;
-  size: number;
+  value: number;
   price: number;
   priceChange: number;
   stockId: string;
+  fill: string;
 }
 
 // Calculate color based on price change percentage
@@ -44,18 +45,14 @@ const getColor = (changePercent: number): string => {
 };
 
 // Custom content renderer for treemap cells
-const CustomTreemapContent = (props: any) => {
-  const { x, y, width, height } = props;
-  const data = props.payload as TreemapNode | undefined;
+const CustomizedContent = (props: any) => {
+  const { x, y, width, height, ticker, price, priceChange } = props;
 
-  // Don't render if too small or missing data
-  if (width < 40 || height < 30 || !data) {
+  // Only render if reasonably sized
+  if (!width || !height || width < 50 || height < 40) {
     return null;
   }
 
-  const { ticker, price, priceChange } = data;
-
-  // Safety checks for required fields
   if (
     ticker === undefined ||
     price === undefined ||
@@ -64,57 +61,43 @@ const CustomTreemapContent = (props: any) => {
     return null;
   }
 
-  const fontSize = Math.min(width / 8, height / 5, 14);
-  const tickerFontSize = fontSize * 1.2;
-  const priceFontSize = fontSize * 0.9;
-  const changeFontSize = fontSize * 0.85;
+  const fontSize = Math.max(10, Math.min(width / 12, height / 10));
 
   return (
     <g>
-      <rect
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        style={{
-          fill: getColor(priceChange),
-          stroke: "#fff",
-          strokeWidth: 2,
-          cursor: "pointer",
-        }}
-      />
-      {/* Ticker */}
       <text
         x={x + width / 2}
         y={y + height / 2 - fontSize}
         textAnchor="middle"
         fill="#000"
-        fontSize={tickerFontSize}
+        fontSize={fontSize * 1.1}
         fontWeight="bold"
+        dominantBaseline="middle"
       >
         {ticker}
       </text>
-      {/* Price */}
       <text
         x={x + width / 2}
-        y={y + height / 2 + fontSize * 0.3}
+        y={y + height / 2 + fontSize * 0.5}
         textAnchor="middle"
         fill="#333"
-        fontSize={priceFontSize}
+        fontSize={fontSize * 0.85}
+        dominantBaseline="middle"
       >
-        ${price.toFixed(2)}
+        ${typeof price === "number" ? price.toFixed(2) : "0.00"}
       </text>
-      {/* Change Percent */}
       <text
         x={x + width / 2}
-        y={y + height / 2 + fontSize * 1.5}
+        y={y + height / 2 + fontSize * 1.6}
         textAnchor="middle"
         fill="#000"
-        fontSize={changeFontSize}
+        fontSize={fontSize * 0.75}
         fontWeight="600"
+        dominantBaseline="middle"
       >
-        {priceChange >= 0 ? "+" : ""}
-        {priceChange.toFixed(2)}%
+        {typeof priceChange === "number"
+          ? `${priceChange >= 0 ? "+" : ""}${priceChange.toFixed(2)}%`
+          : "N/A"}
       </text>
     </g>
   );
@@ -125,10 +108,11 @@ export function StockTreemap({ stocks, onStockClick }: StockTreemapProps) {
     const nodes: TreemapNode[] = stocks.map((stock) => ({
       name: stock.name,
       ticker: stock.ticker,
-      size: stock.marketCap,
+      value: stock.marketCap > 0 ? stock.marketCap : 1,
       price: stock.currentPrice,
       priceChange: stock.priceChangePercent1h ?? 0,
       stockId: stock._id,
+      fill: getColor(stock.priceChangePercent1h ?? 0),
     }));
 
     return [
@@ -158,11 +142,11 @@ export function StockTreemap({ stocks, onStockClick }: StockTreemapProps) {
       <ResponsiveContainer width="100%" height={600}>
         <Treemap
           data={treemapData}
-          dataKey="size"
+          dataKey="value"
           aspectRatio={4 / 3}
           stroke="#fff"
           fill="#8884d8"
-          content={<CustomTreemapContent />}
+          content={<CustomizedContent />}
           onClick={handleClick}
         >
           <Tooltip
@@ -171,7 +155,7 @@ export function StockTreemap({ stocks, onStockClick }: StockTreemapProps) {
               const data = payload[0].payload as TreemapNode | undefined;
               if (!data) return null;
 
-              const { name, ticker, price, priceChange, size } = data;
+              const { name, ticker, price, priceChange, value } = data;
 
               // Safety checks
               if (price === undefined || priceChange === undefined) return null;
@@ -204,7 +188,7 @@ export function StockTreemap({ stocks, onStockClick }: StockTreemapProps) {
                         </span>
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        Market Cap: ${(size / 1_000_000).toFixed(2)}M
+                        Market Cap: ${(value / 1_000_000).toFixed(2)}M
                       </div>
                     </div>
                   </div>
