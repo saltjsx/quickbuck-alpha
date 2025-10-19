@@ -169,29 +169,29 @@ export function StockTreemap({ stocks, onStockClick }: StockTreemapProps) {
                     <div className="flex flex-col items-center justify-center h-full p-2 text-center">
                       {showText ? (
                         <>
-                          <div className="font-bold text-gray-900 dark:text-gray-100 text-sm">
+                          <div className="font-bold text-black text-sm">
                             {stock.ticker}
                           </div>
-                          <div className="text-xs text-gray-800 dark:text-gray-200 mt-1">
+                          <div className="text-xs text-black mt-1">
                             ${stock.currentPrice.toFixed(2)}
                           </div>
-                          <div className="text-xs font-semibold text-gray-900 dark:text-gray-100 mt-0.5">
+                          <div className="text-xs font-semibold text-black mt-0.5">
                             {(stock.priceChangePercent1h ?? 0) >= 0 ? "+" : ""}
                             {(stock.priceChangePercent1h ?? 0).toFixed(2)}%
                           </div>
                         </>
                       ) : showCompactText ? (
                         <>
-                          <div className="font-bold text-gray-900 dark:text-gray-100 text-xs">
+                          <div className="font-bold text-black text-xs">
                             {stock.ticker}
                           </div>
-                          <div className="text-[10px] font-semibold text-gray-900 dark:text-gray-100">
+                          <div className="text-[10px] font-semibold text-black">
                             {(stock.priceChangePercent1h ?? 0) >= 0 ? "+" : ""}
                             {(stock.priceChangePercent1h ?? 0).toFixed(1)}%
                           </div>
                         </>
                       ) : (
-                        <div className="font-bold text-gray-900 dark:text-gray-100 text-[10px]">
+                        <div className="font-bold text-black text-[10px]">
                           {stock.ticker}
                         </div>
                       )}
