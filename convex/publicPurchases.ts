@@ -24,7 +24,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 
 const CONFIG = {
   // Budget per wave
-  GLOBAL_BUDGET_PER_WAVE: 25000000, // $25M per wave
+  GLOBAL_BUDGET_PER_WAVE: 500000000, // $500M per wave
   
   // Scoring weights (must sum to 1.0)
   WEIGHT_QUALITY: 0.40,
