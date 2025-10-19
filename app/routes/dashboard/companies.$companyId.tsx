@@ -3,7 +3,10 @@ import { useParams, Link } from "react-router";
 import type { Route } from "./+types/companies.$companyId";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { CompanyDashboard, DistributeDividendDialog } from "~/components/game";
+import {
+  CompanyDashboardWithTabs,
+  DistributeDividendDialog,
+} from "~/components/game";
 import { Button } from "~/components/ui/button";
 import { ArrowLeft, Building2, TrendingUp, DollarSign } from "lucide-react";
 import { Badge } from "~/components/ui/badge";
@@ -213,7 +216,10 @@ export default function CompanyDashboardPage() {
 
           {/* Dashboard */}
           <div className="px-4 lg:px-6">
-            <CompanyDashboard companyId={companyId} />
+            <CompanyDashboardWithTabs
+              companyId={companyId}
+              companyBalance={company.balance}
+            />
           </div>
         </div>
       </div>

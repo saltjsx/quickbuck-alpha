@@ -19,6 +19,7 @@ import type * as collections from "../collections.js";
 import type * as companies from "../companies.js";
 import type * as crons from "../crons.js";
 import type * as debug from "../debug.js";
+import type * as employees from "../employees.js";
 import type * as expenses from "../expenses.js";
 import type * as gamble from "../gamble.js";
 import type * as http from "../http.js";
@@ -47,6 +48,7 @@ declare const fullApi: ApiFromModules<{
   companies: typeof companies;
   crons: typeof crons;
   debug: typeof debug;
+  employees: typeof employees;
   expenses: typeof expenses;
   gamble: typeof gamble;
   http: typeof http;

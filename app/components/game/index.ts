@@ -6,6 +6,7 @@ export { CompaniesTab } from "./companies-tab";
 export { MarketplaceTab } from "./marketplace-tab";
 export { StockMarketTab } from "./stock-market-tab";
 export { CompanyDashboard } from "./company-dashboard";
+export { CompanyDashboardWithTabs } from "./company-dashboard-with-tabs";
 export { CollectionsTab } from "./collections-tab";
 export { GambleTab } from "./gamble-tab";
 export { LoansTab } from "./loans-tab";
@@ -16,3 +17,8 @@ export { CompanySaleOffersTab } from "./company-sale-offers-tab";
 export { UseRevenueBoostDialog } from "./use-revenue-boost-dialog";
 export { UseStockPriceBoostDialog } from "./use-stock-price-boost-dialog";
 export { UseStockPriceLowerDialog } from "./use-stock-price-lower-dialog";
+export { EmployeesTab } from "./employees-tab";
+export { EmployeeCard } from "./employee-card";
+export { HireEmployeeDialog } from "./hire-employee-dialog";
+export { GiveBonusDialog } from "./give-bonus-dialog";
+

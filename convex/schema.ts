@@ -32,7 +32,8 @@ export default defineSchema({
       v.literal("loan_repayment"),
       v.literal("loan_default"),
       v.literal("company_sale"),
-      v.literal("ai_purchase")
+      v.literal("ai_purchase"),
+      v.literal("payroll")
     ),
     description: v.optional(v.string()),
     productId: v.optional(v.id("products")),
@@ -400,5 +401,34 @@ export default defineSchema({
     .index("by_user_purchased", ["userId", "purchasedAt"])
     .index("by_target", ["targetId"])
     .index("by_used", ["isUsed"]),
+
+  employees: defineTable({
+    companyId: v.id("companies"),
+    name: v.string(),
+    type: v.union(v.literal("npc"), v.literal("player")),
+    playerId: v.optional(v.id("users")),
+    role: v.union(
+      v.literal("marketer"),
+      v.literal("engineer"),
+      v.literal("manager"),
+      v.literal("quality_control"),
+      v.literal("cost_optimizer")
+    ),
+    level: v.number(), // 1-10
+    salary: v.number(), // Per payroll cycle
+    morale: v.number(), // 0-100
+    satisfaction: v.number(), // 0-100
+    bonusMultiplier: v.number(), // 1.0-2.0
+    hiredAt: v.number(),
+    lastPayrollDate: v.number(),
+    isActive: v.boolean(),
+  })
+    .index("by_company", ["companyId"])
+    .index("by_company_active", ["companyId", "isActive"])
+    .index("by_type", ["type"])
+    .index("by_player", ["playerId"])
+    .index("by_lastPayrollDate", ["lastPayrollDate"])
+    .index("by_active", ["isActive"]),
 });
+
 

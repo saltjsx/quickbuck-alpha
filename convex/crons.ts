@@ -60,4 +60,18 @@ crons.daily(
   internal.loans.applyDailyInterest
 );
 
+// Process employee payroll every 10 minutes
+crons.interval(
+  "process employee payroll",
+  { minutes: 10 },
+  internal.employees.processPayroll
+);
+
+// Update employee morale every hour
+crons.hourly(
+  "update employee morale",
+  { minuteUTC: 0 },
+  internal.employees.updateEmployeeMorale
+);
+
 export default crons;
