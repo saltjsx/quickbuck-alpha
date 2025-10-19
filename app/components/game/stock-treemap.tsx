@@ -114,6 +114,15 @@ const TreemapShape = (props: any) => {
 
 export function StockTreemap({ stocks, onStockClick }: StockTreemapProps) {
   const treemapData = useMemo(() => {
+    if (!stocks || stocks.length === 0) {
+      return [
+        {
+          name: "Stock Market",
+          children: [],
+        },
+      ];
+    }
+
     const nodes: TreemapNode[] = stocks.map((stock) => ({
       name: stock.name,
       ticker: stock.ticker,
@@ -147,7 +156,7 @@ export function StockTreemap({ stocks, onStockClick }: StockTreemapProps) {
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full" style={{ minHeight: 600 }}>
       <ResponsiveContainer width="100%" height={600}>
         <Treemap
           data={treemapData}
