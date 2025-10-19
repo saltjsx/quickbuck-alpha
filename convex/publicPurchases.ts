@@ -885,7 +885,18 @@ export const executePublicPurchaseWave = internalMutation({
  */
 export const scheduledPublicPurchaseWave = internalAction({
   args: {},
+<<<<<<< Updated upstream
   handler: async (ctx) => {
+=======
+  handler: async (ctx): Promise<{
+    success: boolean;
+    waveId?: string;
+    totalSpent?: number;
+    productsPurchased?: number;
+    companiesAffected?: number;
+    error?: string;
+  }> => {
+>>>>>>> Stashed changes
     console.log(`\n  Public Purchase Wave triggered at ${new Date().toISOString()}`);
     
     try {
