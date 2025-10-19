@@ -933,8 +933,8 @@ export const getCompanyDashboard = query({
       totalExpenses = cachedMetrics.totalExpenses;
       totalProfit = cachedMetrics.totalProfit;
       
-      // BANDWIDTH OPTIMIZATION: Limit chart to last 7 days with hard cap of 30 transactions
-      // Charts don't need perfect accuracy - reduced from 50 to 30 per direction
+      // BANDWIDTH OPTIMIZATION: Limit chart to last 7 days
+      // Use collect() to get all transactions (not just first 30) for accurate daily breakdown
       const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
       
       const [incomingTx, outgoingTx] = await Promise.all([
@@ -943,13 +943,13 @@ export const getCompanyDashboard = query({
           .withIndex("by_to_account_created", (q) => 
             q.eq("toAccountId", company.accountId).gt("createdAt", sevenDaysAgo)
           )
-          .take(30), // REDUCED from 50 to 30
+          .collect(), // Get all transactions for accurate chart
         ctx.db
           .query("ledger")
           .withIndex("by_from_account_created", (q) => 
             q.eq("fromAccountId", company.accountId).gt("createdAt", sevenDaysAgo)
           )
-          .take(30), // REDUCED from 50 to 30
+          .collect(), // Get all transactions for accurate chart
       ]);
 
       // Revenue: incoming transactions for product sales
