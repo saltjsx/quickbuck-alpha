@@ -46,12 +46,18 @@ const getColor = (changePercent: number): string => {
 
 // Custom content renderer for treemap cells
 const CustomizedContent = (props: any) => {
-  const { x, y, width, height, ticker, price, priceChange } = props;
+  const { x, y, width, height, fill } = props;
 
   // Only render if reasonably sized
   if (!width || !height || width < 50 || height < 40) {
     return null;
   }
+
+  // Get values from props payload
+  const payload = props.payload;
+  const ticker = payload?.ticker;
+  const price = payload?.price;
+  const priceChange = payload?.priceChange;
 
   if (
     ticker === undefined ||
@@ -65,6 +71,17 @@ const CustomizedContent = (props: any) => {
 
   return (
     <g>
+      {/* Colored background rectangle */}
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        fill={fill}
+        stroke="#fff"
+        strokeWidth={2}
+      />
+      {/* Ticker */}
       <text
         x={x + width / 2}
         y={y + height / 2 - fontSize}
@@ -76,6 +93,7 @@ const CustomizedContent = (props: any) => {
       >
         {ticker}
       </text>
+      {/* Price */}
       <text
         x={x + width / 2}
         y={y + height / 2 + fontSize * 0.5}
@@ -86,6 +104,7 @@ const CustomizedContent = (props: any) => {
       >
         ${typeof price === "number" ? price.toFixed(2) : "0.00"}
       </text>
+      {/* Change Percent */}
       <text
         x={x + width / 2}
         y={y + height / 2 + fontSize * 1.6}
