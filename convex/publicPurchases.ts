@@ -704,10 +704,7 @@ async function executePurchaseWithRetry(
   } catch (error) {
     // Retry logic
     if (retries < CONFIG.MAX_TRANSACTION_RETRIES) {
-      // Exponential backoff
-      await new Promise(resolve => 
-        setTimeout(resolve, CONFIG.RETRY_BACKOFF_MS * Math.pow(2, retries))
-      );
+      // No sleeping inside mutations; retry immediately or move to action orchestration.
       return executePurchaseWithRetry(ctx, purchase, systemAccountId, retries + 1);
     }
     
