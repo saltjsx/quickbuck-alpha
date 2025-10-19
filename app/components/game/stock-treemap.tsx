@@ -64,7 +64,8 @@ const TreemapShape = (props: any) => {
         width={width}
         height={height}
         fill={fill || "#8884d8"}
-        stroke="none"
+        stroke="#f5f5f5"
+        strokeWidth={1}
       />
       {/* Ticker text */}
       {width > 50 && height > 40 && (
@@ -152,7 +153,7 @@ export function StockTreemap({ stocks, onStockClick }: StockTreemapProps) {
           data={treemapData}
           dataKey="value"
           aspectRatio={4 / 3}
-          stroke="none"
+          stroke="#f5f5f5"
           fill="#8884d8"
           content={<TreemapShape />}
           onClick={handleClick}
