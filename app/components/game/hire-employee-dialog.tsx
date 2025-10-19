@@ -29,13 +29,20 @@ export function HireEmployeeDialog({
   companyBalance,
 }: HireEmployeeDialogProps) {
   const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
+  const [isHiring, setIsHiring] = useState(false);
   const npcEmployees = useQuery(api.employees.getAvailableNPCEmployees);
   const hireEmployee = useMutation(api.employees.hireEmployee);
+
+  const insufficientFunds =
+    selectedEmployee && companyBalance < selectedEmployee.salary * 2;
 
   const handleHire = async () => {
     if (!selectedEmployee) return;
 
-    if (companyBalance < selectedEmployee.salary * 2) {
+    // Prevent double-submit
+    if (isHiring) return;
+
+    if (insufficientFunds) {
       toast.error("Insufficient funds", {
         description: `You need at least $${(
           selectedEmployee.salary * 2
@@ -44,6 +51,7 @@ export function HireEmployeeDialog({
       return;
     }
 
+    setIsHiring(true);
     try {
       await hireEmployee({
         companyId,
@@ -67,6 +75,8 @@ export function HireEmployeeDialog({
       toast.error("Failed to hire employee", {
         description: error instanceof Error ? error.message : "Unknown error",
       });
+    } finally {
+      setIsHiring(false);
     }
   };
 
@@ -245,10 +255,15 @@ export function HireEmployeeDialog({
                 variant="outline"
                 onClick={() => setSelectedEmployee(null)}
                 className="flex-1"
+                disabled={isHiring}
               >
                 Cancel
               </Button>
-              <Button onClick={handleHire} className="flex-1">
+              <Button
+                onClick={handleHire}
+                className="flex-1"
+                disabled={isHiring || insufficientFunds}
+              >
                 Hire for ${selectedEmployee.salary.toLocaleString()}/cycle
               </Button>
             </div>

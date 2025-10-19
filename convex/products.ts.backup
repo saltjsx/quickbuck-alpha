@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query, internalAction } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { internal } from "./_generated/api";
+import { internal, api } from "./_generated/api";
 
 // Helper to get current user ID
 async function getCurrentUserId(ctx: any) {
@@ -14,56 +14,6 @@ async function getCurrentUserId(ctx: any) {
     .unique();
   
   return user?._id || null;
-}
-
-// Helper to get company employee bonuses
-async function getCompanyEmployeeBonuses(ctx: any, companyId: Id<"companies">) {
-  const employees = await ctx.db
-    .query("employees")
-    .withIndex("by_company_active", (q: any) =>
-      q.eq("companyId", companyId).eq("isActive", true)
-    )
-    .collect();
-
-  const totalBonuses = {
-    salesBoost: 0,
-    maintenanceReduction: 0,
-    qualityBoost: 0,
-    costReduction: 0,
-    efficiencyBoost: 0,
-  };
-
-  for (const employee of employees) {
-    const baseMultiplier = 0.02; // 2% per level
-    const levelMultiplier = employee.level * baseMultiplier;
-    const totalMultiplier = levelMultiplier * employee.bonusMultiplier;
-    const moraleMultiplier = employee.morale / 100;
-
-    switch (employee.role) {
-      case "marketer":
-        totalBonuses.salesBoost += totalMultiplier * moraleMultiplier;
-        break;
-      case "engineer":
-        totalBonuses.maintenanceReduction += totalMultiplier * moraleMultiplier;
-        break;
-      case "quality_control":
-        totalBonuses.qualityBoost += totalMultiplier * moraleMultiplier;
-        break;
-      case "cost_optimizer":
-        totalBonuses.costReduction += totalMultiplier * moraleMultiplier;
-        break;
-      case "manager":
-        const managerBonus = (totalMultiplier * 0.5) * moraleMultiplier;
-        totalBonuses.salesBoost += managerBonus;
-        totalBonuses.maintenanceReduction += managerBonus;
-        totalBonuses.qualityBoost += managerBonus;
-        totalBonuses.costReduction += managerBonus;
-        totalBonuses.efficiencyBoost += managerBonus;
-        break;
-    }
-  }
-
-  return totalBonuses;
 }
 
 // Create a product
@@ -90,8 +40,8 @@ export const createProduct = mutation({
 
     if (!access) throw new Error("No access to this company");
 
-    // Apply employee quality bonuses
-    const employeeBonuses = await getCompanyEmployeeBonuses(ctx, args.companyId);
+    // Apply employee quality bonuses - use canonical employees query
+    const employeeBonuses = await ctx.runQuery(api.employees.getCompanyEmployeeBonuses, { companyId: args.companyId });
     // Quality boost: start at 100 and add bonus (cap at 120)
     const initialQuality = Math.min(120, 100 + (employeeBonuses.qualityBoost * 100));
 
@@ -231,11 +181,11 @@ export const updateProduct = mutation({
 // Automatic purchases have been replaced by the stochastic public purchase system
 // See convex/publicPurchases.ts for the new implementation
 
-// Delete a product (deactivate it)
-export const deleteProduct = mutation({
+// Internal action to call AI purchase HTTP endpoint
+export const aiPurchaseAction = internalAction({
   args: {},
   handler: async (ctx) => {
-    console.log("🤖 AI Purchase cron triggered at", new Date().toISOString());
+    console.log("🤖 AI Purchase action triggered at", new Date().toISOString());
     
     try {
       // Get the deployment URL - Convex provides this as CONVEX_SITE_URL
@@ -266,7 +216,7 @@ export const deleteProduct = mutation({
           "Content-Type": "application/json",
           "X-Admin-Key": adminKey,
         },
-        body: JSON.stringify({ adminKey }),
+        body: JSON.stringify({}),
       });
 
       if (!response.ok) {
@@ -309,6 +259,37 @@ export const deleteProduct = mutation({
         };
       }
     }
+  },
+});
+
+// Delete a product (deactivate it)
+export const deleteProduct = mutation({
+  args: {
+    productId: v.id("products"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const product = await ctx.db.get(args.productId);
+    if (!product) throw new Error("Product not found");
+
+    // Check if user has access to the company
+    const access = await ctx.db
+      .query("companyAccess")
+      .withIndex("by_company_user", (q) =>
+        q.eq("companyId", product.companyId).eq("userId", userId)
+      )
+      .first();
+
+    if (!access) throw new Error("No access to this company");
+
+    // Deactivate the product instead of deleting for historical record
+    await ctx.db.patch(args.productId, {
+      isActive: false,
+    });
+
+    return { success: true };
   },
 });
 
@@ -447,8 +428,8 @@ export const automaticPurchase = internalMutation({
       const companyDoc = companyCache.get(companyKey);
       if (!companyDoc) return false;
 
-      // Apply employee bonuses (cost reduction from cost optimizers)
-      const employeeBonuses = await getCompanyEmployeeBonuses(ctx, companyDoc._id);
+      // Apply employee bonuses (cost reduction from cost optimizers) - use canonical query
+      const employeeBonuses = await ctx.runQuery(api.employees.getCompanyEmployeeBonuses, { companyId: companyDoc._id });
       const costPercentage = 0.23 + Math.random() * 0.44;
       // Reduce production cost based on employee bonuses (max 50% reduction)
       const costReductionMultiplier = Math.max(0.5, 1 - employeeBonuses.costReduction);
@@ -806,37 +787,6 @@ export const automaticPurchase = internalMutation({
       productsReached: new Set(purchases.map((p: any) => p.productId)).size,
       companiesReached: companyTransactions.size,
     };
-  },
-});
-
-// Delete a product (deactivate it)
-export const deleteProduct = mutation({
-  args: {
-    productId: v.id("products"),
-  },
-  handler: async (ctx, args) => {
-    const userId = await getCurrentUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
-    const product = await ctx.db.get(args.productId);
-    if (!product) throw new Error("Product not found");
-
-    // Check if user has access to the company
-    const access = await ctx.db
-      .query("companyAccess")
-      .withIndex("by_company_user", (q) =>
-        q.eq("companyId", product.companyId).eq("userId", userId)
-      )
-      .first();
-
-    if (!access) throw new Error("No access to this company");
-
-    // Deactivate the product instead of deleting for historical record
-    await ctx.db.patch(args.productId, {
-      isActive: false,
-    });
-
-    return { success: true };
   },
 });
 

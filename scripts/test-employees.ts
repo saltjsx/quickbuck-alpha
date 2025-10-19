@@ -9,11 +9,18 @@
  * - Employee integration with products/expenses
  */
 
+import "dotenv/config";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../convex/_generated/api";
 
-const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL || "";
-const client = new ConvexHttpClient(CONVEX_URL);
+// Validate environment setup
+const convexUrl = process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL;
+if (!convexUrl) {
+  console.error("ERROR: CONVEX_URL or NEXT_PUBLIC_CONVEX_URL environment variable is not set");
+  process.exit(1);
+}
+
+const client = new ConvexHttpClient(convexUrl);
 
 interface TestResult {
   name: string;

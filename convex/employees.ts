@@ -280,6 +280,9 @@ export const fireEmployee = mutation({
       isActive: false,
     });
 
+    let severanceProcessed = false;
+    let severanceAmountProcessed = 0;
+
     // Optional severance payment
     if (args.severancePay && args.severancePay > 0) {
       const company = await ctx.db.get(employee.companyId);
@@ -333,22 +336,29 @@ export const fireEmployee = mutation({
             balance: (systemAccount.balance ?? 0) + args.severancePay,
           });
 
-          // Create ledger entry
+          // Create ledger entry as expense
           await ctx.db.insert("ledger", {
             fromAccountId: company.accountId,
             toAccountId: systemAccount._id,
             amount: args.severancePay,
-            type: "transfer",
+            type: "expense",
             description: `Severance payment for ${employee.name}`,
             createdAt: Date.now(),
           });
+
+          severanceProcessed = true;
+          severanceAmountProcessed = args.severancePay;
         }
       }
     }
 
     return {
       success: true,
-      message: `${employee.name} has been terminated`,
+      message: severanceProcessed
+        ? `${employee.name} has been terminated with $${args.severancePay!.toLocaleString()} severance`
+        : `${employee.name} has been terminated`,
+      severanceProcessed,
+      severanceAmountProcessed,
     };
   },
 });
@@ -508,12 +518,10 @@ export const processPayroll = internalMutation({
     let failures = 0;
 
     // Group employees by company for batch processing
-    const companiesMap = new Map<string, Array<Doc<"employees">>>();
+    const companiesMap = new Map<Id<"companies">, Array<Doc<"employees">>>();
     for (const employee of employeesDue) {
-      const key = employee.companyId;
-      if (!companiesMap.has(key)) {
-        companiesMap.set(key, []);
-      }
+      const key: Id<"companies"> = employee.companyId;
+      if (!companiesMap.has(key)) companiesMap.set(key, []);
       companiesMap.get(key)!.push(employee);
     }
 
@@ -554,9 +562,8 @@ export const processPayroll = internalMutation({
     }
 
     // Process each company's payroll
-    for (const [companyIdStr, employees] of companiesMap) {
+    for (const [companyId, employees] of companiesMap) {
       try {
-        const companyId = companyIdStr as Id<"companies">;
         const company = await ctx.db.get(companyId);
         if (!company) continue;
 
@@ -606,7 +613,7 @@ export const processPayroll = internalMutation({
           }
         }
       } catch (error) {
-        console.error(`Payroll processing error for company ${companyIdStr}:`, error);
+        console.error(`Payroll processing error for company ${companyId}:`, error);
         failures += employees.length;
       }
     }
