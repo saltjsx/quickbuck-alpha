@@ -24,6 +24,7 @@ import { TrendingUp, Search } from "lucide-react";
 import type { Route } from "./+types/stocks";
 import { Spinner } from "~/components/ui/spinner";
 import StockCard, { type StockListItem } from "~/components/game/stock-card";
+import { StockTreemap } from "~/components/game/stock-treemap";
 
 // Stocks page shows all public companies with:
 // - Search by name or ticker (client-side filter)
@@ -49,7 +50,7 @@ export default function StocksPage() {
   const [sort, setSort] = useState<
     "marketCapDesc" | "priceDesc" | "priceAsc" | "gainers" | "losers" | "alpha"
   >("marketCapDesc");
-  const [view, setView] = useState<"grid" | "compact">("grid");
+  const [view, setView] = useState<"grid" | "compact" | "treemap">("grid");
 
   const filteredSorted = useMemo<StockListItem[]>(() => {
     if (!publicStocks) return [];
@@ -117,6 +118,7 @@ export default function StocksPage() {
               <TabsList>
                 <TabsTrigger value="grid">Grid</TabsTrigger>
                 <TabsTrigger value="compact">Compact</TabsTrigger>
+                <TabsTrigger value="treemap">Treemap</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
@@ -173,6 +175,22 @@ export default function StocksPage() {
                 <p className="text-sm text-muted-foreground mt-2">
                   Try clearing the search or adjusting sort options.
                 </p>
+              </CardContent>
+            </Card>
+          ) : view === "treemap" ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Market Treemap</CardTitle>
+                <CardDescription>
+                  Company sizes represent market cap. Colors show 1-hour price
+                  changes.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <StockTreemap
+                  stocks={filteredSorted}
+                  onStockClick={(id) => navigate(`/dashboard/stocks/${id}`)}
+                />
               </CardContent>
             </Card>
           ) : (

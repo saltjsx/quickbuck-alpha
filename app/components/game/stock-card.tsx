@@ -15,6 +15,8 @@ export interface StockListItem {
   currentPrice: number;
   priceChange24h: number;
   priceChangePercent24h: number;
+  priceChange1h?: number;
+  priceChangePercent1h?: number;
   marketCap: number;
   priceHistory: PricePoint[];
   description?: string;

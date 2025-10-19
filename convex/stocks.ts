@@ -1138,6 +1138,7 @@ export const getAllPublicStocks = query({
       .take(50);
 
     const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
     const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
 
     const allRecentHistory = await ctx.db
@@ -1154,11 +1155,17 @@ export const getAllPublicStocks = query({
 
     const recentHistoryByCompany = new Map<string, any[]>();
     const dayAgoHistoryByCompany = new Map<string, any>();
+    const hourAgoHistoryByCompany = new Map<string, any>();
 
     allRecentHistory.forEach((entry) => {
       const arr = recentHistoryByCompany.get(entry.companyId) || [];
       arr.push(entry);
       recentHistoryByCompany.set(entry.companyId, arr);
+      
+      // Track 1-hour ago price
+      if (entry.timestamp >= oneHourAgo && !hourAgoHistoryByCompany.has(entry.companyId)) {
+        hourAgoHistoryByCompany.set(entry.companyId, entry);
+      }
     });
 
     allDayAgoHistory.forEach((entry) => {
@@ -1196,6 +1203,13 @@ export const getAllPublicStocks = query({
       const priceChangePercent24h =
         oldPrice !== 0 ? (priceChange24h / oldPrice) * 100 : 0;
 
+      // Calculate 1-hour price change
+      const hourAgoEntry = hourAgoHistoryByCompany.get(company._id);
+      const priceOneHourAgo = hourAgoEntry?.price || company.sharePrice;
+      const priceChange1h = company.sharePrice - priceOneHourAgo;
+      const priceChangePercent1h =
+        priceOneHourAgo !== 0 ? (priceChange1h / priceOneHourAgo) * 100 : 0;
+
       const marketCap = company.sharePrice * company.totalShares;
 
       return {
@@ -1207,6 +1221,8 @@ export const getAllPublicStocks = query({
         currentPrice: company.sharePrice,
         priceChange24h,
         priceChangePercent24h,
+        priceChange1h,
+        priceChangePercent1h,
         marketCap,
         priceHistory: chartHistory,
       };
