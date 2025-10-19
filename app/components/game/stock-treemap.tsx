@@ -45,10 +45,22 @@ const getColor = (changePercent: number): string => {
 
 // Custom content renderer for treemap cells
 const CustomTreemapContent = (props: any) => {
-  const { x, y, width, height, name, ticker, price, priceChange } = props;
+  const { x, y, width, height } = props;
+  const data = props.payload as TreemapNode | undefined;
 
-  // Don't render if too small
-  if (width < 40 || height < 30) {
+  // Don't render if too small or missing data
+  if (width < 40 || height < 30 || !data) {
+    return null;
+  }
+
+  const { ticker, price, priceChange } = data;
+
+  // Safety checks for required fields
+  if (
+    ticker === undefined ||
+    price === undefined ||
+    priceChange === undefined
+  ) {
     return null;
   }
 
@@ -156,38 +168,43 @@ export function StockTreemap({ stocks, onStockClick }: StockTreemapProps) {
           <Tooltip
             content={({ payload }) => {
               if (!payload || !payload[0]) return null;
-              const data = payload[0].payload as TreemapNode;
+              const data = payload[0].payload as TreemapNode | undefined;
+              if (!data) return null;
+
+              const { name, ticker, price, priceChange, size } = data;
+
+              // Safety checks
+              if (price === undefined || priceChange === undefined) return null;
+
               return (
                 <div className="rounded-lg border bg-background p-3 shadow-lg">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold">{data.name}</span>
+                      <span className="font-semibold">{name}</span>
                       <span className="text-xs font-mono text-muted-foreground">
-                        {data.ticker}
+                        {ticker}
                       </span>
                     </div>
                     <div className="text-sm">
                       <div>
                         Price:{" "}
-                        <span className="font-medium">
-                          ${data.price.toFixed(2)}
-                        </span>
+                        <span className="font-medium">${price.toFixed(2)}</span>
                       </div>
                       <div>
                         1h Change:{" "}
                         <span
                           className={
-                            data.priceChange >= 0
+                            priceChange >= 0
                               ? "font-medium text-green-600"
                               : "font-medium text-red-600"
                           }
                         >
-                          {data.priceChange >= 0 ? "+" : ""}
-                          {data.priceChange.toFixed(2)}%
+                          {priceChange >= 0 ? "+" : ""}
+                          {priceChange.toFixed(2)}%
                         </span>
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        Market Cap: ${(data.size / 1_000_000).toFixed(2)}M
+                        Market Cap: ${(size / 1_000_000).toFixed(2)}M
                       </div>
                     </div>
                   </div>
