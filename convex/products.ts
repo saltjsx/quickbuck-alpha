@@ -374,6 +374,9 @@ export const automaticPurchase = internalMutation({
 
       const price = Math.max(product.price, 0.01);
       const totalPrice = price * quantity;
+      
+      // Do not purchase anything over $50k
+      if (totalPrice > 50000) return false;
       const costPercentage = 0.23 + Math.random() * 0.44;
       const productionCost = totalPrice * costPercentage;
 
