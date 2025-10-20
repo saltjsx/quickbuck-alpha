@@ -24,7 +24,11 @@ import type { Doc, Id } from "./_generated/dataModel";
 
 const CONFIG = {
   // Budget per wave
-  GLOBAL_BUDGET_PER_WAVE: 500000000, // $500M per wave
+  GLOBAL_BUDGET_PER_WAVE: 50000000, // $50M per wave
+  
+  // Minimum and maximum spending constraints
+  MIN_SPEND_FRACTION: 0.80, // Must spend at least 80% of budget
+  MAX_SPEND_FRACTION: 0.95, // Try to stay under 95% of budget
   
   // Scoring weights (must sum to 1.0)
   WEIGHT_QUALITY: 0.40,
@@ -537,6 +541,9 @@ function planPurchases(
   const plannedPurchases: PlannedPurchase[] = [];
   const companySpend = new Map<Id<"companies">, number>();
   
+  const minSpend = globalBudget * CONFIG.MIN_SPEND_FRACTION;
+  const maxSpend = globalBudget * CONFIG.MAX_SPEND_FRACTION;
+  
   // Calculate total score for budget allocation
   const totalScore = scoredProducts.reduce((sum, p) => sum + p.finalScore, 0);
   if (totalScore === 0) return [];
@@ -600,8 +607,73 @@ function planPurchases(
     }
   }
   
-  // Sort by score descending, but add some randomization in top-K
+  // Sort by score descending
   plannedPurchases.sort((a, b) => b.score - a.score);
+  
+  // Calculate current total and adjust if needed
+  let currentSpend = plannedPurchases.reduce((sum, p) => sum + p.totalCost, 0);
+  
+  // If we're below minimum spend, add more high-scoring products
+  if (currentSpend < minSpend) {
+    const remainingBudget = minSpend - currentSpend;
+    
+    for (const product of scoredProducts) {
+      // Skip if we already planned to buy this product
+      if (plannedPurchases.some(p => p.productId === product._id)) continue;
+      
+      // Skip if product score is too low
+      if (product.finalScore < 0.1) continue;
+      
+      const expectedSpend = Math.min(product.finalScore * baseSpend, remainingBudget);
+      const quantity = determinePurchaseQuantity(product, expectedSpend);
+      
+      if (quantity < CONFIG.MIN_ORDER_SIZE) continue;
+      
+      const totalCost = quantity * product.price;
+      
+      // Check company budget cap
+      const companyCurrentSpend = companySpend.get(product.companyId) || 0;
+      const companyBudgetCap = globalBudget * CONFIG.COMPANY_BUDGET_LIMIT_FRACTION;
+      
+      if (companyCurrentSpend + totalCost > companyBudgetCap) {
+        const remainingCompanyBudget = companyBudgetCap - companyCurrentSpend;
+        const adjustedQuantity = Math.floor(remainingCompanyBudget / product.price);
+        
+        if (adjustedQuantity < CONFIG.MIN_ORDER_SIZE) continue;
+        
+        const adjustedCost = adjustedQuantity * product.price;
+        plannedPurchases.push({
+          productId: product._id,
+          productName: product.name,
+          companyId: product.companyId,
+          companyName: product.companyName,
+          quantity: adjustedQuantity,
+          price: product.price,
+          totalCost: adjustedCost,
+          score: product.finalScore,
+        });
+        
+        companySpend.set(product.companyId, companyCurrentSpend + adjustedCost);
+        currentSpend += adjustedCost;
+      } else {
+        plannedPurchases.push({
+          productId: product._id,
+          productName: product.name,
+          companyId: product.companyId,
+          companyName: product.companyName,
+          quantity,
+          price: product.price,
+          totalCost,
+          score: product.finalScore,
+        });
+        
+        companySpend.set(product.companyId, companyCurrentSpend + totalCost);
+        currentSpend += totalCost;
+      }
+      
+      if (currentSpend >= minSpend) break;
+    }
+  }
   
   return plannedPurchases;
 }
