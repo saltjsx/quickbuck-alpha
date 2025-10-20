@@ -27,7 +27,7 @@ const CONFIG = {
   GLOBAL_BUDGET_PER_WAVE: 50000000, // $50M per wave
   
   // Minimum and maximum spending constraints
-  MIN_SPEND_FRACTION: 0.80, // Must spend at least 80% of budget
+  MIN_SPEND_FRACTION: 0.50, // Target spending at least 50% of budget
   MAX_SPEND_FRACTION: 0.95, // Try to stay under 95% of budget
   
   // Scoring weights (must sum to 1.0)
@@ -43,10 +43,10 @@ const CONFIG = {
   MIN_QUALITY_THRESHOLD: 30, // Quality below this gets heavy penalty
   
   // Purchase caps
-  MAX_ORDER_SIZE_PERCENT: 0.02, // Max 2% of product stock
+  MAX_ORDER_SIZE_PERCENT: 0.02, // Max 2% of product stock (not used currently)
   MIN_ORDER_SIZE: 1,
-  MAX_ORDER_SIZE_ABSOLUTE: 100,
-  COMPANY_BUDGET_LIMIT_FRACTION: 0.15, // Max 15% of wave budget per company
+  MAX_ORDER_SIZE_ABSOLUTE: 10000, // Max 10k units per order
+  COMPANY_BUDGET_LIMIT_FRACTION: 0.20, // Max 20% of wave budget per company
   
   // Probability parameters
   MIN_PURCHASE_PROBABILITY: 0.01,
@@ -513,85 +513,73 @@ function determinePurchaseQuantity(
   // Calculate expected units based on spend and price
   const expectedUnits = expectedSpend / scoredProduct.price;
   
-  // Use Poisson sampling for stochastic quantity
-  const sampledUnits = randomPoisson(expectedUnits);
+  // Use deterministic quantity - just round to nearest integer, multiplied for more volume
+  const quantity = Math.floor(expectedUnits * 10); // 10x multiplier for volume
   
   // Apply caps
-  const maxQuantity = Math.min(
-    CONFIG.MAX_ORDER_SIZE_ABSOLUTE,
-    Math.ceil(scoredProduct.totalSales * CONFIG.MAX_ORDER_SIZE_PERCENT) || CONFIG.MIN_ORDER_SIZE
-  );
+  const maxQuantity = CONFIG.MAX_ORDER_SIZE_ABSOLUTE;
   
-  const quantity = clamp(
-    sampledUnits,
+  const finalQuantity = clamp(
+    quantity,
     CONFIG.MIN_ORDER_SIZE,
     maxQuantity
   );
   
-  return Math.floor(quantity);
+  return Math.floor(finalQuantity);
 }
 
 /**
- * Plan purchases probabilistically
+ * Plan purchases - ENFORCED minimum spend with safety limits
  */
 function planPurchases(
   scoredProducts: ScoredProduct[],
   globalBudget: number
 ): PlannedPurchase[] {
   const plannedPurchases: PlannedPurchase[] = [];
-  const companySpend = new Map<Id<"companies">, number>();
   
   const minSpend = globalBudget * CONFIG.MIN_SPEND_FRACTION;
   const maxSpend = globalBudget * CONFIG.MAX_SPEND_FRACTION;
+  const MAX_PURCHASE_AMOUNT = 50000; // $50k max per purchase
   
-  // Calculate total score for budget allocation
-  const totalScore = scoredProducts.reduce((sum, p) => sum + p.finalScore, 0);
-  if (totalScore === 0) return [];
+  console.log(`    Min spend target: $${minSpend.toLocaleString()}`);
+  console.log(`    Max spend target: $${maxSpend.toLocaleString()}`);
   
-  // Calculate base spend per unit of score
-  const baseSpend = globalBudget / totalScore;
+  // Sort products by score descending
+  const sortedProducts = [...scoredProducts].sort((a, b) => b.finalScore - a.finalScore);
   
-  // Iterate through products and decide purchases
-  for (const product of scoredProducts) {
-    // Probabilistic sampling: should we buy this product?
-    const shouldPurchase = Math.random() < product.purchaseProbability;
-    if (!shouldPurchase) continue;
+  // Filter out products with extreme prices (> $10k per unit)
+  const affordableProducts = sortedProducts.filter(p => p.price <= 10000);
+  
+  console.log(`    Products available: ${sortedProducts.length}`);
+  console.log(`    Products after price filter: ${affordableProducts.length}`);
+  
+  let currentSpend = 0;
+  let passes = 0;
+  
+  // Keep looping through products until we hit minimum spend or max passes
+  while (currentSpend < minSpend && passes < 100) {
+    passes++;
+    let passSpend = 0;
     
-    // Calculate expected spend for this product
-    const expectedSpend = product.finalScore * baseSpend;
-    
-    // Determine quantity
-    const quantity = determinePurchaseQuantity(product, expectedSpend);
-    if (quantity < CONFIG.MIN_ORDER_SIZE) continue;
-    
-    const totalCost = quantity * product.price;
-    
-    // Check company budget cap
-    const companyCurrentSpend = companySpend.get(product.companyId) || 0;
-    const companyBudgetCap = globalBudget * CONFIG.COMPANY_BUDGET_LIMIT_FRACTION;
-    
-    if (companyCurrentSpend + totalCost > companyBudgetCap) {
-      // Reduce quantity to fit within cap
-      const remainingBudget = companyBudgetCap - companyCurrentSpend;
-      const adjustedQuantity = Math.floor(remainingBudget / product.price);
+    for (const product of affordableProducts) {
+      const remainingBudget = minSpend - currentSpend;
+      if (remainingBudget <= 0) break;
       
-      if (adjustedQuantity < CONFIG.MIN_ORDER_SIZE) continue;
+      // Calculate dynamic quantity based on product score and price
+      // Better products get more quantity
+      const baseQuantity = Math.ceil(product.finalScore * 100);
       
-      const adjustedCost = adjustedQuantity * product.price;
+      // Cap the total purchase amount at $50k
+      const maxQuantityByPrice = Math.floor(MAX_PURCHASE_AMOUNT / product.price);
+      const quantity = Math.min(baseQuantity, maxQuantityByPrice);
       
-      plannedPurchases.push({
-        productId: product._id,
-        productName: product.name,
-        companyId: product.companyId,
-        companyName: product.companyName,
-        quantity: adjustedQuantity,
-        price: product.price,
-        totalCost: adjustedCost,
-        score: product.finalScore,
-      });
+      if (quantity < 1) continue;
       
-      companySpend.set(product.companyId, companyCurrentSpend + adjustedCost);
-    } else {
+      const actualCost = quantity * product.price;
+      
+      // Double-check we're not exceeding $50k per purchase
+      if (actualCost > MAX_PURCHASE_AMOUNT) continue;
+      
       plannedPurchases.push({
         productId: product._id,
         productName: product.name,
@@ -599,81 +587,27 @@ function planPurchases(
         companyName: product.companyName,
         quantity,
         price: product.price,
-        totalCost,
+        totalCost: actualCost,
         score: product.finalScore,
       });
       
-      companySpend.set(product.companyId, companyCurrentSpend + totalCost);
+      currentSpend += actualCost;
+      passSpend += actualCost;
     }
-  }
-  
-  // Sort by score descending
-  plannedPurchases.sort((a, b) => b.score - a.score);
-  
-  // Calculate current total and adjust if needed
-  let currentSpend = plannedPurchases.reduce((sum, p) => sum + p.totalCost, 0);
-  
-  // If we're below minimum spend, add more high-scoring products
-  if (currentSpend < minSpend) {
-    const remainingBudget = minSpend - currentSpend;
     
-    for (const product of scoredProducts) {
-      // Skip if we already planned to buy this product
-      if (plannedPurchases.some(p => p.productId === product._id)) continue;
-      
-      // Skip if product score is too low
-      if (product.finalScore < 0.1) continue;
-      
-      const expectedSpend = Math.min(product.finalScore * baseSpend, remainingBudget);
-      const quantity = determinePurchaseQuantity(product, expectedSpend);
-      
-      if (quantity < CONFIG.MIN_ORDER_SIZE) continue;
-      
-      const totalCost = quantity * product.price;
-      
-      // Check company budget cap
-      const companyCurrentSpend = companySpend.get(product.companyId) || 0;
-      const companyBudgetCap = globalBudget * CONFIG.COMPANY_BUDGET_LIMIT_FRACTION;
-      
-      if (companyCurrentSpend + totalCost > companyBudgetCap) {
-        const remainingCompanyBudget = companyBudgetCap - companyCurrentSpend;
-        const adjustedQuantity = Math.floor(remainingCompanyBudget / product.price);
-        
-        if (adjustedQuantity < CONFIG.MIN_ORDER_SIZE) continue;
-        
-        const adjustedCost = adjustedQuantity * product.price;
-        plannedPurchases.push({
-          productId: product._id,
-          productName: product.name,
-          companyId: product.companyId,
-          companyName: product.companyName,
-          quantity: adjustedQuantity,
-          price: product.price,
-          totalCost: adjustedCost,
-          score: product.finalScore,
-        });
-        
-        companySpend.set(product.companyId, companyCurrentSpend + adjustedCost);
-        currentSpend += adjustedCost;
-      } else {
-        plannedPurchases.push({
-          productId: product._id,
-          productName: product.name,
-          companyId: product.companyId,
-          companyName: product.companyName,
-          quantity,
-          price: product.price,
-          totalCost,
-          score: product.finalScore,
-        });
-        
-        companySpend.set(product.companyId, companyCurrentSpend + totalCost);
-        currentSpend += totalCost;
-      }
-      
-      if (currentSpend >= minSpend) break;
-    }
+    console.log(`    Pass ${passes}: +$${passSpend.toLocaleString()}, Total: $${currentSpend.toLocaleString()}`);
+    
+    // If we didn't add any spending this pass, break to avoid infinite loop
+    if (passSpend === 0) break;
   }
+  
+  console.log(`    Final spend after ${passes} passes: $${currentSpend.toLocaleString()}`);
+  
+  // Log total items planned
+  const totalItemsPlanned = plannedPurchases.reduce((sum, p) => sum + p.quantity, 0);
+  const totalCostPlanned = plannedPurchases.reduce((sum, p) => sum + p.totalCost, 0);
+  console.log(`    Total items planned: ${totalItemsPlanned.toLocaleString()}`);
+  console.log(`    Total cost planned: $${totalCostPlanned.toLocaleString()}`);
   
   return plannedPurchases;
 }
@@ -727,7 +661,7 @@ async function executePurchaseWithRetry(
       };
     }
     
-    // Calculate costs
+    // Calculate costs - normal calculation
     const totalRevenue = purchase.quantity * purchase.price;
     const totalCost = Math.floor(totalRevenue * 0.3); // 30% cost
     const netProfit = totalRevenue - totalCost;
@@ -990,6 +924,43 @@ export const scheduledPublicPurchaseWave = internalAction({
     error?: string;
   }> => {
     console.log(`\n  Public Purchase Wave triggered at ${new Date().toISOString()}`);
+    
+    try {
+      // @ts-ignore - API types will be regenerated
+      const result = await ctx.runMutation(internal.publicPurchases.executePublicPurchaseWave, {});
+      
+      console.log(`  Wave ${result.waveId} completed successfully`);
+      console.log(`  Spent: $${result.totalSpent.toLocaleString()}`);
+      console.log(`  Products: ${result.productsPurchased}`);
+      
+      return {
+        success: true,
+        ...result,
+      };
+    } catch (error) {
+      console.error(`  Wave execution failed:`, error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  },
+});
+
+/**
+ * Public endpoint to manually trigger public purchases
+ */
+export const manualPublicPurchaseWave = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{
+    success: boolean;
+    waveId?: string;
+    totalSpent?: number;
+    productsPurchased?: number;
+    companiesAffected?: number;
+    error?: string;
+  }> => {
+    console.log(`\n  Manual Public Purchase Wave triggered at ${new Date().toISOString()}`);
     
     try {
       // @ts-ignore - API types will be regenerated
