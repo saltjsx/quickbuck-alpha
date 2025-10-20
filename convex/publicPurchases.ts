@@ -824,6 +824,7 @@ export const executePublicPurchaseWave = internalMutation({
     console.log(`  [6/6] Executing purchases...`);
     const results: PurchaseResult[] = [];
     const companiesAffected = new Set<Id<"companies">>();
+    const companySpending = new Map<Id<"companies">, { name: string; spent: number }>();
     const errors: string[] = [];
     const anomalies: string[] = [];
     
@@ -833,6 +834,17 @@ export const executePublicPurchaseWave = internalMutation({
       
       if (result.success) {
         companiesAffected.add(purchase.companyId);
+        
+        // Track spending per company
+        const existing = companySpending.get(purchase.companyId);
+        if (existing) {
+          existing.spent += result.spent;
+        } else {
+          companySpending.set(purchase.companyId, {
+            name: purchase.companyName,
+            spent: result.spent,
+          });
+        }
       } else if (result.error) {
         errors.push(`${purchase.productName}: ${result.error}`);
       }
@@ -856,6 +868,18 @@ export const executePublicPurchaseWave = internalMutation({
     console.log(`  Products purchased: ${successfulPurchases} of ${plannedPurchases.length} planned`);
     console.log(`  Companies affected: ${companiesAffected.size}`);
     console.log(`  Failed purchases: ${failedPurchases}`);
+    
+    // Log spending per company
+    if (companySpending.size > 0) {
+      console.log(`\n  Spending breakdown by company:`);
+      const sortedCompanies = Array.from(companySpending.entries())
+        .sort((a, b) => b[1].spent - a[1].spent);
+      
+      for (const [_, { name, spent }] of sortedCompanies) {
+        console.log(`    ${name}: $${spent.toLocaleString()}`);
+      }
+    }
+    
     if (errors.length > 0) {
       console.log(`  Errors: ${errors.length}`);
     }
