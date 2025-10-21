@@ -78,7 +78,9 @@ export const getAllCompanies = query({
       const originalIndex = allCompanies.findIndex(c => c._id === company._id);
       const owner = owners[originalIndex];
       if (owner) {
-        ownerMap.set(company.ownerId, owner.name || "Unknown");
+        // Show username if name is not set
+        const displayName = owner.name || owner.username || owner.email || "Unknown";
+        ownerMap.set(company.ownerId, displayName);
       }
     });
 

@@ -483,12 +483,24 @@ export const getPublicCompanies = query({
       }
     });
     
-    // BANDWIDTH OPTIMIZATION: Skip owner fetching for stock market listing
-    // Owner info not critical for stock listings
+    // Batch fetch owners to get their names/usernames
+    const ownerIds = companies.map(c => c.ownerId);
+    const owners = await Promise.all(ownerIds.map(id => ctx.db.get(id)));
+    
+    // Create owner name map with username fallback
+    const ownerNameMap = new Map();
+    owners.forEach((owner: any) => {
+      if (owner) {
+        // Show username if name is not set
+        const displayName = owner.name || owner.username || owner.email || "Unknown";
+        ownerNameMap.set(owner._id, displayName);
+      }
+    });
 
     const enrichedCompanies = companies.map((company) => ({
       ...company,
       balance: balanceMap.get(company.accountId) ?? 0,
+      ownerName: ownerNameMap.get(company.ownerId) || "Unknown",
     }));
 
     return enrichedCompanies;

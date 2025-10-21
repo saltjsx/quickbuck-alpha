@@ -1108,7 +1108,7 @@ export const getStockDetails = query({
       company: {
         ...company,
         balance,
-        ownerName: owner?.name || "Unknown",
+        ownerName: owner?.name || owner?.username || owner?.email || "Unknown",
       },
       stats: {
         currentPrice: company.sharePrice,
