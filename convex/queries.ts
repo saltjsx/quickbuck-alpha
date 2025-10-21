@@ -1,6 +1,13 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
 
+export const getAllAccounts = query({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db.query("accounts").collect();
+  },
+});
+
 export const getStockPriceHistory = query({
   args: { companyId: v.id("companies") },
   handler: async (ctx, args) => {
