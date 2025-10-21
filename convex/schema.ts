@@ -495,6 +495,13 @@ export default defineSchema({
     .index("by_company_created", ["companyId", "createdAt"])
     .index("by_company_type", ["companyId", "type"])
     .index("by_product", ["productId"]),
+
+  maintenance: defineTable({
+    isActive: v.boolean(),
+    message: v.string(),
+    startedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  }),
 });
 
 

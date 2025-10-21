@@ -17,6 +17,7 @@ import { Analytics } from "@vercel/analytics/react";
 import { Toaster } from "~/components/toaster";
 import { Databuddy } from "@databuddy/sdk/react";
 import { ModerationProviders } from "~/components/moderation/moderation-components";
+import { MaintenanceScreen } from "~/components/maintenance-screen";
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
@@ -131,6 +132,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
     >
       <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
         <ModerationProviders />
+        <MaintenanceScreen />
         <Outlet />
         <Toaster />
       </ConvexProviderWithClerk>

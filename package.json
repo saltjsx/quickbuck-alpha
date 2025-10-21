@@ -15,7 +15,8 @@
     "bot-buy": "tsx scripts/bot-buy.ts",
     "moderation": "tsx scripts/moderation.ts",
     "init-resources": "tsx scripts/init-resources.ts",
-    "test-employees": "tsx scripts/test-employees.ts"
+    "test-employees": "tsx scripts/test-employees.ts",
+    "maintenance": "tsx scripts/maintenance.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.22",
