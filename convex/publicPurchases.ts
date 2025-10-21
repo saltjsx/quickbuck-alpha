@@ -14,7 +14,7 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation, internalAction } from "./_generated/server";
+import { internalMutation, internalAction, query } from "./_generated/server";
 import { internal, api } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 
@@ -981,5 +981,26 @@ export const manualPublicPurchaseWave = internalAction({
         error: error instanceof Error ? error.message : "Unknown error",
       };
     }
+  },
+});
+
+/**
+ * Get the timestamp of the next scheduled public purchase tick
+ * Public purchases run every 20 minutes
+ */
+export const getNextPurchaseTick = query({
+  args: {},
+  handler: async () => {
+    const now = Date.now();
+    const TWENTY_MINUTES = 20 * 60 * 1000;
+    
+    // Calculate minutes since epoch
+    const minutesSinceEpoch = Math.floor(now / (60 * 1000));
+    
+    // Calculate next 20-minute interval
+    const nextInterval = Math.ceil(minutesSinceEpoch / 20) * 20;
+    
+    // Convert back to milliseconds
+    return nextInterval * 60 * 1000;
   },
 });

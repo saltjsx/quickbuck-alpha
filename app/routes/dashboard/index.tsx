@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import {
@@ -16,6 +16,7 @@ import {
   TrendingUp,
   DollarSign,
   ArrowRight,
+  Clock,
 } from "lucide-react";
 import { Link } from "react-router";
 import type { Route } from "./+types/index";
@@ -41,6 +42,28 @@ export default function Page() {
     api.accounts.getTransactions,
     personalAccount?._id ? { accountId: personalAccount._id, limit: 8 } : "skip"
   );
+  const nextTickTime = useQuery(api.publicPurchases.getNextPurchaseTick);
+
+  // State for countdown timer
+  const [timeRemaining, setTimeRemaining] = useState<string>("");
+
+  // Update countdown every second
+  useEffect(() => {
+    if (!nextTickTime) return;
+
+    const updateTimer = () => {
+      const now = Date.now();
+      const remaining = Math.max(0, nextTickTime - now);
+      const minutes = Math.floor(remaining / (60 * 1000));
+      const seconds = Math.floor((remaining % (60 * 1000)) / 1000);
+      setTimeRemaining(`${minutes}:${seconds.toString().padStart(2, "0")}`);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+
+    return () => clearInterval(interval);
+  }, [nextTickTime]);
 
   const breakdown = useMemo(() => {
     if (!overview)
@@ -123,7 +146,7 @@ export default function Page() {
 
         {/* KPI Cards */}
         <div className="px-4 lg:px-8">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <Card className="p-1">
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
@@ -208,6 +231,25 @@ export default function Page() {
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   You have active access
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="p-1">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm text-muted-foreground">
+                    Next Tick
+                  </CardTitle>
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-semibold tracking-tight tabular-nums">
+                  {timeRemaining || "--:--"}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Automatic purchases every 20 min
                 </p>
               </CardContent>
             </Card>
