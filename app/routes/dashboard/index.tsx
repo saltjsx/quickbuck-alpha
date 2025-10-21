@@ -54,6 +54,13 @@ export default function Page() {
     const updateTimer = () => {
       const now = Date.now();
       const remaining = Math.max(0, nextTickTime - now);
+
+      // If countdown finished, show "Updating..."
+      if (remaining === 0) {
+        setTimeRemaining("Updating...");
+        return;
+      }
+
       const minutes = Math.floor(remaining / (60 * 1000));
       const seconds = Math.floor((remaining % (60 * 1000)) / 1000);
       setTimeRemaining(`${minutes}:${seconds.toString().padStart(2, "0")}`);

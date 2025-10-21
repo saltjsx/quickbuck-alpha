@@ -738,6 +738,21 @@ export const executePublicPurchaseWave = internalMutation({
     const startTime = Date.now();
     const now = Date.now();
     
+    // Update last tick time in system state
+    const systemState = await ctx.db
+      .query("systemState")
+      .withIndex("by_key", (q) => q.eq("key", "publicPurchases"))
+      .first();
+    
+    if (systemState) {
+      await ctx.db.patch(systemState._id, { lastTickTime: now });
+    } else {
+      await ctx.db.insert("systemState", {
+        key: "publicPurchases",
+        lastTickTime: now,
+      });
+    }
+    
     console.log(`\n${"=".repeat(80)}`);
     console.log(`  PUBLIC PURCHASE WAVE: ${waveId}`);
     console.log(`${"=".repeat(80)}`);
@@ -990,17 +1005,24 @@ export const manualPublicPurchaseWave = internalAction({
  */
 export const getNextPurchaseTick = query({
   args: {},
-  handler: async () => {
-    const now = Date.now();
+  handler: async (ctx) => {
     const TWENTY_MINUTES = 20 * 60 * 1000;
     
-    // Calculate minutes since epoch
+    // Get the last tick time from system state
+    const systemState = await ctx.db
+      .query("systemState")
+      .withIndex("by_key", (q) => q.eq("key", "publicPurchases"))
+      .first();
+    
+    if (systemState?.lastTickTime) {
+      // Calculate next tick based on last execution
+      return systemState.lastTickTime + TWENTY_MINUTES;
+    }
+    
+    // If no last tick recorded, estimate next 20-minute boundary
+    const now = Date.now();
     const minutesSinceEpoch = Math.floor(now / (60 * 1000));
-    
-    // Calculate next 20-minute interval
     const nextInterval = Math.ceil(minutesSinceEpoch / 20) * 20;
-    
-    // Convert back to milliseconds
     return nextInterval * 60 * 1000;
   },
 });

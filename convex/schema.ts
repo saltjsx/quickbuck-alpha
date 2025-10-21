@@ -502,6 +502,11 @@ export default defineSchema({
     startedAt: v.optional(v.number()),
     updatedAt: v.number(),
   }),
+
+  systemState: defineTable({
+    key: v.string(),
+    lastTickTime: v.optional(v.number()),
+  }).index("by_key", ["key"]),
 });
 
 
