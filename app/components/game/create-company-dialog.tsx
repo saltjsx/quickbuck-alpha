@@ -283,8 +283,12 @@ export function CreateCompanyDialog() {
                   <Badge key={tag} variant="secondary" className="gap-1">
                     {tag}
                     <X
-                      className="h-3 w-3 cursor-pointer"
-                      onClick={() => handleRemoveTag(tag)}
+                      className="h-3 w-3 cursor-pointer hover:text-destructive"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleRemoveTag(tag);
+                      }}
                     />
                   </Badge>
                 ))}
