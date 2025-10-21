@@ -117,7 +117,7 @@ export const StockCard = memo(function StockCard({
         <ArrowRight className="h-5 w-5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
       </div>
 
-      <div className="mt-4 h-20 w-full rounded-md border bg-muted/40 p-1">
+      <div className="mt-4 h-20 w-full rounded-md border bg-muted/40 p-1 overflow-hidden">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart
             data={chartData}

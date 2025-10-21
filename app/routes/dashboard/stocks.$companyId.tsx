@@ -229,7 +229,7 @@ export default function StockDetailPage() {
   };
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col overflow-x-hidden">
       <div className="@container/main flex flex-1 flex-col gap-6 py-6">
         <div className="px-4 lg:px-8">
           <Button
@@ -525,7 +525,7 @@ export default function StockDetailPage() {
               </div>
 
               {/* Chart */}
-              <Card>
+              <Card className="overflow-hidden">
                 <CardHeader>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-2">
@@ -550,64 +550,71 @@ export default function StockDetailPage() {
                     Price updates during the selected time period
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="overflow-hidden">
-                  <ChartContainer
-                    config={{
-                      price: { label: "Price", color: "hsl(var(--chart-1))" },
-                    }}
-                    className="h-[300px] sm:h-[420px] w-full"
-                  >
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={chartData}>
-                        <XAxis
-                          dataKey="timestamp"
-                          type="number"
-                          domain={["dataMin", "dataMax"]}
-                          stroke="#888888"
-                          fontSize={12}
-                          tickLine={false}
-                          axisLine={false}
-                          tickFormatter={(value) =>
-                            typeof value === "number"
-                              ? formatTimestamp(value)
-                              : String(value)
-                          }
-                          minTickGap={24}
-                        />
-                        <YAxis
-                          stroke="#888888"
-                          fontSize={12}
-                          tickLine={false}
-                          axisLine={false}
-                          domain={[
-                            (dataMin: number) => dataMin * 0.995,
-                            (dataMax: number) => dataMax * 1.005,
-                          ]}
-                          tickFormatter={(value) =>
-                            `$${Number(value).toFixed(2)}`
-                          }
-                        />
-                        <ChartTooltip
-                          content={
-                            <ChartTooltipContent
-                              labelFormatter={(value) =>
-                                typeof value === "number"
-                                  ? formatTimestamp(value)
-                                  : String(value)
-                              }
-                            />
-                          }
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="price"
-                          stroke="#3b82f6"
-                          strokeWidth={3}
-                          dot={false}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </ChartContainer>
+                <CardContent className="overflow-hidden p-0 px-2 pb-6 sm:px-6">
+                  <div className="w-full overflow-hidden">
+                    <ChartContainer
+                      config={{
+                        price: { label: "Price", color: "hsl(var(--chart-1))" },
+                      }}
+                      className="h-[300px] sm:h-[420px] w-full"
+                    >
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={chartData}
+                          margin={{ top: 5, right: 5, left: -20, bottom: 5 }}
+                        >
+                          <XAxis
+                            dataKey="timestamp"
+                            type="number"
+                            domain={["dataMin", "dataMax"]}
+                            stroke="#888888"
+                            fontSize={10}
+                            tickLine={false}
+                            axisLine={false}
+                            tickFormatter={(value) =>
+                              typeof value === "number"
+                                ? formatTimestamp(value)
+                                : String(value)
+                            }
+                            minTickGap={30}
+                            interval="preserveStartEnd"
+                          />
+                          <YAxis
+                            stroke="#888888"
+                            fontSize={10}
+                            tickLine={false}
+                            axisLine={false}
+                            domain={[
+                              (dataMin: number) => dataMin * 0.995,
+                              (dataMax: number) => dataMax * 1.005,
+                            ]}
+                            tickFormatter={(value) =>
+                              `$${Number(value).toFixed(2)}`
+                            }
+                            width={50}
+                          />
+                          <ChartTooltip
+                            content={
+                              <ChartTooltipContent
+                                labelFormatter={(value) =>
+                                  typeof value === "number"
+                                    ? formatTimestamp(value)
+                                    : String(value)
+                                }
+                              />
+                            }
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="price"
+                            stroke="#3b82f6"
+                            strokeWidth={2}
+                            dot={false}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </ChartContainer>
+                  </div>
                 </CardContent>
               </Card>
 

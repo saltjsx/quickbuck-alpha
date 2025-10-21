@@ -119,6 +119,19 @@ function formatNumber(value: number) {
   return value.toLocaleString("en-US");
 }
 
+function formatCompactCurrency(value: number) {
+  if (value >= 1_000_000_000) {
+    return `$${(value / 1_000_000_000).toFixed(2)}B`;
+  }
+  if (value >= 1_000_000) {
+    return `$${(value / 1_000_000).toFixed(2)}M`;
+  }
+  if (value >= 1_000) {
+    return `$${(value / 1_000).toFixed(1)}K`;
+  }
+  return `$${value.toFixed(2)}`;
+}
+
 function getInitials(name: string) {
   return (
     name
@@ -841,13 +854,13 @@ export default function LeaderboardPage() {
                                   </span>
                                 </TableCell>
                                 <TableCell className="text-right whitespace-nowrap hidden md:table-cell">
-                                  ${(company.balance / 1000).toFixed(1)}K
+                                  {formatCompactCurrency(company.balance)}
                                 </TableCell>
                                 <TableCell className="text-right font-semibold whitespace-nowrap">
-                                  ${(company.netWorth / 1000).toFixed(1)}K
+                                  {formatCompactCurrency(company.netWorth)}
                                 </TableCell>
                                 <TableCell className="text-right whitespace-nowrap hidden lg:table-cell">
-                                  ${(company.marketCap / 1000).toFixed(1)}K
+                                  {formatCompactCurrency(company.marketCap)}
                                 </TableCell>
                                 <TableCell className="hidden md:table-cell">
                                   {company.isPublic ? (
@@ -985,13 +998,13 @@ export default function LeaderboardPage() {
                                 </div>
                               </TableCell>
                               <TableCell className="text-right whitespace-nowrap hidden md:table-cell">
-                                ${(player.cashBalance / 1000).toFixed(1)}K
+                                {formatCompactCurrency(player.cashBalance)}
                               </TableCell>
                               <TableCell className="text-right whitespace-nowrap hidden sm:table-cell">
-                                ${(player.portfolioValue / 1000).toFixed(1)}K
+                                {formatCompactCurrency(player.portfolioValue)}
                               </TableCell>
                               <TableCell className="text-right font-semibold whitespace-nowrap">
-                                ${(player.netWorth / 1000).toFixed(1)}K
+                                {formatCompactCurrency(player.netWorth)}
                               </TableCell>
                             </TableRow>
                           ))}
@@ -1169,12 +1182,12 @@ export default function LeaderboardPage() {
                                 ${product.price.toFixed(0)}
                               </TableCell>
                               <TableCell className="text-right whitespace-nowrap">
-                                {product.totalSales > 1000
+                                {product.totalSales >= 1000
                                   ? `${(product.totalSales / 1000).toFixed(1)}K`
                                   : formatNumber(product.totalSales)}
                               </TableCell>
                               <TableCell className="text-right hidden lg:table-cell whitespace-nowrap">
-                                ${(product.totalRevenue / 1000).toFixed(1)}K
+                                {formatCompactCurrency(product.totalRevenue)}
                               </TableCell>
                               <TableCell className="text-right hidden xl:table-cell whitespace-nowrap">
                                 <span
@@ -1184,7 +1197,7 @@ export default function LeaderboardPage() {
                                       : "text-red-600"
                                   }
                                 >
-                                  ${(product.profit / 1000).toFixed(1)}K
+                                  {formatCompactCurrency(product.profit)}
                                 </span>
                               </TableCell>
                             </TableRow>

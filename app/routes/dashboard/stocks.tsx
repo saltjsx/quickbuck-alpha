@@ -101,7 +101,7 @@ export default function StocksPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col overflow-x-hidden">
       <div className="@container/main flex flex-1 flex-col gap-4 py-6">
         {/* Header */}
         <div className="px-4 lg:px-8">
