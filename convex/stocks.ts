@@ -960,10 +960,9 @@ export const getCompanyShareholders = query({
     const userMap = new Map();
     users.forEach((user: any, index) => {
       if (user) {
-        userMap.set(
-          userIds[index],
-          user.name || user.username || "Unknown User"
-        );
+        // Show username if name is not set
+        const displayName = user.name || user.username || "Unknown User";
+        userMap.set(userIds[index], displayName);
       }
     });
 

@@ -138,7 +138,7 @@ export const warnUser = mutation({
       success: true,
       warningId,
       userId: args.userId,
-      userName: user.name || user.email || "Unknown",
+      userName: user.name || user.username || user.email || "Unknown",
       reason: args.reason,
     };
   },
@@ -403,7 +403,7 @@ export const banUser = mutation({
       success: true,
       banId,
       userId: args.userId,
-      userName: user.name || user.email || "Unknown",
+      userName: user.name || user.username || user.email || "Unknown",
       email,
       reason: args.reason,
       status: `Ban created. Deleted ${operationsCompleted} records.`,

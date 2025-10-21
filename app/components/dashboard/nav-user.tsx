@@ -24,11 +24,25 @@ import { useClerk } from "@clerk/react-router";
 
 export function NavUser({ user }: any) {
   const { isMobile } = useSidebar();
-  const userFullName = user.firstName + " " + user.lastName;
+  // Show username if firstName/lastName are not set (both empty or undefined)
+  const userFullName =
+    user.firstName && user.lastName
+      ? `${user.firstName} ${user.lastName}`
+      : user.username ||
+        `${user.firstName || ""} ${user.lastName || ""}`.trim() ||
+        "User";
   const userEmail = user.emailAddresses[0].emailAddress;
   const userInitials =
-    (user?.firstName?.charAt(0) || "").toUpperCase() +
-    (user?.lastName?.charAt(0) || "").toUpperCase();
+    (
+      user?.firstName?.charAt(0) ||
+      user?.username?.charAt(0) ||
+      ""
+    ).toUpperCase() +
+    (
+      user?.lastName?.charAt(0) ||
+      user?.username?.charAt(1) ||
+      ""
+    ).toUpperCase();
   const userProfile = user.imageUrl;
   const { signOut } = useClerk();
 

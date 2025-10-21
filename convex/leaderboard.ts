@@ -20,7 +20,8 @@ function formatPlayerName(user: UserDoc | null | undefined): {
     return { displayName: "Unknown Player", username: null };
   }
 
-  const displayName = user.name ?? user.username ?? user.email ?? "Unknown Player";
+  // Show username if name is not set, otherwise show name
+  const displayName = user.name || user.username || user.email || "Unknown Player";
   return { displayName, username: user.username ?? null };
 }
 
