@@ -280,16 +280,20 @@ export function CreateCompanyDialog() {
             {tags.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
                 {tags.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="gap-1">
-                    {tag}
-                    <X
-                      className="h-3 w-3 cursor-pointer hover:text-destructive"
+                  <Badge key={tag} variant="secondary" className="gap-1 pr-1">
+                    <span>{tag}</span>
+                    <button
+                      type="button"
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         handleRemoveTag(tag);
                       }}
-                    />
+                      className="ml-1 rounded-sm hover:bg-secondary-foreground/20 p-0.5 pointer-events-auto"
+                      aria-label={`Remove ${tag}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
                   </Badge>
                 ))}
               </div>
