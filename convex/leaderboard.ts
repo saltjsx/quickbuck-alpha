@@ -278,7 +278,11 @@ export const getAllProducts = query({
     // BANDWIDTH OPTIMIZATION: Reduced from 400 to 200 by default, max 300
     // Most users only view top 10-20 products on leaderboards
     const limit = Math.min(args.limit || 200, 300);
-    const products = await ctx.db.query("products").take(limit);
+    // Only include active products (filters out products from deleted companies)
+    const products = await ctx.db
+      .query("products")
+      .withIndex("by_active_totalSales", (q) => q.eq("isActive", true))
+      .take(limit);
 
     // Batch fetch all companies
     const companyIds = [...new Set(products.map(p => p.companyId))];

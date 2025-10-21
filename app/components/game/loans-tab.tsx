@@ -219,17 +219,20 @@ export function LoansTab() {
   return (
     <div className="space-y-6">
       {/* Warning Banner */}
-      <Card className="border-red-300/60 bg-red-50">
+      <Card className="border-red-300/60 bg-red-50 dark:bg-red-950 dark:border-red-800/60">
         <CardHeader className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-          <div className="flex items-center gap-2 text-red-900">
+          <div className="flex items-center gap-2 text-red-900 dark:text-red-100">
             <AlertTriangle className="h-5 w-5" />
             <CardTitle>High-Risk Loans</CardTitle>
           </div>
-          <Badge variant="secondary" className="bg-red-200 text-red-900">
+          <Badge
+            variant="secondary"
+            className="bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100"
+          >
             {DAILY_INTEREST_RATE * 100}% Daily Interest
           </Badge>
         </CardHeader>
-        <CardContent className="text-red-900/80 space-y-2">
+        <CardContent className="text-red-900/80 dark:text-red-100/80 space-y-2">
           <p className="font-semibold">⚠️ Loan Terms:</p>
           <ul className="list-disc list-inside space-y-1 text-sm">
             <li>
@@ -241,13 +244,13 @@ export function LoansTab() {
             </li>
             <li>Repayment period: {LOAN_DURATION_DAYS} days</li>
             <li>
-              <span className="font-semibold text-red-700">
+              <span className="font-semibold text-red-700 dark:text-red-300">
                 After {LOAN_DURATION_DAYS} days, the full amount is
                 automatically deducted, even if your balance goes negative!
               </span>
             </li>
             <li>
-              <span className="font-semibold text-red-700">
+              <span className="font-semibold text-red-700 dark:text-red-300">
                 Loans negatively impact your net worth until fully repaid.
               </span>
             </li>
@@ -407,7 +410,9 @@ export function LoansTab() {
                 <div
                   key={loan._id}
                   className={`rounded-lg border p-4 space-y-3 ${
-                    isOverdue ? "border-red-300 bg-red-50" : "border-border"
+                    isOverdue
+                      ? "border-red-300 bg-red-50 dark:bg-red-950 dark:border-red-800/60"
+                      : "border-border"
                   }`}
                 >
                   <div className="flex items-start justify-between">
@@ -448,14 +453,18 @@ export function LoansTab() {
 
                     <span className="text-muted-foreground">Due date:</span>
                     <span
-                      className={isOverdue ? "font-semibold text-red-600" : ""}
+                      className={
+                        isOverdue
+                          ? "font-semibold text-red-600 dark:text-red-400"
+                          : ""
+                      }
                     >
                       {formatDate(loan.dueDate)}
                     </span>
                   </div>
 
                   {isOverdue && (
-                    <div className="rounded-md bg-red-100 border border-red-300 p-2 text-xs text-red-900">
+                    <div className="rounded-md bg-red-100 border border-red-300 p-2 text-xs text-red-900 dark:bg-red-900 dark:border-red-700 dark:text-red-100">
                       ⚠️ <strong>OVERDUE!</strong> This loan will be
                       automatically deducted soon, even if it puts your balance
                       negative!

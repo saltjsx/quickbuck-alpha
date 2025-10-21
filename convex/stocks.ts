@@ -669,21 +669,50 @@ export const transferStock = mutation({
     }
 
     // ANTI-EXPLOIT: Check receiver ownership cap
-    const receiverOwnershipCheck = await calculateTotalOwnership(
-      ctx,
-      args.companyId,
-      args.toId,
-      args.toType,
-      args.shares
-    );
+    // BUT: If sender and receiver are both controlled by the same user, skip this check
+    // since it's just moving shares between their own accounts (total doesn't change)
+    let skipOwnershipCheck = false;
+    
+    // Get the actual user who controls both sender and receiver
+    let senderControllingUserId = fromHolderType === "user" ? fromHolderId : null;
+    if (fromHolderType === "company") {
+      const senderCompany = await ctx.db.get(fromHolderId as any);
+      if (senderCompany && "ownerId" in senderCompany) {
+        senderControllingUserId = senderCompany.ownerId;
+      }
+    }
+    
+    let receiverControllingUserId = args.toType === "user" ? args.toId : null;
+    if (args.toType === "company") {
+      const receiverCompany = await ctx.db.get(args.toId as any);
+      if (receiverCompany && "ownerId" in receiverCompany) {
+        receiverControllingUserId = receiverCompany.ownerId;
+      }
+    }
+    
+    // If same user controls both, skip ownership check
+    if (senderControllingUserId && receiverControllingUserId && 
+        senderControllingUserId === receiverControllingUserId) {
+      skipOwnershipCheck = true;
+    }
 
-    if (!receiverOwnershipCheck.canProceed) {
-      throw new Error(
-        `Cannot complete transfer: The receiver would have ${receiverOwnershipCheck.ownershipPercent.toFixed(
-          2
-        )}% ` +
-          `total ownership across all their accounts. Maximum allowed is 100%.`
+    if (!skipOwnershipCheck) {
+      const receiverOwnershipCheck = await calculateTotalOwnership(
+        ctx,
+        args.companyId,
+        args.toId,
+        args.toType,
+        args.shares
       );
+
+      if (!receiverOwnershipCheck.canProceed) {
+        throw new Error(
+          `Cannot complete transfer: The receiver would have ${receiverOwnershipCheck.ownershipPercent.toFixed(
+            2
+          )}% ` +
+            `total ownership across all their accounts. Maximum allowed is 100%.`
+        );
+      }
     }
 
     // Record transaction

@@ -46,6 +46,24 @@ export function EditCompanyDialog({
   const { toast } = useToast();
   const filter = new Filter();
 
+  // Reset form when dialog opens or company changes
+  const resetForm = () => {
+    setName(company.name);
+    setDescription(company.description || "");
+    setTags(company.tags);
+    setTagInput("");
+    setTicker(company.ticker);
+    setLogoUrl(company.logoUrl || "");
+  };
+
+  // Reset form when dialog opens
+  const handleOpenChange = (newOpen: boolean) => {
+    if (newOpen) {
+      resetForm();
+    }
+    setOpen(newOpen);
+  };
+
   // Helper function to extract filename from URL
   const getFilenameFromUrl = (url: string): string => {
     try {
@@ -196,7 +214,7 @@ export function EditCompanyDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         {trigger || (
           <Button variant="outline" size="sm">

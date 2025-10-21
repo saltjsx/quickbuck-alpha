@@ -815,13 +815,25 @@ export const deleteCompany = mutation({
       await ctx.db.patch(product._id, { isActive: false });
     }
 
-    // Delete all stock holdings for this company
+    // Delete all stock holdings for this company (where this company is the stock target)
     const stocks = await ctx.db
       .query("stocks")
       .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
       .collect();
 
     for (const stock of stocks) {
+      await ctx.db.delete(stock._id);
+    }
+
+    // Delete all stock holdings owned by this company (where this company is the holder)
+    const companyOwnedStocks = await ctx.db
+      .query("stocks")
+      .withIndex("by_holder_holderType", (q) =>
+        q.eq("holderId", args.companyId).eq("holderType", "company")
+      )
+      .collect();
+
+    for (const stock of companyOwnedStocks) {
       await ctx.db.delete(stock._id);
     }
 
@@ -1239,13 +1251,25 @@ export const internalDeleteCompany = internalMutation({
       await ctx.db.patch(product._id, { isActive: false });
     }
 
-    // Delete all stock holdings for this company
+    // Delete all stock holdings for this company (where this company is the stock target)
     const stocks = await ctx.db
       .query("stocks")
       .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
       .collect();
 
     for (const stock of stocks) {
+      await ctx.db.delete(stock._id);
+    }
+
+    // Delete all stock holdings owned by this company (where this company is the holder)
+    const companyOwnedStocks = await ctx.db
+      .query("stocks")
+      .withIndex("by_holder_holderType", (q) =>
+        q.eq("holderId", args.companyId).eq("holderType", "company")
+      )
+      .collect();
+
+    for (const stock of companyOwnedStocks) {
       await ctx.db.delete(stock._id);
     }
 

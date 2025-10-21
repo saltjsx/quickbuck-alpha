@@ -602,17 +602,20 @@ export function GambleTab() {
 
   return (
     <div className="space-y-6">
-      <Card className="border-amber-300/60 bg-amber-50">
+      <Card className="border-amber-300/60 bg-amber-50 dark:bg-amber-950 dark:border-amber-800/60">
         <CardHeader className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-          <div className="flex items-center gap-2 text-amber-900">
+          <div className="flex items-center gap-2 text-amber-900 dark:text-amber-100">
             <AlertTriangle className="h-5 w-5" />
             <CardTitle>Tip: Keep personal funds loaded</CardTitle>
           </div>
-          <Badge variant="secondary" className="bg-amber-200 text-amber-900">
+          <Badge
+            variant="secondary"
+            className="bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-100"
+          >
             House rake: 4% on every winning payout
           </Badge>
         </CardHeader>
-        <CardContent className="text-amber-900/80 space-y-2">
+        <CardContent className="text-amber-900/80 dark:text-amber-100/80 space-y-2">
           <p>
             Transfer profits out of your company accounts into your personal
             account before playing. Only personal funds can be wagered here, and
