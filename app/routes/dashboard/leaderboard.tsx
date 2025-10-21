@@ -713,143 +713,155 @@ export default function LeaderboardPage() {
                     No companies have been created yet.
                   </p>
                 ) : (
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-[50px]">#</TableHead>
-                          <TableHead className="min-w-[220px]">
-                            <SortableHeader
-                              label="Company"
-                              active={companySort.key === "name"}
-                              onClick={() =>
-                                toggleSort(companySort, setCompanySort, "name")
-                              }
-                            />
-                          </TableHead>
-                          <TableHead className="min-w-[160px]">
-                            <SortableHeader
-                              label="Owner"
-                              active={companySort.key === "ownerName"}
-                              onClick={() =>
-                                toggleSort(
-                                  companySort,
-                                  setCompanySort,
-                                  "ownerName"
-                                )
-                              }
-                            />
-                          </TableHead>
-                          <TableHead className="text-right">
-                            <SortableHeader
-                              label="Cash"
-                              numeric
-                              active={companySort.key === "balance"}
-                              onClick={() =>
-                                toggleSort(
-                                  companySort,
-                                  setCompanySort,
-                                  "balance"
-                                )
-                              }
-                            />
-                          </TableHead>
-                          <TableHead className="text-right">
-                            <SortableHeader
-                              label="Net Worth"
-                              numeric
-                              active={companySort.key === "netWorth"}
-                              onClick={() =>
-                                toggleSort(
-                                  companySort,
-                                  setCompanySort,
-                                  "netWorth"
-                                )
-                              }
-                            />
-                          </TableHead>
-                          <TableHead className="text-right">
-                            <SortableHeader
-                              label="Market Cap"
-                              numeric
-                              active={companySort.key === "marketCap"}
-                              onClick={() =>
-                                toggleSort(
-                                  companySort,
-                                  setCompanySort,
-                                  "marketCap"
-                                )
-                              }
-                            />
-                          </TableHead>
-                          <TableHead>
-                            <SortableHeader
-                              label="Status"
-                              active={companySort.key === "isPublic"}
-                              onClick={() =>
-                                toggleSort(
-                                  companySort,
-                                  setCompanySort,
-                                  "isPublic"
-                                )
-                              }
-                            />
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {sortedCompanies.map((company: any, index: number) => (
-                          <TableRow
-                            key={company._id}
-                            className="hover:bg-muted/40"
-                          >
-                            <TableCell className="font-medium">
-                              {index + 1}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                {company.logoUrl ? (
-                                  <img
-                                    src={company.logoUrl}
-                                    alt={company.name}
-                                    className="w-8 h-8 rounded"
-                                  />
-                                ) : (
-                                  <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center">
-                                    <Building2 className="h-4 w-4 text-primary" />
-                                  </div>
-                                )}
-                                <div>
-                                  <p className="font-semibold">
-                                    {company.name}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {company.ticker}
-                                  </p>
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell>{company.ownerName}</TableCell>
-                            <TableCell className="text-right">
-                              {formatCurrency(company.balance)}
-                            </TableCell>
-                            <TableCell className="text-right font-semibold">
-                              {formatCurrency(company.netWorth)}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {formatCurrency(company.marketCap)}
-                            </TableCell>
-                            <TableCell>
-                              {company.isPublic ? (
-                                <Badge variant="default">Public</Badge>
-                              ) : (
-                                <Badge variant="secondary">Private</Badge>
-                              )}
-                            </TableCell>
+                  <div className="overflow-x-auto">
+                    <div className="rounded-md border inline-block min-w-full">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-[50px]">#</TableHead>
+                            <TableHead className="min-w-[180px]">
+                              <SortableHeader
+                                label="Company"
+                                active={companySort.key === "name"}
+                                onClick={() =>
+                                  toggleSort(
+                                    companySort,
+                                    setCompanySort,
+                                    "name"
+                                  )
+                                }
+                              />
+                            </TableHead>
+                            <TableHead className="min-w-[140px] hidden sm:table-cell">
+                              <SortableHeader
+                                label="Owner"
+                                active={companySort.key === "ownerName"}
+                                onClick={() =>
+                                  toggleSort(
+                                    companySort,
+                                    setCompanySort,
+                                    "ownerName"
+                                  )
+                                }
+                              />
+                            </TableHead>
+                            <TableHead className="text-right hidden md:table-cell">
+                              <SortableHeader
+                                label="Cash"
+                                numeric
+                                active={companySort.key === "balance"}
+                                onClick={() =>
+                                  toggleSort(
+                                    companySort,
+                                    setCompanySort,
+                                    "balance"
+                                  )
+                                }
+                              />
+                            </TableHead>
+                            <TableHead className="text-right">
+                              <SortableHeader
+                                label="Net Worth"
+                                numeric
+                                active={companySort.key === "netWorth"}
+                                onClick={() =>
+                                  toggleSort(
+                                    companySort,
+                                    setCompanySort,
+                                    "netWorth"
+                                  )
+                                }
+                              />
+                            </TableHead>
+                            <TableHead className="text-right hidden lg:table-cell">
+                              <SortableHeader
+                                label="Market Cap"
+                                numeric
+                                active={companySort.key === "marketCap"}
+                                onClick={() =>
+                                  toggleSort(
+                                    companySort,
+                                    setCompanySort,
+                                    "marketCap"
+                                  )
+                                }
+                              />
+                            </TableHead>
+                            <TableHead className="hidden md:table-cell">
+                              <SortableHeader
+                                label="Status"
+                                active={companySort.key === "isPublic"}
+                                onClick={() =>
+                                  toggleSort(
+                                    companySort,
+                                    setCompanySort,
+                                    "isPublic"
+                                  )
+                                }
+                              />
+                            </TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {sortedCompanies.map(
+                            (company: any, index: number) => (
+                              <TableRow
+                                key={company._id}
+                                className="hover:bg-muted/40"
+                              >
+                                <TableCell className="font-medium">
+                                  {index + 1}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    {company.logoUrl ? (
+                                      <img
+                                        src={company.logoUrl}
+                                        alt={company.name}
+                                        className="w-8 h-8 rounded flex-shrink-0"
+                                      />
+                                    ) : (
+                                      <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                        <Building2 className="h-4 w-4 text-primary" />
+                                      </div>
+                                    )}
+                                    <div className="min-w-0">
+                                      <p className="font-semibold truncate">
+                                        {company.name}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {company.ticker}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="hidden sm:table-cell">
+                                  <span className="truncate max-w-[120px] block">
+                                    {company.ownerName}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="text-right whitespace-nowrap hidden md:table-cell">
+                                  ${(company.balance / 1000).toFixed(1)}K
+                                </TableCell>
+                                <TableCell className="text-right font-semibold whitespace-nowrap">
+                                  ${(company.netWorth / 1000).toFixed(1)}K
+                                </TableCell>
+                                <TableCell className="text-right whitespace-nowrap hidden lg:table-cell">
+                                  ${(company.marketCap / 1000).toFixed(1)}K
+                                </TableCell>
+                                <TableCell className="hidden md:table-cell">
+                                  {company.isPublic ? (
+                                    <Badge variant="default">Public</Badge>
+                                  ) : (
+                                    <Badge variant="secondary">Private</Badge>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            )
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
                 )}
               </CardContent>
@@ -879,109 +891,113 @@ export default function LeaderboardPage() {
                     No players have joined yet.
                   </p>
                 ) : (
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-[50px]">#</TableHead>
-                          <TableHead className="min-w-[220px]">
-                            <SortableHeader
-                              label="Player"
-                              active={playerSort.key === "name"}
-                              onClick={() =>
-                                toggleSort(playerSort, setPlayerSort, "name")
-                              }
-                            />
-                          </TableHead>
-                          <TableHead className="text-right">
-                            <SortableHeader
-                              label="Cash"
-                              numeric
-                              active={playerSort.key === "cashBalance"}
-                              onClick={() =>
-                                toggleSort(
-                                  playerSort,
-                                  setPlayerSort,
-                                  "cashBalance"
-                                )
-                              }
-                            />
-                          </TableHead>
-                          <TableHead className="text-right">
-                            <SortableHeader
-                              label="Portfolio"
-                              numeric
-                              active={playerSort.key === "portfolioValue"}
-                              onClick={() =>
-                                toggleSort(
-                                  playerSort,
-                                  setPlayerSort,
-                                  "portfolioValue"
-                                )
-                              }
-                            />
-                          </TableHead>
-                          <TableHead className="text-right">
-                            <SortableHeader
-                              label="Net Worth"
-                              numeric
-                              active={playerSort.key === "netWorth"}
-                              onClick={() =>
-                                toggleSort(
-                                  playerSort,
-                                  setPlayerSort,
-                                  "netWorth"
-                                )
-                              }
-                            />
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {sortedPlayers.map((player: any, index: number) => (
-                          <TableRow
-                            key={player._id}
-                            className="hover:bg-muted/40"
-                          >
-                            <TableCell className="font-medium">
-                              {index + 1}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Avatar className="h-8 w-8">
-                                  {player.avatarUrl ? (
-                                    <AvatarImage
-                                      src={player.avatarUrl}
-                                      alt={player.name}
-                                    />
-                                  ) : null}
-                                  <AvatarFallback>
-                                    {getInitials(player.name)}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div>
-                                  <p className="font-semibold">{player.name}</p>
-                                  {player.username && (
-                                    <p className="text-xs text-muted-foreground">
-                                      @{player.username}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {formatCurrency(player.cashBalance)}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {formatCurrency(player.portfolioValue)}
-                            </TableCell>
-                            <TableCell className="text-right font-semibold">
-                              {formatCurrency(player.netWorth)}
-                            </TableCell>
+                  <div className="overflow-x-auto">
+                    <div className="rounded-md border inline-block min-w-full">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-[50px]">#</TableHead>
+                            <TableHead className="min-w-[180px]">
+                              <SortableHeader
+                                label="Player"
+                                active={playerSort.key === "name"}
+                                onClick={() =>
+                                  toggleSort(playerSort, setPlayerSort, "name")
+                                }
+                              />
+                            </TableHead>
+                            <TableHead className="text-right hidden md:table-cell">
+                              <SortableHeader
+                                label="Cash"
+                                numeric
+                                active={playerSort.key === "cashBalance"}
+                                onClick={() =>
+                                  toggleSort(
+                                    playerSort,
+                                    setPlayerSort,
+                                    "cashBalance"
+                                  )
+                                }
+                              />
+                            </TableHead>
+                            <TableHead className="text-right hidden sm:table-cell">
+                              <SortableHeader
+                                label="Portfolio"
+                                numeric
+                                active={playerSort.key === "portfolioValue"}
+                                onClick={() =>
+                                  toggleSort(
+                                    playerSort,
+                                    setPlayerSort,
+                                    "portfolioValue"
+                                  )
+                                }
+                              />
+                            </TableHead>
+                            <TableHead className="text-right">
+                              <SortableHeader
+                                label="Net Worth"
+                                numeric
+                                active={playerSort.key === "netWorth"}
+                                onClick={() =>
+                                  toggleSort(
+                                    playerSort,
+                                    setPlayerSort,
+                                    "netWorth"
+                                  )
+                                }
+                              />
+                            </TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {sortedPlayers.map((player: any, index: number) => (
+                            <TableRow
+                              key={player._id}
+                              className="hover:bg-muted/40"
+                            >
+                              <TableCell className="font-medium">
+                                {index + 1}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <Avatar className="h-8 w-8 flex-shrink-0">
+                                    {player.avatarUrl ? (
+                                      <AvatarImage
+                                        src={player.avatarUrl}
+                                        alt={player.name}
+                                      />
+                                    ) : null}
+                                    <AvatarFallback>
+                                      {getInitials(player.name)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="min-w-0">
+                                    <p className="font-semibold truncate">
+                                      {player.name}
+                                    </p>
+                                    {player.username && (
+                                      <p className="text-xs text-muted-foreground truncate">
+                                        @{player.username}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right whitespace-nowrap hidden md:table-cell">
+                                ${(player.cashBalance / 1000).toFixed(1)}K
+                              </TableCell>
+                              <TableCell className="text-right whitespace-nowrap hidden sm:table-cell">
+                                ${(player.portfolioValue / 1000).toFixed(1)}K
+                              </TableCell>
+                              <TableCell className="text-right font-semibold whitespace-nowrap">
+                                ${(player.netWorth / 1000).toFixed(1)}K
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
                 )}
               </CardContent>
@@ -1012,12 +1028,12 @@ export default function LeaderboardPage() {
                   </p>
                 ) : (
                   <div className="overflow-x-auto">
-                    <div className="rounded-md border overflow-hidden">
+                    <div className="rounded-md border inline-block min-w-full">
                       <Table>
                         <TableHeader>
                           <TableRow>
                             <TableHead className="w-[50px]">#</TableHead>
-                            <TableHead className="min-w-[220px]">
+                            <TableHead className="min-w-[180px]">
                               <SortableHeader
                                 label="Product"
                                 active={productSort.key === "name"}
@@ -1030,7 +1046,7 @@ export default function LeaderboardPage() {
                                 }
                               />
                             </TableHead>
-                            <TableHead className="min-w-[200px] hidden md:table-cell">
+                            <TableHead className="min-w-[140px] hidden md:table-cell">
                               <SortableHeader
                                 label="Company"
                                 active={productSort.key === "companyName"}
@@ -1085,7 +1101,7 @@ export default function LeaderboardPage() {
                                 }
                               />
                             </TableHead>
-                            <TableHead className="text-right hidden lg:table-cell">
+                            <TableHead className="text-right hidden xl:table-cell">
                               <SortableHeader
                                 label="Profit"
                                 numeric
@@ -1116,14 +1132,14 @@ export default function LeaderboardPage() {
                                     <img
                                       src={product.imageUrl}
                                       alt={product.name}
-                                      className="w-8 h-8 rounded object-cover"
+                                      className="w-8 h-8 rounded object-cover flex-shrink-0"
                                     />
                                   ) : (
-                                    <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center">
+                                    <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
                                       <Package className="h-4 w-4 text-primary" />
                                     </div>
                                   )}
-                                  <p className="font-semibold truncate max-w-[12rem]">
+                                  <p className="font-semibold truncate max-w-[140px]">
                                     {product.name}
                                   </p>
                                 </div>
@@ -1134,11 +1150,11 @@ export default function LeaderboardPage() {
                                     <img
                                       src={product.companyLogoUrl}
                                       alt={product.companyName}
-                                      className="w-6 h-6 rounded"
+                                      className="w-6 h-6 rounded flex-shrink-0"
                                     />
                                   )}
-                                  <div>
-                                    <p className="text-sm truncate max-w-[10rem]">
+                                  <div className="min-w-0">
+                                    <p className="text-sm truncate max-w-[100px]">
                                       {product.companyName}
                                     </p>
                                     {product.companyTicker && (
@@ -1150,15 +1166,17 @@ export default function LeaderboardPage() {
                                 </div>
                               </TableCell>
                               <TableCell className="text-right whitespace-nowrap">
-                                {formatCurrency(product.price)}
+                                ${product.price.toFixed(0)}
                               </TableCell>
                               <TableCell className="text-right whitespace-nowrap">
-                                {formatNumber(product.totalSales)}
+                                {product.totalSales > 1000
+                                  ? `${(product.totalSales / 1000).toFixed(1)}K`
+                                  : formatNumber(product.totalSales)}
                               </TableCell>
                               <TableCell className="text-right hidden lg:table-cell whitespace-nowrap">
-                                {formatCurrency(product.totalRevenue)}
+                                ${(product.totalRevenue / 1000).toFixed(1)}K
                               </TableCell>
-                              <TableCell className="text-right hidden lg:table-cell whitespace-nowrap">
+                              <TableCell className="text-right hidden xl:table-cell whitespace-nowrap">
                                 <span
                                   className={
                                     product.profit >= 0
@@ -1166,7 +1184,7 @@ export default function LeaderboardPage() {
                                       : "text-red-600"
                                   }
                                 >
-                                  {formatCurrency(product.profit)}
+                                  ${(product.profit / 1000).toFixed(1)}K
                                 </span>
                               </TableCell>
                             </TableRow>

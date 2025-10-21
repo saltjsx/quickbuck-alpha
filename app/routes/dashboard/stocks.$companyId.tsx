@@ -295,11 +295,177 @@ export default function StockDetailPage() {
         </div>
 
         <div className="px-4 lg:px-8">
+          {/* Trade Panel - Show on mobile first */}
+          <div className="lg:hidden mb-6">
+            <Card className="border-2">
+              <CardHeader className="pb-3">
+                <div className="space-y-3">
+                  <CardTitle className="text-xl">
+                    Trade {company.ticker}
+                  </CardTitle>
+                  <Tabs value={mode} onValueChange={(v) => setMode(v as any)}>
+                    <TabsList className="grid w-full grid-cols-2 h-10">
+                      <TabsTrigger
+                        value="buy"
+                        className="text-base font-semibold data-[state=active]:bg-emerald-500 data-[state=active]:text-white"
+                      >
+                        <ShoppingCart className="w-4 h-4 mr-2" /> BUY
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="sell"
+                        className="text-base font-semibold data-[state=active]:bg-red-500 data-[state=active]:text-white"
+                      >
+                        <TrendingDownIcon className="w-4 h-4 mr-2" /> SELL
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
+                <CardDescription className="pt-2">
+                  {mode === "buy"
+                    ? "Purchase shares using your selected account"
+                    : "Sell shares from your holdings"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {currentHolding && (
+                  <div className="p-3 bg-muted rounded-lg">
+                    <p className="text-sm text-muted-foreground">
+                      Your Holdings
+                    </p>
+                    <p className="text-lg font-semibold">
+                      {currentHolding.shares} shares
+                    </p>
+                    <p className="text-sm">
+                      Value: ${currentHolding.currentValue.toFixed(2)}
+                    </p>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="account-mobile">Account</Label>
+                  <Select
+                    value={selectedAccount}
+                    onValueChange={setSelectedAccount}
+                  >
+                    <SelectTrigger id="account-mobile">
+                      <SelectValue placeholder="Select account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {accounts.map((account: any) => (
+                        <SelectItem key={account._id} value={account._id}>
+                          {account.name} - $
+                          {account.balance?.toFixed(2) || "0.00"} (
+                          {account.type})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedAccountObj && (
+                    <div className="text-xs text-muted-foreground pt-2 px-1">
+                      Buying as:{" "}
+                      <span className="font-semibold capitalize">
+                        {derivedBuyerType === "company"
+                          ? "Company"
+                          : "Personal"}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="shares-mobile">Number of Shares</Label>
+                  <Input
+                    id="shares-mobile"
+                    type="number"
+                    placeholder="0"
+                    value={shareAmount}
+                    onChange={(e) => setShareAmount(e.target.value)}
+                    min={minTradeSize}
+                  />
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setQuickShares("min")}
+                    >
+                      Min
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setQuickShares("10")}
+                    >
+                      10
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setQuickShares("100")}
+                    >
+                      100
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setQuickShares("1000")}
+                    >
+                      1k
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setQuickShares("max")}
+                    >
+                      Max
+                    </Button>
+                  </div>
+                  {shareAmount && !isNaN(parseFloat(shareAmount)) && (
+                    <div className="text-sm text-muted-foreground">
+                      {mode === "buy" ? (
+                        <>Total cost: ${totalCost.toFixed(2)}</>
+                      ) : (
+                        <>
+                          Estimated proceeds: $
+                          {(parseFloat(shareAmount) * currentPrice).toFixed(2)}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <Button
+                  className={`w-full h-12 font-bold text-base ${
+                    mode === "buy"
+                      ? "bg-emerald-600 hover:bg-emerald-700"
+                      : "bg-red-600 hover:bg-red-700"
+                  }`}
+                  onClick={onSubmitTrade}
+                  disabled={isProcessing || !selectedAccount || !shareAmount}
+                >
+                  {mode === "buy" ? (
+                    <>
+                      <ShoppingCart className="w-4 h-4 mr-2" /> Buy Shares
+                    </>
+                  ) : (
+                    <>
+                      <TrendingDownIcon className="w-4 h-4 mr-2" /> Sell Shares
+                    </>
+                  )}
+                </Button>
+
+                <div className="text-xs text-muted-foreground">
+                  Min trade size: {minTradeSize.toLocaleString()} shares. Price
+                  may move on execution due to market impact.
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
           <div className="grid gap-6 lg:grid-cols-12">
             {/* Left content */}
             <div className="lg:col-span-8 space-y-6">
               {/* Stats */}
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">
@@ -308,7 +474,7 @@ export default function StockDetailPage() {
                     <DollarSign className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">
+                    <div className="text-xl lg:text-2xl font-bold">
                       $
                       {stats.marketCap.toLocaleString("en-US", {
                         minimumFractionDigits: 2,
@@ -325,7 +491,7 @@ export default function StockDetailPage() {
                     <Activity className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">
+                    <div className="text-xl lg:text-2xl font-bold">
                       {stats.volume24h.toLocaleString()}
                     </div>
                   </CardContent>
@@ -338,7 +504,7 @@ export default function StockDetailPage() {
                     <TrendingUp className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">
+                    <div className="text-xl lg:text-2xl font-bold">
                       ${stats.highPrice.toFixed(2)}
                     </div>
                   </CardContent>
@@ -351,7 +517,7 @@ export default function StockDetailPage() {
                     <TrendingDown className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">
+                    <div className="text-xl lg:text-2xl font-bold">
                       ${stats.lowPrice.toFixed(2)}
                     </div>
                   </CardContent>
@@ -361,7 +527,7 @@ export default function StockDetailPage() {
               {/* Chart */}
               <Card>
                 <CardHeader>
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-2">
                       <BarChart3 className="h-5 w-5" />
                       <CardTitle>Price History</CardTitle>
@@ -370,7 +536,7 @@ export default function StockDetailPage() {
                       value={timeRange}
                       onValueChange={(v) => setTimeRange(v)}
                     >
-                      <TabsList>
+                      <TabsList className="grid grid-cols-6 w-full sm:w-auto">
                         <TabsTrigger value="1h">1h</TabsTrigger>
                         <TabsTrigger value="6h">6h</TabsTrigger>
                         <TabsTrigger value="24h">24h</TabsTrigger>
@@ -384,12 +550,12 @@ export default function StockDetailPage() {
                     Price updates during the selected time period
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="overflow-hidden">
                   <ChartContainer
                     config={{
                       price: { label: "Price", color: "hsl(var(--chart-1))" },
                     }}
-                    className="h-[420px] w-full"
+                    className="h-[300px] sm:h-[420px] w-full"
                   >
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={chartData}>
@@ -497,7 +663,7 @@ export default function StockDetailPage() {
             </div>
 
             {/* Right trade panel */}
-            <div className="lg:col-span-4">
+            <div className="hidden lg:block lg:col-span-4">
               <Card className="border-2">
                 <CardHeader className="pb-3">
                   <div className="space-y-3">

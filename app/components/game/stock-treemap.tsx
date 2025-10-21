@@ -133,10 +133,10 @@ export function StockTreemap({ stocks, onStockClick }: StockTreemapProps) {
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full overflow-hidden">
       <div
         className="relative w-full bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden"
-        style={{ height: 600 }}
+        style={{ height: "min(600px, 80vh)" }}
       >
         <TooltipProvider>
           {cells.map((cell, index) => {

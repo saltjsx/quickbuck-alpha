@@ -17,6 +17,19 @@ import type { Route } from "./+types/portfolio";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Spinner } from "~/components/ui/spinner";
 
+function formatCurrencyCompact(value: number) {
+  if (value >= 1_000_000_000) {
+    return `$${(value / 1_000_000_000).toFixed(2)}B`;
+  }
+  if (value >= 1_000_000) {
+    return `$${(value / 1_000_000).toFixed(2)}M`;
+  }
+  if (value >= 10_000) {
+    return `$${(value / 1_000).toFixed(1)}K`;
+  }
+  return `$${value.toFixed(2)}`;
+}
+
 export function meta({}: Route.MetaArgs) {
   return [
     { title: "My Portfolio - QuickBuck" },
@@ -103,9 +116,9 @@ export default function PortfolioPage() {
                     <CardDescription>Your total investment</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex items-baseline gap-4">
-                      <p className="text-4xl font-bold">
-                        ${totalPortfolioValue.toFixed(2)}
+                    <div className="flex flex-col sm:flex-row sm:items-baseline gap-2 sm:gap-4">
+                      <p className="text-3xl sm:text-4xl font-bold break-all">
+                        {formatCurrencyCompact(totalPortfolioValue)}
                       </p>
                       {totalGainLoss !== 0 && (
                         <div
@@ -116,12 +129,12 @@ export default function PortfolioPage() {
                           }`}
                         >
                           {totalGainLoss >= 0 ? (
-                            <TrendingUp className="h-5 w-5" />
+                            <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5" />
                           ) : (
-                            <TrendingDown className="h-5 w-5" />
+                            <TrendingDown className="h-4 w-4 sm:h-5 sm:w-5" />
                           )}
-                          <span className="text-lg font-semibold">
-                            ${Math.abs(totalGainLoss).toFixed(2)} (
+                          <span className="text-base sm:text-lg font-semibold">
+                            {formatCurrencyCompact(Math.abs(totalGainLoss))} (
                             {totalGainLossPercent > 0 ? "+" : ""}
                             {totalGainLossPercent.toFixed(2)}%)
                           </span>
@@ -167,18 +180,18 @@ export default function PortfolioPage() {
                               }
                             >
                               <CardContent className="pt-6">
-                                <div className="flex items-start justify-between">
-                                  <div className="flex-1">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-1">
                                       {holding.companyLogoUrl && (
                                         <img
                                           src={holding.companyLogoUrl}
                                           alt={holding.companyName}
-                                          className="h-8 w-8 object-contain rounded border"
+                                          className="h-8 w-8 object-contain rounded border flex-shrink-0"
                                         />
                                       )}
-                                      <div>
-                                        <h3 className="font-semibold">
+                                      <div className="min-w-0">
+                                        <h3 className="font-semibold truncate text-sm sm:text-base">
                                           {holding.companyName}
                                         </h3>
                                         <Badge
@@ -189,35 +202,33 @@ export default function PortfolioPage() {
                                         </Badge>
                                       </div>
                                     </div>
-                                    <p className="text-sm text-muted-foreground">
+                                    <p className="text-xs sm:text-sm text-muted-foreground">
                                       {holding.shares} shares @ $
                                       {holding.averagePurchasePrice.toFixed(2)}
                                     </p>
                                   </div>
-                                  <div className="text-right">
-                                    <p className="font-semibold text-lg">
-                                      $
-                                      {holding.currentValue.toLocaleString(
-                                        "en-US",
-                                        {
-                                          minimumFractionDigits: 2,
-                                        }
+                                  <div className="text-right flex-shrink-0">
+                                    <p className="font-semibold text-base sm:text-lg break-all">
+                                      {formatCurrencyCompact(
+                                        holding.currentValue
                                       )}
                                     </p>
                                     <div
-                                      className={`flex items-center gap-1 text-sm justify-end ${
+                                      className={`flex items-center gap-1 text-xs sm:text-sm justify-end ${
                                         isPositive
                                           ? "text-green-600"
                                           : "text-red-600"
                                       }`}
                                     >
                                       {isPositive ? (
-                                        <TrendingUp className="h-4 w-4" />
+                                        <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4" />
                                       ) : (
-                                        <TrendingDown className="h-4 w-4" />
+                                        <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4" />
                                       )}
                                       <span>
-                                        ${Math.abs(holding.gainLoss).toFixed(2)}{" "}
+                                        {formatCurrencyCompact(
+                                          Math.abs(holding.gainLoss)
+                                        )}{" "}
                                         ({holding.gainLossPercent.toFixed(2)}
                                         %)
                                       </span>
@@ -342,19 +353,21 @@ function CompanyPortfolioSection({
   );
 
   return (
-    <div className="p-6 border rounded-lg">
+    <div className="p-4 sm:p-6 border rounded-lg">
       {/* Company Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <div className="flex items-center gap-3">
           {company.logoUrl && (
             <img
               src={company.logoUrl}
               alt={company.name}
-              className="h-10 w-10 object-contain rounded border"
+              className="h-10 w-10 object-contain rounded border flex-shrink-0"
             />
           )}
-          <div>
-            <h3 className="font-semibold text-lg">{company.name}</h3>
+          <div className="min-w-0">
+            <h3 className="font-semibold text-base sm:text-lg truncate">
+              {company.name}
+            </h3>
             {company.ticker && (
               <Badge variant="outline" className="font-mono text-xs mt-1">
                 {company.ticker}
@@ -362,27 +375,25 @@ function CompanyPortfolioSection({
             )}
           </div>
         </div>
-        <div className="text-right">
-          <p className="text-sm text-muted-foreground">Portfolio Value</p>
-          <p className="text-2xl font-bold">
-            $
-            {totalPortfolioValue.toLocaleString("en-US", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
+        <div className="text-left sm:text-right">
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            Portfolio Value
+          </p>
+          <p className="text-xl sm:text-2xl font-bold break-all">
+            {formatCurrencyCompact(totalPortfolioValue)}
           </p>
           {totalGainLoss !== 0 && (
             <div
-              className={`flex items-center gap-1 text-sm justify-end mt-1 ${
+              className={`flex items-center gap-1 text-xs sm:text-sm mt-1 ${
                 totalGainLoss >= 0 ? "text-green-600" : "text-red-600"
               }`}
             >
               {totalGainLoss >= 0 ? (
-                <TrendingUp className="h-4 w-4" />
+                <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4" />
               ) : (
-                <TrendingDown className="h-4 w-4" />
+                <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4" />
               )}
-              <span>${Math.abs(totalGainLoss).toFixed(2)}</span>
+              <span>{formatCurrencyCompact(Math.abs(totalGainLoss))}</span>
             </div>
           )}
         </div>
@@ -412,23 +423,23 @@ function CompanyPortfolioSection({
             return (
               <div
                 key={holding._id}
-                className="p-4 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+                className="p-3 sm:p-4 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
                 onClick={() =>
                   navigate(`/dashboard/stocks/${holding.companyId}`)
                 }
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       {holding.companyLogoUrl && (
                         <img
                           src={holding.companyLogoUrl}
                           alt={holding.companyName}
-                          className="h-6 w-6 object-contain rounded border"
+                          className="h-6 w-6 object-contain rounded border flex-shrink-0"
                         />
                       )}
-                      <div>
-                        <h4 className="font-medium text-sm">
+                      <div className="min-w-0">
+                        <h4 className="font-medium text-xs sm:text-sm truncate">
                           {holding.companyName}
                         </h4>
                         <Badge variant="outline" className="font-mono text-xs">
@@ -441,12 +452,9 @@ function CompanyPortfolioSection({
                       {holding.averagePurchasePrice.toFixed(2)}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold">
-                      $
-                      {holding.currentValue.toLocaleString("en-US", {
-                        minimumFractionDigits: 2,
-                      })}
+                  <div className="text-right flex-shrink-0">
+                    <p className="font-semibold text-sm sm:text-base break-all">
+                      {formatCurrencyCompact(holding.currentValue)}
                     </p>
                     <div
                       className={`flex items-center gap-1 text-xs justify-end ${
@@ -459,7 +467,7 @@ function CompanyPortfolioSection({
                         <TrendingDown className="h-3 w-3" />
                       )}
                       <span>
-                        ${Math.abs(holding.gainLoss).toFixed(2)} (
+                        {formatCurrencyCompact(Math.abs(holding.gainLoss))} (
                         {holding.gainLossPercent.toFixed(2)}%)
                       </span>
                     </div>
