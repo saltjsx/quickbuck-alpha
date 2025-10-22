@@ -503,6 +503,12 @@ export default defineSchema({
     updatedAt: v.number(),
   }),
 
+  globalAlerts: defineTable({
+    title: v.string(),
+    description: v.string(),
+    createdAt: v.number(),
+  }),
+
   systemState: defineTable({
     key: v.string(),
     lastTickTime: v.optional(v.number()),

@@ -22,6 +22,7 @@ import type * as debug from "../debug.js";
 import type * as employees from "../employees.js";
 import type * as expenses from "../expenses.js";
 import type * as gamble from "../gamble.js";
+import type * as globalAlerts from "../globalAlerts.js";
 import type * as http from "../http.js";
 import type * as leaderboard from "../leaderboard.js";
 import type * as loans from "../loans.js";
@@ -57,6 +58,7 @@ declare const fullApi: ApiFromModules<{
   employees: typeof employees;
   expenses: typeof expenses;
   gamble: typeof gamble;
+  globalAlerts: typeof globalAlerts;
   http: typeof http;
   leaderboard: typeof leaderboard;
   loans: typeof loans;
