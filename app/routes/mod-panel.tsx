@@ -25,11 +25,13 @@ export default function ModPanel() {
   // Queries
   const searchResults = useQuery(
     api.mod.searchUser,
-    isAuthenticated && searchQuery ? { query: searchQuery, modKey } : "skip"
+    isAuthenticated && searchQuery && modKey
+      ? { query: searchQuery, modKey }
+      : "skip"
   );
 
   const userWarnings =
-    isAuthenticated && selectedUser
+    isAuthenticated && selectedUser && modKey
       ? useQuery(api.mod.getUserWarningsForMod, {
           userId: selectedUser as any,
           modKey,
@@ -37,7 +39,7 @@ export default function ModPanel() {
       : null;
 
   const userCompanies =
-    isAuthenticated && selectedUser
+    isAuthenticated && selectedUser && modKey
       ? useQuery(api.mod.getUserCompanies, {
           userId: selectedUser as any,
           modKey,
@@ -45,7 +47,7 @@ export default function ModPanel() {
       : null;
 
   const companyProducts =
-    isAuthenticated && selectedCompany
+    isAuthenticated && selectedCompany && modKey
       ? useQuery(api.mod.getCompanyProducts, {
           companyId: selectedCompany as any,
           modKey,
