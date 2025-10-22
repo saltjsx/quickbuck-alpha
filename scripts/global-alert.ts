@@ -72,7 +72,7 @@ async function main() {
 
     // Show preview
     console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("ℹ️  PREVIEW");
+    console.log("[i] PREVIEW");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log(`Title: ${title}`);
     console.log(`Description:\n${description}`);
@@ -82,28 +82,28 @@ async function main() {
     const confirm = await question("Send this alert to all users? (yes/no): ");
 
     if (confirm.toLowerCase() !== "yes") {
-      console.log("❌ Alert cancelled");
+      console.log("✗ Alert cancelled");
       rl.close();
       process.exit(0);
     }
 
-    console.log("\n🚀 Sending global alert...");
+    console.log("\n► Sending global alert...");
 
     // Initialize Convex client
     const client = new ConvexHttpClient(convexUrl);
     
-    // Send alert
+    // Send alert - this is a public mutation, so no auth needed
     const result = await client.mutation(api.globalAlerts.sendAlert, {
       title: title.trim(),
       description: description,
     });
 
-    console.log("✅ Alert sent successfully!");
-    console.log(`   Alert ID: ${result.alertId}`);
-    console.log("   All users will see this alert once");
+    console.log("✓ Alert sent successfully!");
+    console.log(`  Alert ID: ${result.alertId}`);
+    console.log("  All users will see this alert once when they refresh");
 
   } catch (error) {
-    console.error("\n❌ Error sending alert:", error);
+    console.error("\n✗ Error sending alert:", error);
     rl.close();
     process.exit(1);
   }
