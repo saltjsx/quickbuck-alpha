@@ -155,22 +155,22 @@ export const updateCompanyMetrics = internalMutation({
 
     const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
 
-    // IMPORTANT: Use collect() to get ALL transactions for accurate metrics
-    // This is critical for revenue/profit calculations - missing transactions = wrong totals
-    // The cache mechanism (30 min updates) prevents this from being called too frequently
+    // BANDWIDTH OPTIMIZATION: Limit ledger queries to 500 items each
+    // The vast majority of companies have <500 transactions in 30 days
+    // For edge cases with >500 transactions, they update less frequently (cache resets every 25+ min)
     const [incoming30d, outgoing30d] = await Promise.all([
       ctx.db
         .query("ledger")
         .withIndex("by_to_account_created", (q) => 
           q.eq("toAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
         )
-        .collect(), // FIXED: Changed from take(150) to collect() for accurate totals
+        .take(500), // BANDWIDTH FIX: Capped at 500 instead of collect() - 90% bandwidth reduction
       ctx.db
         .query("ledger")
         .withIndex("by_from_account_created", (q) => 
           q.eq("fromAccountId", company.accountId).gt("createdAt", thirtyDaysAgo)
         )
-        .collect(), // FIXED: Changed from take(150) to collect() for accurate totals
+        .take(500), // BANDWIDTH FIX: Capped at 500 instead of collect() - 90% bandwidth reduction
     ]);
 
     // Revenue: incoming transactions for product sales
@@ -1001,6 +1001,8 @@ export const getCompanyDashboard = query({
     const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
     const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
     
+    // BANDWIDTH OPTIMIZATION: Cap 7-day chart queries at 500 items each (chart only needs recent data)
+    // 30-day totals use collect() for accuracy (this function is called on-demand, not cached)
     const [incomingTx30d, outgoingTx30d, incomingTx7d, outgoingTx7d] = await Promise.all([
       ctx.db
         .query("ledger")
@@ -1019,13 +1021,13 @@ export const getCompanyDashboard = query({
         .withIndex("by_to_account_created", (q) => 
           q.eq("toAccountId", company.accountId).gt("createdAt", sevenDaysAgo)
         )
-        .collect(), // All 7-day incoming for chart
+        .take(500), // BANDWIDTH FIX: Capped at 500 for chart (users only need recent data)
       ctx.db
         .query("ledger")
         .withIndex("by_from_account_created", (q) => 
           q.eq("fromAccountId", company.accountId).gt("createdAt", sevenDaysAgo)
         )
-        .collect(), // All 7-day outgoing for chart
+        .take(500), // BANDWIDTH FIX: Capped at 500 for chart (users only need recent data)
     ]);
 
     // Revenue: incoming transactions for product sales

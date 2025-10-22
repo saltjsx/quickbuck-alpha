@@ -221,21 +221,22 @@ function randomPoisson(lambda: number): number {
 async function loadEligibleProducts(
   ctx: any
 ): Promise<{ products: ProductCandidate[]; companies: Map<Id<"companies">, CompanyInfo> }> {
-  // Load all active products
+  // Load all active products (BANDWIDTH FIX: Use take(5000) instead of collect() to cap response)
   const allProducts = await ctx.db
     .query("products")
     .withIndex("by_active", (q: any) => q.eq("isActive", true))
-    .collect();
+    .take(5000); // Cap at 5000 products max per wave
 
-  // Get unique company IDs
+  // Get unique company IDs (BANDWIDTH FIX: Deduplicate before fetching)
   const companyIds = [...new Set(allProducts.map((p: any) => p.companyId))] as Id<"companies">[];
   
-  // Load companies
+  // Batch load all companies at once (BANDWIDTH FIX: Parallel instead of sequential)
   const companies = new Map<Id<"companies">, CompanyInfo>();
-  for (const companyId of companyIds) {
-    const company = await ctx.db.get(companyId);
+  const companyDocs = await Promise.all(companyIds.map(id => ctx.db.get(id)));
+  
+  companyDocs.forEach((company, index) => {
     if (company) {
-      companies.set(companyId, {
+      companies.set(companyIds[index], {
         _id: company._id,
         name: company.name,
         accountId: company.accountId,
@@ -244,7 +245,7 @@ async function loadEligibleProducts(
         sharePrice: company.sharePrice,
       });
     }
-  }
+  });
 
   // Filter and enrich products
   const products: ProductCandidate[] = [];
@@ -623,11 +624,20 @@ async function executePurchaseWithRetry(
   ctx: any,
   purchase: PlannedPurchase,
   systemAccountId: Id<"accounts">,
+  // BANDWIDTH FIX: Cache lookups to avoid redundant DB fetches
+  productCache: Map<Id<"products">, any>,
+  companyCache: Map<Id<"companies">, any>,
+  accountCache: Map<Id<"accounts">, any>,
   retries: number = 0
 ): Promise<PurchaseResult> {
   try {
-    // Verify product still exists and is active
-    const product = await ctx.db.get(purchase.productId);
+    // Use cached data instead of fetching each time
+    let product = productCache.get(purchase.productId);
+    if (!product) {
+      product = await ctx.db.get(purchase.productId);
+      if (product) productCache.set(purchase.productId, product);
+    }
+    
     if (!product || !product.isActive) {
       return {
         success: false,
@@ -638,8 +648,13 @@ async function executePurchaseWithRetry(
       };
     }
     
-    // Get company and account
-    const company = await ctx.db.get(purchase.companyId);
+    // Get company from cache
+    let company = companyCache.get(purchase.companyId);
+    if (!company) {
+      company = await ctx.db.get(purchase.companyId);
+      if (company) companyCache.set(purchase.companyId, company);
+    }
+    
     if (!company) {
       return {
         success: false,
@@ -650,7 +665,13 @@ async function executePurchaseWithRetry(
       };
     }
     
-    const companyAccount = await ctx.db.get(company.accountId);
+    // Get company account from cache
+    let companyAccount = accountCache.get(company.accountId);
+    if (!companyAccount) {
+      companyAccount = await ctx.db.get(company.accountId);
+      if (companyAccount) accountCache.set(company.accountId, companyAccount);
+    }
+    
     if (!companyAccount) {
       return {
         success: false,
@@ -711,7 +732,7 @@ async function executePurchaseWithRetry(
     // Retry logic
     if (retries < CONFIG.MAX_TRANSACTION_RETRIES) {
       // No sleeping inside mutations; retry immediately or move to action orchestration.
-      return executePurchaseWithRetry(ctx, purchase, systemAccountId, retries + 1);
+      return executePurchaseWithRetry(ctx, purchase, systemAccountId, productCache, companyCache, accountCache, retries + 1);
     }
     
     return {
@@ -849,8 +870,41 @@ export const executePublicPurchaseWave = internalMutation({
     const errors: string[] = [];
     const anomalies: string[] = [];
     
+    // BANDWIDTH FIX: Pre-populate caches with planned purchase data to avoid N+3 queries
+    const productCache = new Map<Id<"products">, any>();
+    const companyCache = new Map<Id<"companies">, any>();
+    const accountCache = new Map<Id<"accounts">, any>();
+    
+    // Pre-fetch all unique products, companies, and accounts needed for purchases
+    const uniqueProductIds = [...new Set(plannedPurchases.map(p => p.productId))];
+    const uniqueCompanyIds = [...new Set(plannedPurchases.map(p => p.companyId))];
+    
+    // Batch fetch all products and companies upfront (BANDWIDTH OPTIMIZATION)
+    const productsForCache = await Promise.all(uniqueProductIds.map(id => ctx.db.get(id)));
+    const companiesForCache = await Promise.all(uniqueCompanyIds.map(id => ctx.db.get(id)));
+    
+    productsForCache.forEach((p, idx) => {
+      if (p) productCache.set(uniqueProductIds[idx], p);
+    });
+    
+    companiesForCache.forEach((c, idx) => {
+      if (c) {
+        companyCache.set(uniqueCompanyIds[idx], c);
+        // Also pre-cache company accounts
+        accountCache.set(c.accountId, null); // Will fetch below
+      }
+    });
+    
+    // Batch fetch all company accounts
+    const accountIds = [...new Set(Array.from(companyCache.values()).map(c => c.accountId))];
+    const accountsForCache = await Promise.all(accountIds.map(id => ctx.db.get(id)));
+    
+    accountsForCache.forEach((a, idx) => {
+      if (a) accountCache.set(accountIds[idx], a);
+    });
+    
     for (const purchase of plannedPurchases) {
-      const result = await executePurchaseWithRetry(ctx, purchase, systemAccount._id);
+      const result = await executePurchaseWithRetry(ctx, purchase, systemAccount._id, productCache, companyCache, accountCache);
       results.push(result);
       
       if (result.success) {
