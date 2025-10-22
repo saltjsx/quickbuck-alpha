@@ -22,6 +22,72 @@ function question(query: string): Promise<string> {
   });
 }
 
+// Interactive selection function
+async function selectItems(
+  items: Array<{ id: string; name: string; reason: string }>,
+  itemType: string
+): Promise<string[]> {
+  const selected = new Set<string>();
+
+  console.log(`\n📋 Interactive Selection Mode`);
+  console.log(`Enter numbers to toggle selection (comma-separated or 'all'/'none')\n`);
+
+  while (true) {
+    // Display current selection
+    items.forEach((item, index) => {
+      const isSelected = selected.has(item.id);
+      const checkbox = isSelected ? "[✓]" : "[ ]";
+      console.log(`${checkbox} ${index + 1}. ${item.name}`);
+      console.log(`   Reason: ${item.reason}`);
+    });
+
+    console.log(`\n📊 Selected: ${selected.size}/${items.length}`);
+    console.log("Options: Enter numbers (e.g., '1,3,5'), 'all', 'none', or 'done' to proceed\n");
+
+    const input = await question("Your choice: ");
+
+    if (input.toLowerCase() === "done") {
+      if (selected.size === 0) {
+        console.log("❌ No items selected. Please select at least one item.");
+        continue;
+      }
+      break;
+    }
+
+    if (input.toLowerCase() === "all") {
+      items.forEach((item) => selected.add(item.id));
+      console.log(`✅ Selected all ${items.length} items\n`);
+      continue;
+    }
+
+    if (input.toLowerCase() === "none") {
+      selected.clear();
+      console.log("✅ Deselected all items\n");
+      continue;
+    }
+
+    // Parse number input
+    const numbers = input.split(",").map((n) => n.trim());
+    for (const num of numbers) {
+      const index = parseInt(num, 10) - 1;
+      if (isNaN(index) || index < 0 || index >= items.length) {
+        console.log(`⚠️  Invalid number: ${num}`);
+        continue;
+      }
+      const itemId = items[index].id;
+      if (selected.has(itemId)) {
+        selected.delete(itemId);
+      } else {
+        selected.add(itemId);
+      }
+    }
+
+    console.log("");
+  }
+
+  return Array.from(selected);
+}
+
 async function main() {
   // Get Gemini API key
   const apiKey = await question("Enter your Gemini API key: ");
@@ -169,19 +235,19 @@ Do not flag products just because they are low quality or have a bad description
       console.log(`   Reason: ${product.reason}\n`);
     });
 
-    // Ask for confirmation
-    const confirmation = await question("Do you want to proceed with removing these products? (yes/no): ");
+    // Interactive selection
+    const selectedIds = await selectItems(productsToRemove, "product");
 
-    if (confirmation.toLowerCase() !== "yes" && confirmation.toLowerCase() !== "y") {
-      console.log("\n❌ Operation cancelled");
+    if (selectedIds.length === 0) {
+      console.log("\n❌ No products selected for removal");
       rl.close();
       process.exit(0);
     }
 
-    console.log("\n🗑️  Removing products...");
+    console.log(`\n✅ Selected ${selectedIds.length} product(s) for removal\n`);
 
     // Prepare product IDs for deletion
-    const productIds = productsToRemove.map(p => p.id as any);
+    const productIds = selectedIds.map(id => id as any);
 
     try {
       // Remove products using admin mutation
