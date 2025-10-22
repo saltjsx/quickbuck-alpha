@@ -228,6 +228,35 @@ The original code had a bug where the first user to trigger account creation wou
 - After any economy reset
 - After migrating to the stochastic purchase system
 
+## Force Company to Go Public
+
+If a company went public but was recreated and lost its public status, or if you need to manually list a company on the stock market:
+
+```bash
+npx tsx scripts/force-company-public.ts
+```
+
+You'll be prompted for:
+1. Company ticker or ID
+2. Your Convex admin key
+
+The script will:
+1. Find the company by ticker or ID
+2. Show current company details (name, ticker, balance, public status)
+3. Force the company to go public with IPO pricing based on balance
+4. Create initial stock price history entry
+
+**When to use this:**
+- After a company was deleted and recreated (lost its public status)
+- When a company should be public but the automatic check failed
+- To manually list a company on the stock market
+
+**Pricing:**
+- IPO Price = (Company Balance × 10) / 1,000,000 shares
+- Creates initial price history for stock market tracking
+
+**Note:** Company owners can also use the "Force" button on the company dashboard page to make their company public without using this script.
+
 ## Manual Bot Purchase (CLI Tool)
 
 Interactive CLI tool to manually purchase products as the QuickBuck bot:

@@ -673,6 +673,69 @@ export const checkAndUpdatePublicStatus = mutation({
   },
 });
 
+// Force a company to go public manually (admin/owner use)
+export const forceCompanyPublic = mutation({
+  args: { 
+    companyId: v.id("companies"),
+    adminKey: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const company = await ctx.db.get(args.companyId);
+    if (!company) throw new Error("Company not found");
+
+    // Check permissions: either company owner or admin
+    const isAdmin = args.adminKey && args.adminKey === process.env.ADMIN_KEY;
+    const isOwner = userId && company.ownerId === userId;
+    
+    if (!isAdmin && !isOwner) {
+      throw new Error("Only the company owner or admin can force public status");
+    }
+
+    // Get balance from cached account balance
+    const account = await ctx.db.get(company.accountId);
+    const balance = account?.balance ?? 0;
+
+    if (company.isPublic) {
+      return { 
+        alreadyPublic: true, 
+        message: "Company is already public",
+        sharePrice: company.sharePrice,
+        balance,
+      };
+    }
+
+    // IPO PRICING: Total market value = 10x company balance
+    // Initial share price = (Balance * 10) / 1,000,000 shares
+    const ipoPrice = (balance * 10) / company.totalShares;
+    
+    await ctx.db.patch(args.companyId, {
+      isPublic: true,
+      sharePrice: ipoPrice,
+      marketSentiment: 1.0,
+      keepPrivate: false, // Reset keepPrivate flag
+    });
+    
+    // Record initial public price in history
+    await ctx.db.insert("stockPriceHistory", {
+      companyId: args.companyId,
+      price: ipoPrice,
+      marketCap: ipoPrice * company.totalShares,
+      volume: 0,
+      timestamp: Date.now(),
+    });
+    
+    return { 
+      success: true, 
+      message: "Company is now public",
+      balance, 
+      ipoPrice,
+      ticker: company.ticker,
+      name: company.name,
+    };
+  },
+});
+
 // Update company details
 export const updateCompany = mutation({
   args: {

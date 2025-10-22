@@ -33,6 +33,7 @@ export default function CompanyDashboardPage() {
   const checkPublicStatus = useMutation(
     api.companies.checkAndUpdatePublicStatus
   );
+  const forcePublic = useMutation(api.companies.forceCompanyPublic);
 
   const [isChecking, setIsChecking] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
@@ -49,6 +50,29 @@ export default function CompanyDashboardPage() {
       } else {
         setStatusMessage(
           `Your company has a balance of $${result.balance.toLocaleString()}. You need more than $50,000 to be listed on the stock market.`
+        );
+      }
+    } catch (error: any) {
+      setStatusMessage(`Error: ${error.message}`);
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  const handleForcePublic = async () => {
+    setIsChecking(true);
+    setStatusMessage("");
+    try {
+      const result = await forcePublic({ companyId });
+      if (result.alreadyPublic) {
+        setStatusMessage(result.message);
+      } else if (result.success) {
+        setStatusMessage(
+          `🎉 ${
+            result.message
+          } Your company is now trading at $${result.ipoPrice.toFixed(
+            4
+          )} per share!`
         );
       }
     } catch (error: any) {
@@ -181,15 +205,26 @@ export default function CompanyDashboardPage() {
                 {/* Go Public Button */}
                 {!company.isPublic && company.role === "owner" && (
                   <div className="flex flex-col gap-2">
-                    <Button
-                      onClick={handleCheckPublicStatus}
-                      disabled={isChecking}
-                      variant="default"
-                      size="sm"
-                    >
-                      <TrendingUp className="h-4 w-4 mr-2" />
-                      {isChecking ? "Checking..." : "Go Public"}
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button
+                        onClick={handleCheckPublicStatus}
+                        disabled={isChecking}
+                        variant="default"
+                        size="sm"
+                      >
+                        <TrendingUp className="h-4 w-4 mr-2" />
+                        {isChecking ? "Checking..." : "Go Public"}
+                      </Button>
+                      <Button
+                        onClick={handleForcePublic}
+                        disabled={isChecking}
+                        variant="outline"
+                        size="sm"
+                        title="Force company public (bypasses balance check)"
+                      >
+                        Force
+                      </Button>
+                    </div>
                     <p className="text-xs text-muted-foreground text-right">
                       Requires $50k+ balance
                     </p>
