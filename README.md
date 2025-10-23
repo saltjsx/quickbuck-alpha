@@ -14,7 +14,7 @@ A modern, production-ready SaaS starter template for building full-stack React a
 - 💳 **Subscription management with Polar.sh** - Billing and payments
 - 🗄️ **Real-time database with Convex** - Serverless backend
 - 🤖 **AI Chat Integration** - OpenAI-powered chat functionality
-- 📊 **Interactive Dashboard** - User management and analytics
+ - 📊 **Interactive Dashboard** - (removed)
 - 🎯 **Webhook handling** - Payment and subscription events
 - 📱 **Responsive Design** - Mobile-first approach
 - 🚢 **Vercel Deployment Ready** - One-click deployment
@@ -166,9 +166,6 @@ Make sure to deploy the output of `npm run build`
 ### Key Routes
 - `/` - Homepage with pricing
 - `/pricing` - Dynamic pricing page
-- `/dashboard` - Protected user dashboard
-- `/dashboard/chat` - AI-powered chat interface
-- `/dashboard/settings` - User settings
 - `/success` - Subscription success page
 - `/webhook/polar` - Polar.sh webhook handler
 
@@ -220,7 +217,7 @@ Make sure to deploy the output of `npm run build`
 │   ├── components/         # Reusable UI components
 │   │   ├── ui/            # shadcn/ui components
 │   │   ├── homepage/      # Homepage sections
-│   │   └── dashboard/     # Dashboard components
+│   │   └── dashboard/     # Dashboard components (removed)
 │   ├── routes/            # React Router routes
 │   └── utils/             # Utility functions
 ├── convex/                # Convex backend functions

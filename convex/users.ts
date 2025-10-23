@@ -60,6 +60,35 @@ export const upsertUser = mutation({
       tokenIdentifier: identity.subject,
     });
 
-    return await ctx.db.get(userId);
+    const user = await ctx.db.get(userId);
+
+    if (!user) {
+      return null;
+    }
+
+    // Create personal account with starting balance
+    const STARTING_BALANCE = parseInt(
+      process.env.QUICKBUCK_START_BALANCE || "10000000"
+    ); // $100,000 in cents
+
+    const accountId = await ctx.db.insert("accounts", {
+      type: "personal",
+      userId: user._id,
+      balance: STARTING_BALANCE,
+      canGoNegative: false,
+    });
+
+    // Create transaction record for account creation
+    await ctx.db.insert("transactions", {
+      type: "account_creation",
+      toAccountId: accountId,
+      amount: STARTING_BALANCE,
+      description: "Initial account balance",
+      metadata: {
+        userId: user._id,
+      },
+    });
+
+    return user;
   },
 });

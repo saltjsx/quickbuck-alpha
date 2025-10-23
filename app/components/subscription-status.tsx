@@ -16,18 +16,19 @@ import { useState } from "react";
 
 export default function SubscriptionStatus() {
   const { isSignedIn } = useAuth();
-  const [loadingDashboard, setLoadingDashboard] = useState(false);
+  const [loadingPortal, setLoadingPortal] = useState(false);
 
-  const subscription = useQuery(api.subscriptions.fetchUserSubscription);
+  const subscription = useQuery(api.subscriptions.fetchUserSubscription, {});
   const subscriptionStatus = useQuery(
-    api.subscriptions.checkUserSubscriptionStatus
+    api.subscriptions.checkUserSubscriptionStatus,
+    {}
   );
   const createPortalUrl = useAction(api.subscriptions.createCustomerPortalUrl);
 
   const handleManageSubscription = async () => {
     if (!subscription?.customerId) return;
 
-    setLoadingDashboard(true);
+    setLoadingPortal(true);
     try {
       const result = await createPortalUrl({
         customerId: subscription.customerId,
@@ -36,7 +37,7 @@ export default function SubscriptionStatus() {
     } catch (error) {
       console.error("Failed to open customer portal:", error);
     } finally {
-      setLoadingDashboard(false);
+      setLoadingPortal(false);
     }
   };
 
@@ -161,10 +162,10 @@ export default function SubscriptionStatus() {
           <Button
             variant="outline"
             onClick={handleManageSubscription}
-            disabled={loadingDashboard || !subscription.customerId}
+            disabled={loadingPortal || !subscription.customerId}
             className="flex-1"
           >
-            {loadingDashboard ? (
+            {loadingPortal ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Loading...

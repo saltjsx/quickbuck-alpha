@@ -12,9 +12,5 @@ export default [
   route("pricing", "routes/pricing.tsx"),
   route("success", "routes/success.tsx"),
   route("subscription-required", "routes/subscription-required.tsx"),
-  layout("routes/dashboard/layout.tsx", [
-    route("dashboard", "routes/dashboard/index.tsx"),
-    route("dashboard/chat", "routes/dashboard/chat.tsx"),
-    route("dashboard/settings", "routes/dashboard/settings.tsx"),
-  ]),
+  // Dashboard removed: no dashboard routes remain
 ] satisfies RouteConfig;

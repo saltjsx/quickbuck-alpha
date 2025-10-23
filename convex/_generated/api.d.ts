@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as accounts from "../accounts.js";
 import type * as http from "../http.js";
 import type * as subscriptions from "../subscriptions.js";
 import type * as users from "../users.js";
@@ -27,6 +28,7 @@ import type {
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  accounts: typeof accounts;
   http: typeof http;
   subscriptions: typeof subscriptions;
   users: typeof users;

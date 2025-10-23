@@ -1,5 +1,4 @@
 import { httpRouter } from "convex/server";
-import { paymentWebhook } from "./subscriptions";
 import { httpAction } from "./_generated/server";
 import { openai } from "@ai-sdk/openai";
 import { streamText } from "ai";
@@ -90,12 +89,6 @@ http.route({
       return new Response();
     }
   }),
-});
-
-http.route({
-  path: "/payments/webhook",
-  method: "POST",
-  handler: paymentWebhook,
 });
 
 // Log that routes are configured
